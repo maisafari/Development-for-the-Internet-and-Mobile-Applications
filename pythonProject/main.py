@@ -79,7 +79,7 @@ disciplinaEsteAno.update(disciplinaAnoPassado)
 #print(dict(sorted(disciplinaEsteAno.items())))
 
 
-class gestDiscipliinas:
+class GestDiscipliinas:
 
     #f
     def exists( self, dictionary,myStrinng):
@@ -112,11 +112,60 @@ class gestDiscipliinas:
 
 
 
-manage = gestDiscipliinas()
+manage = GestDiscipliinas()
 discipline = "DIAM"
 #manage.exists(disciplinaEsteAno,discipline)
 nota = 17
 #print(manage.valueGreaterThan(disciplinaEsteAno,nota))
 #print(manage.media(disciplinaEsteAno))
-print(manage.high(disciplinaEsteAno))
+#print(manage.high(disciplinaEsteAno))
 
+#3.3
+# Selection sort in Python
+# time complexity O(n*n)
+#sorting by finding min_index
+def selectionSort(array, size):
+
+	for ind in range(size):
+		min_index = ind
+
+		for j in range(ind + 1, size):
+			# select the minimum element in every iteration
+			if array[j] < array[min_index]:
+				min_index = j
+		# swapping the elements to sort the array
+		(array[ind], array[min_index]) = (array[min_index], array[ind])
+
+arr = [-2, 45, 0, 11, -9,88,-90,-202,747, 1000, 3, 5, 7]
+size = len(arr)
+selectionSort(arr, size)
+#print('The array after sorting in Ascending Order by selection sort is:')
+#print(arr)
+
+#3.4 Estruturas de controlo
+
+class Transpor:
+    def possivelTransporOpcao1(self, palavra1, palavra2):
+        if len(palavra1) != len(palavra2):
+             return False
+        palavra2List  =  list(palavra2)
+        for letra in list(palavra1):
+            if letra in palavra2List:
+                palavra2List.remove(letra)
+        if len(palavra2List) == 0:
+            return True
+        return False
+
+    def possivelTransporOpcao2(self,palavra1,palavra2):
+        if len(palavra1) != len(palavra2):
+            return False
+        palavra1List = list(palavra1).sort()
+        palavra2List = list(palavra2).sort()
+        if palavra1List == palavra2List:
+            return True
+        return False
+
+transpor = Transpor()
+#a
+#print(transpor.possivelTransporOpcao1("roma", "amor"))
+#print(transpor.possivelTransporOpcao2("roma", "amor"))
