@@ -20,35 +20,34 @@ Isso me deixa triste e cabisbaixo'''
 
 #a
 versos_poema = poema.split('/')
-#for verso in versos_poema:
-#   print(verso)
-#print()
+for verso in versos_poema:
+   print(verso)
+print()
 
 #b
 
 poema_completo = versos_poema + novos_versos.split("\n")
-#for verso in poema_completo:
-#   print(verso)
-#print()
+for verso in poema_completo:
+   print(verso)
+print()
 
 #c
 
-#for verso in poema_completo[-2:]:
-#    print(verso)
+for verso in poema_completo[-2:]:
+  print(verso)
 
 #d
-
-#num = 0
-#for verso in poema_completo:
- #   if str(verso).count("samba") >= 1:
- #       num = num + 1
-#print(num)
+num = 0
+for verso in poema_completo:
+   if str(verso).count("samba") >= 1:
+       num = num + 1
+print(num)
 
 #e
 
-#vogais = ["a", "e", "i", "o","u"]
-#for v in vogais:
-#    print(str(v) +": " + str(str(poema_completo).count(str(v))))
+vogais = ["a", "e", "i", "o","u"]
+for v in vogais:
+    print(str(v) +": " + str(str(poema_completo).count(str(v))))
 
 #3.2
 #a
@@ -63,20 +62,20 @@ disciplinaEsteAno={
     "Econ": 18,
     "DIAM":14
 }
-#print(disciplinaAnoPassado, disciplinaEsteAno)
+print(disciplinaAnoPassado, disciplinaEsteAno)
 
 #b
 disciplinaEsteAno.update(disciplinaAnoPassado)
-#print(disciplinaEsteAno)
+print(disciplinaEsteAno)
 
 #c
-#print(disciplinaEsteAno.keys())
+print(disciplinaEsteAno.keys())
 
 #d
-#print(disciplinaEsteAno.values())
+print(disciplinaEsteAno.values())
 
 #e
-#print(dict(sorted(disciplinaEsteAno.items())))
+print(dict(sorted(disciplinaEsteAno.items())))
 
 
 class GestDiscipliinas:
@@ -114,16 +113,15 @@ class GestDiscipliinas:
 
 manage = GestDiscipliinas()
 discipline = "DIAM"
-#manage.exists(disciplinaEsteAno,discipline)
+manage.exists(disciplinaEsteAno,discipline)
 nota = 17
-#print(manage.valueGreaterThan(disciplinaEsteAno,nota))
-#print(manage.media(disciplinaEsteAno))
-#print(manage.high(disciplinaEsteAno))
+print(manage.valueGreaterThan(disciplinaEsteAno,nota))
+print(manage.media(disciplinaEsteAno))
+print(manage.high(disciplinaEsteAno))
 
 #3.3
 # Selection sort in Python
-# time complexity O(n*n)
-#sorting by finding min_index
+
 def selectionSort(array, size):
 
 	for ind in range(size):
@@ -139,8 +137,8 @@ def selectionSort(array, size):
 arr = [-2, 45, 0, 11, -9,88,-90,-202,747, 1000, 3, 5, 7]
 size = len(arr)
 selectionSort(arr, size)
-#print('The array after sorting in Ascending Order by selection sort is:')
-#print(arr)
+print('The array after sorting in Ascending Order by selection sort is:')
+print(arr)
 
 #3.4 Estruturas de controlo
 
@@ -155,9 +153,8 @@ class Transpor:
         if len(palavra2List) == 0:
             return True
         return False
-
     def possivelTransporOpcao2(self,palavra1,palavra2):
-        if len(palavra1) != len(palavra2):
+        if len(palavra2)!= len(palavra1):
             return False
         palavra1List = list(palavra1).sort()
         palavra2List = list(palavra2).sort()
@@ -167,5 +164,5 @@ class Transpor:
 
 transpor = Transpor()
 #a
-#print(transpor.possivelTransporOpcao1("roma", "amor"))
-#print(transpor.possivelTransporOpcao2("roma", "amor"))
+print(transpor.possivelTransporOpcao1("roma", "amor"))
+print(transpor.possivelTransporOpcao2("roma", "amor"))
