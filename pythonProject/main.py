@@ -166,5 +166,3 @@ transpor = Transpor()
 #a
 print(transpor.possivelTransporOpcao1("roma", "amor"))
 print(transpor.possivelTransporOpcao2("roma", "amor"))
-
-#123
