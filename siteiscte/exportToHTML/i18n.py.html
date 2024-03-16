@@ -1,0 +1,639 @@
+<html>
+<head>
+<title>i18n.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+.s6 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+i18n.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">decimal </span><span class="s0">import </span><span class="s1">Decimal</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template </span><span class="s0">import </span><span class="s1">Library</span><span class="s2">, </span><span class="s1">Node</span><span class="s2">, </span><span class="s1">TemplateSyntaxError</span><span class="s2">, </span><span class="s1">Variable</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">TokenType</span><span class="s2">, </span><span class="s1">render_value_in_context</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template</span><span class="s2">.</span><span class="s1">defaulttags </span><span class="s0">import </span><span class="s1">token_kwargs</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">translation</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">safestring </span><span class="s0">import </span><span class="s1">SafeData</span><span class="s2">, </span><span class="s1">SafeString</span><span class="s2">, </span><span class="s1">mark_safe</span>
+
+<span class="s1">register </span><span class="s2">= </span><span class="s1">Library</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">GetAvailableLanguagesNode</span><span class="s2">(</span><span class="s1">Node</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">variable</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">variable </span><span class="s2">= </span><span class="s1">variable</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s1">context</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">variable</span><span class="s2">] = [</span>
+            <span class="s2">(</span><span class="s1">k</span><span class="s2">, </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">gettext</span><span class="s2">(</span><span class="s1">v</span><span class="s2">)) </span><span class="s0">for </span><span class="s1">k</span><span class="s2">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">LANGUAGES</span>
+        <span class="s2">]</span>
+        <span class="s0">return </span><span class="s3">&quot;&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">GetLanguageInfoNode</span><span class="s2">(</span><span class="s1">Node</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">lang_code</span><span class="s2">, </span><span class="s1">variable</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">lang_code </span><span class="s2">= </span><span class="s1">lang_code</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">variable </span><span class="s2">= </span><span class="s1">variable</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s1">lang_code </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lang_code</span><span class="s2">.</span><span class="s1">resolve</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+        <span class="s1">context</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">variable</span><span class="s2">] = </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language_info</span><span class="s2">(</span><span class="s1">lang_code</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s3">&quot;&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">GetLanguageInfoListNode</span><span class="s2">(</span><span class="s1">Node</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">languages</span><span class="s2">, </span><span class="s1">variable</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">languages </span><span class="s2">= </span><span class="s1">languages</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">variable </span><span class="s2">= </span><span class="s1">variable</span>
+
+    <span class="s0">def </span><span class="s1">get_language_info</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">language</span><span class="s2">):</span>
+        <span class="s4"># ``language`` is either a language code string or a sequence</span>
+        <span class="s4"># with the language code as its first item</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">language</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]) &gt; </span><span class="s5">1</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language_info</span><span class="s2">(</span><span class="s1">language</span><span class="s2">[</span><span class="s5">0</span><span class="s2">])</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language_info</span><span class="s2">(</span><span class="s1">str</span><span class="s2">(</span><span class="s1">language</span><span class="s2">))</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s1">langs </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">languages</span><span class="s2">.</span><span class="s1">resolve</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+        <span class="s1">context</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">variable</span><span class="s2">] = [</span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_language_info</span><span class="s2">(</span><span class="s1">lang</span><span class="s2">) </span><span class="s0">for </span><span class="s1">lang </span><span class="s0">in </span><span class="s1">langs</span><span class="s2">]</span>
+        <span class="s0">return </span><span class="s3">&quot;&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">GetCurrentLanguageNode</span><span class="s2">(</span><span class="s1">Node</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">variable</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">variable </span><span class="s2">= </span><span class="s1">variable</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s1">context</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">variable</span><span class="s2">] = </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s3">&quot;&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">GetCurrentLanguageBidiNode</span><span class="s2">(</span><span class="s1">Node</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">variable</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">variable </span><span class="s2">= </span><span class="s1">variable</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s1">context</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">variable</span><span class="s2">] = </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language_bidi</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s3">&quot;&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TranslateNode</span><span class="s2">(</span><span class="s1">Node</span><span class="s2">):</span>
+    <span class="s1">child_nodelists </span><span class="s2">= ()</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">filter_expression</span><span class="s2">, </span><span class="s1">noop</span><span class="s2">, </span><span class="s1">asvar</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">message_context</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">noop </span><span class="s2">= </span><span class="s1">noop</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">asvar </span><span class="s2">= </span><span class="s1">asvar</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">message_context </span><span class="s2">= </span><span class="s1">message_context</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">filter_expression </span><span class="s2">= </span><span class="s1">filter_expression</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">filter_expression</span><span class="s2">.</span><span class="s1">var</span><span class="s2">, </span><span class="s1">str</span><span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">filter_expression</span><span class="s2">.</span><span class="s1">is_var </span><span class="s2">= </span><span class="s0">True</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">filter_expression</span><span class="s2">.</span><span class="s1">var </span><span class="s2">= </span><span class="s1">Variable</span><span class="s2">(</span><span class="s3">&quot;'%s'&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">filter_expression</span><span class="s2">.</span><span class="s1">var</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">filter_expression</span><span class="s2">.</span><span class="s1">var</span><span class="s2">.</span><span class="s1">translate </span><span class="s2">= </span><span class="s0">not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">noop</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">message_context</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">filter_expression</span><span class="s2">.</span><span class="s1">var</span><span class="s2">.</span><span class="s1">message_context </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">message_context</span><span class="s2">.</span><span class="s1">resolve</span><span class="s2">(</span>
+                <span class="s1">context</span>
+            <span class="s2">)</span>
+        <span class="s1">output </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">filter_expression</span><span class="s2">.</span><span class="s1">resolve</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+        <span class="s1">value </span><span class="s2">= </span><span class="s1">render_value_in_context</span><span class="s2">(</span><span class="s1">output</span><span class="s2">, </span><span class="s1">context</span><span class="s2">)</span>
+        <span class="s4"># Restore percent signs. Percent signs in template text are doubled</span>
+        <span class="s4"># so they are not interpreted as string format flags.</span>
+        <span class="s1">is_safe </span><span class="s2">= </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">SafeData</span><span class="s2">)</span>
+        <span class="s1">value </span><span class="s2">= </span><span class="s1">value</span><span class="s2">.</span><span class="s1">replace</span><span class="s2">(</span><span class="s3">&quot;%%&quot;</span><span class="s2">, </span><span class="s3">&quot;%&quot;</span><span class="s2">)</span>
+        <span class="s1">value </span><span class="s2">= </span><span class="s1">mark_safe</span><span class="s2">(</span><span class="s1">value</span><span class="s2">) </span><span class="s0">if </span><span class="s1">is_safe </span><span class="s0">else </span><span class="s1">value</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">asvar</span><span class="s2">:</span>
+            <span class="s1">context</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">asvar</span><span class="s2">] = </span><span class="s1">value</span>
+            <span class="s0">return </span><span class="s3">&quot;&quot;</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">value</span>
+
+
+<span class="s0">class </span><span class="s1">BlockTranslateNode</span><span class="s2">(</span><span class="s1">Node</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">extra_context</span><span class="s2">,</span>
+        <span class="s1">singular</span><span class="s2">,</span>
+        <span class="s1">plural</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">countervar</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">counter</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">message_context</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">trimmed</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">asvar</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">tag_name</span><span class="s2">=</span><span class="s3">&quot;blocktranslate&quot;</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">extra_context </span><span class="s2">= </span><span class="s1">extra_context</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">singular </span><span class="s2">= </span><span class="s1">singular</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">plural </span><span class="s2">= </span><span class="s1">plural</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">countervar </span><span class="s2">= </span><span class="s1">countervar</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">counter </span><span class="s2">= </span><span class="s1">counter</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">message_context </span><span class="s2">= </span><span class="s1">message_context</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">trimmed </span><span class="s2">= </span><span class="s1">trimmed</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">asvar </span><span class="s2">= </span><span class="s1">asvar</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">tag_name </span><span class="s2">= </span><span class="s1">tag_name</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">(</span>
+            <span class="s3">f&quot;&lt;</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s0">}</span><span class="s3">: &quot;</span>
+            <span class="s3">f&quot;extra_context=</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">extra_context</span><span class="s0">!r} </span><span class="s3">&quot;</span>
+            <span class="s3">f&quot;singular=</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">singular</span><span class="s0">!r} </span><span class="s3">plural=</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">plural</span><span class="s0">!r}</span><span class="s3">&gt;&quot;</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">render_token_list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">tokens</span><span class="s2">):</span>
+        <span class="s1">result </span><span class="s2">= []</span>
+        <span class="s1">vars </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">token </span><span class="s0">in </span><span class="s1">tokens</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">token</span><span class="s2">.</span><span class="s1">token_type </span><span class="s2">== </span><span class="s1">TokenType</span><span class="s2">.</span><span class="s1">TEXT</span><span class="s2">:</span>
+                <span class="s1">result</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">token</span><span class="s2">.</span><span class="s1">contents</span><span class="s2">.</span><span class="s1">replace</span><span class="s2">(</span><span class="s3">&quot;%&quot;</span><span class="s2">, </span><span class="s3">&quot;%%&quot;</span><span class="s2">))</span>
+            <span class="s0">elif </span><span class="s1">token</span><span class="s2">.</span><span class="s1">token_type </span><span class="s2">== </span><span class="s1">TokenType</span><span class="s2">.</span><span class="s1">VAR</span><span class="s2">:</span>
+                <span class="s1">result</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;%%(%s)s&quot; </span><span class="s2">% </span><span class="s1">token</span><span class="s2">.</span><span class="s1">contents</span><span class="s2">)</span>
+                <span class="s1">vars</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">token</span><span class="s2">.</span><span class="s1">contents</span><span class="s2">)</span>
+        <span class="s1">msg </span><span class="s2">= </span><span class="s3">&quot;&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">result</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">trimmed</span><span class="s2">:</span>
+            <span class="s1">msg </span><span class="s2">= </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">trim_whitespace</span><span class="s2">(</span><span class="s1">msg</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">msg</span><span class="s2">, </span><span class="s1">vars</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">, </span><span class="s1">nested</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">message_context</span><span class="s2">:</span>
+            <span class="s1">message_context </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">message_context</span><span class="s2">.</span><span class="s1">resolve</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">message_context </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s4"># Update() works like a push(), so corresponding context.pop() is at</span>
+        <span class="s4"># the end of function</span>
+        <span class="s1">context</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span>
+            <span class="s2">{</span><span class="s1">var</span><span class="s2">: </span><span class="s1">val</span><span class="s2">.</span><span class="s1">resolve</span><span class="s2">(</span><span class="s1">context</span><span class="s2">) </span><span class="s0">for </span><span class="s1">var</span><span class="s2">, </span><span class="s1">val </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">extra_context</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()}</span>
+        <span class="s2">)</span>
+        <span class="s1">singular</span><span class="s2">, </span><span class="s1">vars </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">render_token_list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">singular</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">plural </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">countervar </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">counter</span><span class="s2">:</span>
+            <span class="s1">count </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">counter</span><span class="s2">.</span><span class="s1">resolve</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">count</span><span class="s2">, (</span><span class="s1">Decimal</span><span class="s2">, </span><span class="s1">float</span><span class="s2">, </span><span class="s1">int</span><span class="s2">)):</span>
+                <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                    <span class="s3">&quot;%r argument to %r tag must be a number.&quot;</span>
+                    <span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">countervar</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">tag_name</span><span class="s2">)</span>
+                <span class="s2">)</span>
+            <span class="s1">context</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">countervar</span><span class="s2">] = </span><span class="s1">count</span>
+            <span class="s1">plural</span><span class="s2">, </span><span class="s1">plural_vars </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">render_token_list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">plural</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">message_context</span><span class="s2">:</span>
+                <span class="s1">result </span><span class="s2">= </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">npgettext</span><span class="s2">(</span><span class="s1">message_context</span><span class="s2">, </span><span class="s1">singular</span><span class="s2">, </span><span class="s1">plural</span><span class="s2">, </span><span class="s1">count</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">result </span><span class="s2">= </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">ngettext</span><span class="s2">(</span><span class="s1">singular</span><span class="s2">, </span><span class="s1">plural</span><span class="s2">, </span><span class="s1">count</span><span class="s2">)</span>
+            <span class="s1">vars</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">plural_vars</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">message_context</span><span class="s2">:</span>
+                <span class="s1">result </span><span class="s2">= </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">pgettext</span><span class="s2">(</span><span class="s1">message_context</span><span class="s2">, </span><span class="s1">singular</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">result </span><span class="s2">= </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">gettext</span><span class="s2">(</span><span class="s1">singular</span><span class="s2">)</span>
+        <span class="s1">default_value </span><span class="s2">= </span><span class="s1">context</span><span class="s2">.</span><span class="s1">template</span><span class="s2">.</span><span class="s1">engine</span><span class="s2">.</span><span class="s1">string_if_invalid</span>
+
+        <span class="s0">def </span><span class="s1">render_value</span><span class="s2">(</span><span class="s1">key</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">key </span><span class="s0">in </span><span class="s1">context</span><span class="s2">:</span>
+                <span class="s1">val </span><span class="s2">= </span><span class="s1">context</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">val </span><span class="s2">= </span><span class="s1">default_value </span><span class="s2">% </span><span class="s1">key </span><span class="s0">if </span><span class="s3">&quot;%s&quot; </span><span class="s0">in </span><span class="s1">default_value </span><span class="s0">else </span><span class="s1">default_value</span>
+            <span class="s0">return </span><span class="s1">render_value_in_context</span><span class="s2">(</span><span class="s1">val</span><span class="s2">, </span><span class="s1">context</span><span class="s2">)</span>
+
+        <span class="s1">data </span><span class="s2">= {</span><span class="s1">v</span><span class="s2">: </span><span class="s1">render_value</span><span class="s2">(</span><span class="s1">v</span><span class="s2">) </span><span class="s0">for </span><span class="s1">v </span><span class="s0">in </span><span class="s1">vars</span><span class="s2">}</span>
+        <span class="s1">context</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">()</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">result </span><span class="s2">%= </span><span class="s1">data</span>
+        <span class="s0">except </span><span class="s2">(</span><span class="s1">KeyError</span><span class="s2">, </span><span class="s1">ValueError</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">nested</span><span class="s2">:</span>
+                <span class="s4"># Either string is malformed, or it's a bug</span>
+                <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                    <span class="s3">&quot;%r is unable to format string returned by gettext: %r &quot;</span>
+                    <span class="s3">&quot;using %r&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">tag_name</span><span class="s2">, </span><span class="s1">result</span><span class="s2">, </span><span class="s1">data</span><span class="s2">)</span>
+                <span class="s2">)</span>
+            <span class="s0">with </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">override</span><span class="s2">(</span><span class="s0">None</span><span class="s2">):</span>
+                <span class="s1">result </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">render</span><span class="s2">(</span><span class="s1">context</span><span class="s2">, </span><span class="s1">nested</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">asvar</span><span class="s2">:</span>
+            <span class="s1">context</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">asvar</span><span class="s2">] = </span><span class="s1">SafeString</span><span class="s2">(</span><span class="s1">result</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s3">&quot;&quot;</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">result</span>
+
+
+<span class="s0">class </span><span class="s1">LanguageNode</span><span class="s2">(</span><span class="s1">Node</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">nodelist</span><span class="s2">, </span><span class="s1">language</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">nodelist </span><span class="s2">= </span><span class="s1">nodelist</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">language </span><span class="s2">= </span><span class="s1">language</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s0">with </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">override</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">language</span><span class="s2">.</span><span class="s1">resolve</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)):</span>
+            <span class="s1">output </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">nodelist</span><span class="s2">.</span><span class="s1">render</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">output</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s3">&quot;get_available_languages&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">do_get_available_languages</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Store a list of available languages in the context. 
+ 
+    Usage:: 
+ 
+        {% get_available_languages as languages %} 
+        {% for language in languages %} 
+        ... 
+        {% endfor %} 
+ 
+    This puts settings.LANGUAGES into the named variable. 
+    &quot;&quot;&quot;</span>
+    <span class="s4"># token.split_contents() isn't useful here because this tag doesn't accept</span>
+    <span class="s4"># variable as arguments.</span>
+    <span class="s1">args </span><span class="s2">= </span><span class="s1">token</span><span class="s2">.</span><span class="s1">contents</span><span class="s2">.</span><span class="s1">split</span><span class="s2">()</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">args</span><span class="s2">) != </span><span class="s5">3 </span><span class="s0">or </span><span class="s1">args</span><span class="s2">[</span><span class="s5">1</span><span class="s2">] != </span><span class="s3">&quot;as&quot;</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+            <span class="s3">&quot;'get_available_languages' requires 'as variable' (got %r)&quot; </span><span class="s2">% </span><span class="s1">args</span>
+        <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">GetAvailableLanguagesNode</span><span class="s2">(</span><span class="s1">args</span><span class="s2">[</span><span class="s5">2</span><span class="s2">])</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s3">&quot;get_language_info&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">do_get_language_info</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Store the language information dictionary for the given language code in a 
+    context variable. 
+ 
+    Usage:: 
+ 
+        {% get_language_info for LANGUAGE_CODE as l %} 
+        {{ l.code }} 
+        {{ l.name }} 
+        {{ l.name_translated }} 
+        {{ l.name_local }} 
+        {{ l.bidi|yesno:&quot;bi-directional,uni-directional&quot; }} 
+    &quot;&quot;&quot;</span>
+    <span class="s1">args </span><span class="s2">= </span><span class="s1">token</span><span class="s2">.</span><span class="s1">split_contents</span><span class="s2">()</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">args</span><span class="s2">) != </span><span class="s5">5 </span><span class="s0">or </span><span class="s1">args</span><span class="s2">[</span><span class="s5">1</span><span class="s2">] != </span><span class="s3">&quot;for&quot; </span><span class="s0">or </span><span class="s1">args</span><span class="s2">[</span><span class="s5">3</span><span class="s2">] != </span><span class="s3">&quot;as&quot;</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+            <span class="s3">&quot;'%s' requires 'for string as variable' (got %r)&quot; </span><span class="s2">% (</span><span class="s1">args</span><span class="s2">[</span><span class="s5">0</span><span class="s2">], </span><span class="s1">args</span><span class="s2">[</span><span class="s5">1</span><span class="s2">:])</span>
+        <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">GetLanguageInfoNode</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">.</span><span class="s1">compile_filter</span><span class="s2">(</span><span class="s1">args</span><span class="s2">[</span><span class="s5">2</span><span class="s2">]), </span><span class="s1">args</span><span class="s2">[</span><span class="s5">4</span><span class="s2">])</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s3">&quot;get_language_info_list&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">do_get_language_info_list</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Store a list of language information dictionaries for the given language 
+    codes in a context variable. The language codes can be specified either as 
+    a list of strings or a settings.LANGUAGES style list (or any sequence of 
+    sequences whose first items are language codes). 
+ 
+    Usage:: 
+ 
+        {% get_language_info_list for LANGUAGES as langs %} 
+        {% for l in langs %} 
+          {{ l.code }} 
+          {{ l.name }} 
+          {{ l.name_translated }} 
+          {{ l.name_local }} 
+          {{ l.bidi|yesno:&quot;bi-directional,uni-directional&quot; }} 
+        {% endfor %} 
+    &quot;&quot;&quot;</span>
+    <span class="s1">args </span><span class="s2">= </span><span class="s1">token</span><span class="s2">.</span><span class="s1">split_contents</span><span class="s2">()</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">args</span><span class="s2">) != </span><span class="s5">5 </span><span class="s0">or </span><span class="s1">args</span><span class="s2">[</span><span class="s5">1</span><span class="s2">] != </span><span class="s3">&quot;for&quot; </span><span class="s0">or </span><span class="s1">args</span><span class="s2">[</span><span class="s5">3</span><span class="s2">] != </span><span class="s3">&quot;as&quot;</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+            <span class="s3">&quot;'%s' requires 'for sequence as variable' (got %r)&quot; </span><span class="s2">% (</span><span class="s1">args</span><span class="s2">[</span><span class="s5">0</span><span class="s2">], </span><span class="s1">args</span><span class="s2">[</span><span class="s5">1</span><span class="s2">:])</span>
+        <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">GetLanguageInfoListNode</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">.</span><span class="s1">compile_filter</span><span class="s2">(</span><span class="s1">args</span><span class="s2">[</span><span class="s5">2</span><span class="s2">]), </span><span class="s1">args</span><span class="s2">[</span><span class="s5">4</span><span class="s2">])</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">filter</span>
+<span class="s0">def </span><span class="s1">language_name</span><span class="s2">(</span><span class="s1">lang_code</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language_info</span><span class="s2">(</span><span class="s1">lang_code</span><span class="s2">)[</span><span class="s3">&quot;name&quot;</span><span class="s2">]</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">filter</span>
+<span class="s0">def </span><span class="s1">language_name_translated</span><span class="s2">(</span><span class="s1">lang_code</span><span class="s2">):</span>
+    <span class="s1">english_name </span><span class="s2">= </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language_info</span><span class="s2">(</span><span class="s1">lang_code</span><span class="s2">)[</span><span class="s3">&quot;name&quot;</span><span class="s2">]</span>
+    <span class="s0">return </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">gettext</span><span class="s2">(</span><span class="s1">english_name</span><span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">filter</span>
+<span class="s0">def </span><span class="s1">language_name_local</span><span class="s2">(</span><span class="s1">lang_code</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language_info</span><span class="s2">(</span><span class="s1">lang_code</span><span class="s2">)[</span><span class="s3">&quot;name_local&quot;</span><span class="s2">]</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">filter</span>
+<span class="s0">def </span><span class="s1">language_bidi</span><span class="s2">(</span><span class="s1">lang_code</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language_info</span><span class="s2">(</span><span class="s1">lang_code</span><span class="s2">)[</span><span class="s3">&quot;bidi&quot;</span><span class="s2">]</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s3">&quot;get_current_language&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">do_get_current_language</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Store the current language in the context. 
+ 
+    Usage:: 
+ 
+        {% get_current_language as language %} 
+ 
+    This fetches the currently active language and puts its value into the 
+    ``language`` context variable. 
+    &quot;&quot;&quot;</span>
+    <span class="s4"># token.split_contents() isn't useful here because this tag doesn't accept</span>
+    <span class="s4"># variable as arguments.</span>
+    <span class="s1">args </span><span class="s2">= </span><span class="s1">token</span><span class="s2">.</span><span class="s1">contents</span><span class="s2">.</span><span class="s1">split</span><span class="s2">()</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">args</span><span class="s2">) != </span><span class="s5">3 </span><span class="s0">or </span><span class="s1">args</span><span class="s2">[</span><span class="s5">1</span><span class="s2">] != </span><span class="s3">&quot;as&quot;</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+            <span class="s3">&quot;'get_current_language' requires 'as variable' (got %r)&quot; </span><span class="s2">% </span><span class="s1">args</span>
+        <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">GetCurrentLanguageNode</span><span class="s2">(</span><span class="s1">args</span><span class="s2">[</span><span class="s5">2</span><span class="s2">])</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s3">&quot;get_current_language_bidi&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">do_get_current_language_bidi</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Store the current language layout in the context. 
+ 
+    Usage:: 
+ 
+        {% get_current_language_bidi as bidi %} 
+ 
+    This fetches the currently active language's layout and puts its value into 
+    the ``bidi`` context variable. True indicates right-to-left layout, 
+    otherwise left-to-right. 
+    &quot;&quot;&quot;</span>
+    <span class="s4"># token.split_contents() isn't useful here because this tag doesn't accept</span>
+    <span class="s4"># variable as arguments.</span>
+    <span class="s1">args </span><span class="s2">= </span><span class="s1">token</span><span class="s2">.</span><span class="s1">contents</span><span class="s2">.</span><span class="s1">split</span><span class="s2">()</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">args</span><span class="s2">) != </span><span class="s5">3 </span><span class="s0">or </span><span class="s1">args</span><span class="s2">[</span><span class="s5">1</span><span class="s2">] != </span><span class="s3">&quot;as&quot;</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+            <span class="s3">&quot;'get_current_language_bidi' requires 'as variable' (got %r)&quot; </span><span class="s2">% </span><span class="s1">args</span>
+        <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">GetCurrentLanguageBidiNode</span><span class="s2">(</span><span class="s1">args</span><span class="s2">[</span><span class="s5">2</span><span class="s2">])</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s3">&quot;translate&quot;</span><span class="s2">)</span>
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s3">&quot;trans&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">do_translate</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Mark a string for translation and translate the string for the current 
+    language. 
+ 
+    Usage:: 
+ 
+        {% translate &quot;this is a test&quot; %} 
+ 
+    This marks the string for translation so it will be pulled out by 
+    makemessages into the .po files and runs the string through the translation 
+    engine. 
+ 
+    There is a second form:: 
+ 
+        {% translate &quot;this is a test&quot; noop %} 
+ 
+    This marks the string for translation, but returns the string unchanged. 
+    Use it when you need to store values into forms that should be translated 
+    later on. 
+ 
+    You can use variables instead of constant strings 
+    to translate stuff you marked somewhere else:: 
+ 
+        {% translate variable %} 
+ 
+    This tries to translate the contents of the variable ``variable``. Make 
+    sure that the string in there is something that is in the .po file. 
+ 
+    It is possible to store the translated string into a variable:: 
+ 
+        {% translate &quot;this is a test&quot; as var %} 
+        {{ var }} 
+ 
+    Contextual translations are also supported:: 
+ 
+        {% translate &quot;this is a test&quot; context &quot;greeting&quot; %} 
+ 
+    This is equivalent to calling pgettext instead of (u)gettext. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">bits </span><span class="s2">= </span><span class="s1">token</span><span class="s2">.</span><span class="s1">split_contents</span><span class="s2">()</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">bits</span><span class="s2">) &lt; </span><span class="s5">2</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span><span class="s3">&quot;'%s' takes at least one argument&quot; </span><span class="s2">% </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">])</span>
+    <span class="s1">message_string </span><span class="s2">= </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">compile_filter</span><span class="s2">(</span><span class="s1">bits</span><span class="s2">[</span><span class="s5">1</span><span class="s2">])</span>
+    <span class="s1">remaining </span><span class="s2">= </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">2</span><span class="s2">:]</span>
+
+    <span class="s1">noop </span><span class="s2">= </span><span class="s0">False</span>
+    <span class="s1">asvar </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">message_context </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">seen </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+    <span class="s1">invalid_context </span><span class="s2">= {</span><span class="s3">&quot;as&quot;</span><span class="s2">, </span><span class="s3">&quot;noop&quot;</span><span class="s2">}</span>
+
+    <span class="s0">while </span><span class="s1">remaining</span><span class="s2">:</span>
+        <span class="s1">option </span><span class="s2">= </span><span class="s1">remaining</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s5">0</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">option </span><span class="s0">in </span><span class="s1">seen</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                <span class="s3">&quot;The '%s' option was specified more than once.&quot; </span><span class="s2">% </span><span class="s1">option</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">option </span><span class="s2">== </span><span class="s3">&quot;noop&quot;</span><span class="s2">:</span>
+            <span class="s1">noop </span><span class="s2">= </span><span class="s0">True</span>
+        <span class="s0">elif </span><span class="s1">option </span><span class="s2">== </span><span class="s3">&quot;context&quot;</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">value </span><span class="s2">= </span><span class="s1">remaining</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s5">0</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">IndexError</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                    <span class="s3">&quot;No argument provided to the '%s' tag for the context option.&quot;</span>
+                    <span class="s2">% </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]</span>
+                <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">value </span><span class="s0">in </span><span class="s1">invalid_context</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                    <span class="s3">&quot;Invalid argument '%s' provided to the '%s' tag for the context &quot;</span>
+                    <span class="s3">&quot;option&quot; </span><span class="s2">% (</span><span class="s1">value</span><span class="s2">, </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]),</span>
+                <span class="s2">)</span>
+            <span class="s1">message_context </span><span class="s2">= </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">compile_filter</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">option </span><span class="s2">== </span><span class="s3">&quot;as&quot;</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">value </span><span class="s2">= </span><span class="s1">remaining</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s5">0</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">IndexError</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                    <span class="s3">&quot;No argument provided to the '%s' tag for the as option.&quot; </span><span class="s2">% </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]</span>
+                <span class="s2">)</span>
+            <span class="s1">asvar </span><span class="s2">= </span><span class="s1">value</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                <span class="s3">&quot;Unknown argument for '%s' tag: '%s'. The only options &quot;</span>
+                <span class="s3">&quot;available are 'noop', 'context' </span><span class="s0">\&quot;</span><span class="s3">xxx</span><span class="s0">\&quot;</span><span class="s3">, and 'as VAR'.&quot;</span>
+                <span class="s2">% (</span>
+                    <span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">],</span>
+                    <span class="s1">option</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s1">seen</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s1">option</span><span class="s2">)</span>
+
+    <span class="s0">return </span><span class="s1">TranslateNode</span><span class="s2">(</span><span class="s1">message_string</span><span class="s2">, </span><span class="s1">noop</span><span class="s2">, </span><span class="s1">asvar</span><span class="s2">, </span><span class="s1">message_context</span><span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s3">&quot;blocktranslate&quot;</span><span class="s2">)</span>
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s3">&quot;blocktrans&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">do_block_translate</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Translate a block of text with parameters. 
+ 
+    Usage:: 
+ 
+        {% blocktranslate with bar=foo|filter boo=baz|filter %} 
+        This is {{ bar }} and {{ boo }}. 
+        {% endblocktranslate %} 
+ 
+    Additionally, this supports pluralization:: 
+ 
+        {% blocktranslate count count=var|length %} 
+        There is {{ count }} object. 
+        {% plural %} 
+        There are {{ count }} objects. 
+        {% endblocktranslate %} 
+ 
+    This is much like ngettext, only in template syntax. 
+ 
+    The &quot;var as value&quot; legacy format is still supported:: 
+ 
+        {% blocktranslate with foo|filter as bar and baz|filter as boo %} 
+        {% blocktranslate count var|length as count %} 
+ 
+    The translated string can be stored in a variable using `asvar`:: 
+ 
+        {% blocktranslate with bar=foo|filter boo=baz|filter asvar var %} 
+        This is {{ bar }} and {{ boo }}. 
+        {% endblocktranslate %} 
+        {{ var }} 
+ 
+    Contextual translations are supported:: 
+ 
+        {% blocktranslate with bar=foo|filter context &quot;greeting&quot; %} 
+            This is {{ bar }}. 
+        {% endblocktranslate %} 
+ 
+    This is equivalent to calling pgettext/npgettext instead of 
+    (u)gettext/(u)ngettext. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">bits </span><span class="s2">= </span><span class="s1">token</span><span class="s2">.</span><span class="s1">split_contents</span><span class="s2">()</span>
+
+    <span class="s1">options </span><span class="s2">= {}</span>
+    <span class="s1">remaining_bits </span><span class="s2">= </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">1</span><span class="s2">:]</span>
+    <span class="s1">asvar </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s0">while </span><span class="s1">remaining_bits</span><span class="s2">:</span>
+        <span class="s1">option </span><span class="s2">= </span><span class="s1">remaining_bits</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s5">0</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">option </span><span class="s0">in </span><span class="s1">options</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                <span class="s3">&quot;The %r option was specified more than once.&quot; </span><span class="s2">% </span><span class="s1">option</span>
+            <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">option </span><span class="s2">== </span><span class="s3">&quot;with&quot;</span><span class="s2">:</span>
+            <span class="s1">value </span><span class="s2">= </span><span class="s1">token_kwargs</span><span class="s2">(</span><span class="s1">remaining_bits</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">, </span><span class="s1">support_legacy</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">value</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                    <span class="s3">'&quot;with&quot; in %r tag needs at least one keyword argument.' </span><span class="s2">% </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]</span>
+                <span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">option </span><span class="s2">== </span><span class="s3">&quot;count&quot;</span><span class="s2">:</span>
+            <span class="s1">value </span><span class="s2">= </span><span class="s1">token_kwargs</span><span class="s2">(</span><span class="s1">remaining_bits</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">, </span><span class="s1">support_legacy</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">value</span><span class="s2">) != </span><span class="s5">1</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                    <span class="s3">'&quot;count&quot; in %r tag expected exactly '</span>
+                    <span class="s3">&quot;one keyword argument.&quot; </span><span class="s2">% </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]</span>
+                <span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">option </span><span class="s2">== </span><span class="s3">&quot;context&quot;</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">value </span><span class="s2">= </span><span class="s1">remaining_bits</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s5">0</span><span class="s2">)</span>
+                <span class="s1">value </span><span class="s2">= </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">compile_filter</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">Exception</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                    <span class="s3">'&quot;context&quot; in %r tag expected exactly one argument.' </span><span class="s2">% </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]</span>
+                <span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">option </span><span class="s2">== </span><span class="s3">&quot;trimmed&quot;</span><span class="s2">:</span>
+            <span class="s1">value </span><span class="s2">= </span><span class="s0">True</span>
+        <span class="s0">elif </span><span class="s1">option </span><span class="s2">== </span><span class="s3">&quot;asvar&quot;</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">value </span><span class="s2">= </span><span class="s1">remaining_bits</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s5">0</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">IndexError</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                    <span class="s3">&quot;No argument provided to the '%s' tag for the asvar option.&quot;</span>
+                    <span class="s2">% </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]</span>
+                <span class="s2">)</span>
+            <span class="s1">asvar </span><span class="s2">= </span><span class="s1">value</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                <span class="s3">&quot;Unknown argument for %r tag: %r.&quot; </span><span class="s2">% (</span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">], </span><span class="s1">option</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s1">options</span><span class="s2">[</span><span class="s1">option</span><span class="s2">] = </span><span class="s1">value</span>
+
+    <span class="s0">if </span><span class="s3">&quot;count&quot; </span><span class="s0">in </span><span class="s1">options</span><span class="s2">:</span>
+        <span class="s1">countervar</span><span class="s2">, </span><span class="s1">counter </span><span class="s2">= </span><span class="s1">next</span><span class="s2">(</span><span class="s1">iter</span><span class="s2">(</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;count&quot;</span><span class="s2">].</span><span class="s1">items</span><span class="s2">()))</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">countervar</span><span class="s2">, </span><span class="s1">counter </span><span class="s2">= </span><span class="s0">None</span><span class="s2">, </span><span class="s0">None</span>
+    <span class="s0">if </span><span class="s3">&quot;context&quot; </span><span class="s0">in </span><span class="s1">options</span><span class="s2">:</span>
+        <span class="s1">message_context </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;context&quot;</span><span class="s2">]</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">message_context </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">extra_context </span><span class="s2">= </span><span class="s1">options</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;with&quot;</span><span class="s2">, {})</span>
+
+    <span class="s1">trimmed </span><span class="s2">= </span><span class="s1">options</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;trimmed&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">)</span>
+
+    <span class="s1">singular </span><span class="s2">= []</span>
+    <span class="s1">plural </span><span class="s2">= []</span>
+    <span class="s0">while </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">tokens</span><span class="s2">:</span>
+        <span class="s1">token </span><span class="s2">= </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">next_token</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">token</span><span class="s2">.</span><span class="s1">token_type </span><span class="s0">in </span><span class="s2">(</span><span class="s1">TokenType</span><span class="s2">.</span><span class="s1">VAR</span><span class="s2">, </span><span class="s1">TokenType</span><span class="s2">.</span><span class="s1">TEXT</span><span class="s2">):</span>
+            <span class="s1">singular</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">token</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">break</span>
+    <span class="s0">if </span><span class="s1">countervar </span><span class="s0">and </span><span class="s1">counter</span><span class="s2">:</span>
+        <span class="s0">if </span><span class="s1">token</span><span class="s2">.</span><span class="s1">contents</span><span class="s2">.</span><span class="s1">strip</span><span class="s2">() != </span><span class="s3">&quot;plural&quot;</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                <span class="s3">&quot;%r doesn't allow other block tags inside it&quot; </span><span class="s2">% </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]</span>
+            <span class="s2">)</span>
+        <span class="s0">while </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">tokens</span><span class="s2">:</span>
+            <span class="s1">token </span><span class="s2">= </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">next_token</span><span class="s2">()</span>
+            <span class="s0">if </span><span class="s1">token</span><span class="s2">.</span><span class="s1">token_type </span><span class="s0">in </span><span class="s2">(</span><span class="s1">TokenType</span><span class="s2">.</span><span class="s1">VAR</span><span class="s2">, </span><span class="s1">TokenType</span><span class="s2">.</span><span class="s1">TEXT</span><span class="s2">):</span>
+                <span class="s1">plural</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">token</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">break</span>
+    <span class="s1">end_tag_name </span><span class="s2">= </span><span class="s3">&quot;end%s&quot; </span><span class="s2">% </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]</span>
+    <span class="s0">if </span><span class="s1">token</span><span class="s2">.</span><span class="s1">contents</span><span class="s2">.</span><span class="s1">strip</span><span class="s2">() != </span><span class="s1">end_tag_name</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+            <span class="s3">&quot;%r doesn't allow other block tags (seen %r) inside it&quot;</span>
+            <span class="s2">% (</span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">], </span><span class="s1">token</span><span class="s2">.</span><span class="s1">contents</span><span class="s2">)</span>
+        <span class="s2">)</span>
+
+    <span class="s0">return </span><span class="s1">BlockTranslateNode</span><span class="s2">(</span>
+        <span class="s1">extra_context</span><span class="s2">,</span>
+        <span class="s1">singular</span><span class="s2">,</span>
+        <span class="s1">plural</span><span class="s2">,</span>
+        <span class="s1">countervar</span><span class="s2">,</span>
+        <span class="s1">counter</span><span class="s2">,</span>
+        <span class="s1">message_context</span><span class="s2">,</span>
+        <span class="s1">trimmed</span><span class="s2">=</span><span class="s1">trimmed</span><span class="s2">,</span>
+        <span class="s1">asvar</span><span class="s2">=</span><span class="s1">asvar</span><span class="s2">,</span>
+        <span class="s1">tag_name</span><span class="s2">=</span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">],</span>
+    <span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span>
+<span class="s0">def </span><span class="s1">language</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Enable the given language just for this block. 
+ 
+    Usage:: 
+ 
+        {% language &quot;de&quot; %} 
+            This is {{ bar }} and {{ boo }}. 
+        {% endlanguage %} 
+    &quot;&quot;&quot;</span>
+    <span class="s1">bits </span><span class="s2">= </span><span class="s1">token</span><span class="s2">.</span><span class="s1">split_contents</span><span class="s2">()</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">bits</span><span class="s2">) != </span><span class="s5">2</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span><span class="s3">&quot;'%s' takes one argument (language)&quot; </span><span class="s2">% </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">])</span>
+    <span class="s1">language </span><span class="s2">= </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">compile_filter</span><span class="s2">(</span><span class="s1">bits</span><span class="s2">[</span><span class="s5">1</span><span class="s2">])</span>
+    <span class="s1">nodelist </span><span class="s2">= </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">parse</span><span class="s2">((</span><span class="s3">&quot;endlanguage&quot;</span><span class="s2">,))</span>
+    <span class="s1">parser</span><span class="s2">.</span><span class="s1">delete_first_token</span><span class="s2">()</span>
+    <span class="s0">return </span><span class="s1">LanguageNode</span><span class="s2">(</span><span class="s1">nodelist</span><span class="s2">, </span><span class="s1">language</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

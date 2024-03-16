@@ -1,0 +1,148 @@
+<html>
+<head>
+<title>api.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+api.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">messages </span><span class="s0">import </span><span class="s1">constants</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">messages</span><span class="s2">.</span><span class="s1">storage </span><span class="s0">import </span><span class="s1">default_storage</span>
+
+<span class="s1">__all__ </span><span class="s2">= (</span>
+    <span class="s3">&quot;add_message&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;get_messages&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;get_level&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;set_level&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;debug&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;info&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;success&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;warning&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;error&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;MessageFailure&quot;</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">MessageFailure</span><span class="s2">(</span><span class="s1">Exception</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">def </span><span class="s1">add_message</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">level</span><span class="s2">, </span><span class="s1">message</span><span class="s2">, </span><span class="s1">extra_tags</span><span class="s2">=</span><span class="s3">&quot;&quot;</span><span class="s2">, </span><span class="s1">fail_silently</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Attempt to add a message to the request using the 'messages' app. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">try</span><span class="s2">:</span>
+        <span class="s1">messages </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">_messages</span>
+    <span class="s0">except </span><span class="s1">AttributeError</span><span class="s2">:</span>
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s3">&quot;META&quot;</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                <span class="s3">&quot;add_message() argument must be an HttpRequest object, not &quot;</span>
+                <span class="s3">&quot;'%s'.&quot; </span><span class="s2">% </span><span class="s1">request</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span>
+            <span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">fail_silently</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">MessageFailure</span><span class="s2">(</span>
+                <span class="s3">&quot;You cannot add messages without installing &quot;</span>
+                <span class="s3">&quot;django.contrib.messages.middleware.MessageMiddleware&quot;</span>
+            <span class="s2">)</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">messages</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s1">level</span><span class="s2">, </span><span class="s1">message</span><span class="s2">, </span><span class="s1">extra_tags</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">get_messages</span><span class="s2">(</span><span class="s1">request</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Return the message storage on the request if it exists, otherwise return 
+    an empty list. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s3">&quot;_messages&quot;</span><span class="s2">, [])</span>
+
+
+<span class="s0">def </span><span class="s1">get_level</span><span class="s2">(</span><span class="s1">request</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Return the minimum level of messages to be recorded. 
+ 
+    The default level is the ``MESSAGE_LEVEL`` setting. If this is not found, 
+    use the ``INFO`` level. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">storage </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s3">&quot;_messages&quot;</span><span class="s2">, </span><span class="s1">default_storage</span><span class="s2">(</span><span class="s1">request</span><span class="s2">))</span>
+    <span class="s0">return </span><span class="s1">storage</span><span class="s2">.</span><span class="s1">level</span>
+
+
+<span class="s0">def </span><span class="s1">set_level</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">level</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Set the minimum level of messages to be recorded, and return ``True`` if 
+    the level was recorded successfully. 
+ 
+    If set to ``None``, use the default level (see the get_level() function). 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s3">&quot;_messages&quot;</span><span class="s2">):</span>
+        <span class="s0">return False</span>
+    <span class="s1">request</span><span class="s2">.</span><span class="s1">_messages</span><span class="s2">.</span><span class="s1">level </span><span class="s2">= </span><span class="s1">level</span>
+    <span class="s0">return True</span>
+
+
+<span class="s0">def </span><span class="s1">debug</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">message</span><span class="s2">, </span><span class="s1">extra_tags</span><span class="s2">=</span><span class="s3">&quot;&quot;</span><span class="s2">, </span><span class="s1">fail_silently</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot;Add a message with the ``DEBUG`` level.&quot;&quot;&quot;</span>
+    <span class="s1">add_message</span><span class="s2">(</span>
+        <span class="s1">request</span><span class="s2">,</span>
+        <span class="s1">constants</span><span class="s2">.</span><span class="s1">DEBUG</span><span class="s2">,</span>
+        <span class="s1">message</span><span class="s2">,</span>
+        <span class="s1">extra_tags</span><span class="s2">=</span><span class="s1">extra_tags</span><span class="s2">,</span>
+        <span class="s1">fail_silently</span><span class="s2">=</span><span class="s1">fail_silently</span><span class="s2">,</span>
+    <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">info</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">message</span><span class="s2">, </span><span class="s1">extra_tags</span><span class="s2">=</span><span class="s3">&quot;&quot;</span><span class="s2">, </span><span class="s1">fail_silently</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot;Add a message with the ``INFO`` level.&quot;&quot;&quot;</span>
+    <span class="s1">add_message</span><span class="s2">(</span>
+        <span class="s1">request</span><span class="s2">,</span>
+        <span class="s1">constants</span><span class="s2">.</span><span class="s1">INFO</span><span class="s2">,</span>
+        <span class="s1">message</span><span class="s2">,</span>
+        <span class="s1">extra_tags</span><span class="s2">=</span><span class="s1">extra_tags</span><span class="s2">,</span>
+        <span class="s1">fail_silently</span><span class="s2">=</span><span class="s1">fail_silently</span><span class="s2">,</span>
+    <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">success</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">message</span><span class="s2">, </span><span class="s1">extra_tags</span><span class="s2">=</span><span class="s3">&quot;&quot;</span><span class="s2">, </span><span class="s1">fail_silently</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot;Add a message with the ``SUCCESS`` level.&quot;&quot;&quot;</span>
+    <span class="s1">add_message</span><span class="s2">(</span>
+        <span class="s1">request</span><span class="s2">,</span>
+        <span class="s1">constants</span><span class="s2">.</span><span class="s1">SUCCESS</span><span class="s2">,</span>
+        <span class="s1">message</span><span class="s2">,</span>
+        <span class="s1">extra_tags</span><span class="s2">=</span><span class="s1">extra_tags</span><span class="s2">,</span>
+        <span class="s1">fail_silently</span><span class="s2">=</span><span class="s1">fail_silently</span><span class="s2">,</span>
+    <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">warning</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">message</span><span class="s2">, </span><span class="s1">extra_tags</span><span class="s2">=</span><span class="s3">&quot;&quot;</span><span class="s2">, </span><span class="s1">fail_silently</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot;Add a message with the ``WARNING`` level.&quot;&quot;&quot;</span>
+    <span class="s1">add_message</span><span class="s2">(</span>
+        <span class="s1">request</span><span class="s2">,</span>
+        <span class="s1">constants</span><span class="s2">.</span><span class="s1">WARNING</span><span class="s2">,</span>
+        <span class="s1">message</span><span class="s2">,</span>
+        <span class="s1">extra_tags</span><span class="s2">=</span><span class="s1">extra_tags</span><span class="s2">,</span>
+        <span class="s1">fail_silently</span><span class="s2">=</span><span class="s1">fail_silently</span><span class="s2">,</span>
+    <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">error</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">message</span><span class="s2">, </span><span class="s1">extra_tags</span><span class="s2">=</span><span class="s3">&quot;&quot;</span><span class="s2">, </span><span class="s1">fail_silently</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot;Add a message with the ``ERROR`` level.&quot;&quot;&quot;</span>
+    <span class="s1">add_message</span><span class="s2">(</span>
+        <span class="s1">request</span><span class="s2">,</span>
+        <span class="s1">constants</span><span class="s2">.</span><span class="s1">ERROR</span><span class="s2">,</span>
+        <span class="s1">message</span><span class="s2">,</span>
+        <span class="s1">extra_tags</span><span class="s2">=</span><span class="s1">extra_tags</span><span class="s2">,</span>
+        <span class="s1">fail_silently</span><span class="s2">=</span><span class="s1">fail_silently</span><span class="s2">,</span>
+    <span class="s2">)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<html>
+<head>
+<title>optimizer.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+optimizer.py</font>
+</center></td></tr></table>
+<pre><span class="s0">class </span><span class="s1">MigrationOptimizer</span><span class="s2">:</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Power the optimization process, where you provide a list of Operations 
+    and you are returned a list of equal or shorter length - operations 
+    are merged into one if possible. 
+ 
+    For example, a CreateModel and an AddField can be optimized into a 
+    new CreateModel, and CreateModel and DeleteModel can be optimized into 
+    nothing. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">optimize</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">operations</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Main optimization entry point. Pass in a list of Operation instances, 
+        get out a new list of Operation instances. 
+ 
+        Unfortunately, due to the scope of the optimization (two combinable 
+        operations might be separated by several hundred others), this can't be 
+        done as a peephole optimization with checks/output implemented on 
+        the Operations themselves; instead, the optimizer looks at each 
+        individual operation and scans forwards in the list to see if there 
+        are any matches, stopping at boundaries - operations which can't 
+        be optimized over (RunSQL, operations on the same field/model, etc.) 
+ 
+        The inner loop is run until the starting list is the same as the result 
+        list, and then the result is returned. This means that operation 
+        optimization must be stable and always return an equal or shorter list. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># Internal tracking variable for test assertions about # of loops</span>
+        <span class="s0">if </span><span class="s1">app_label </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span><span class="s5">&quot;app_label must be a str.&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_iterations </span><span class="s2">= </span><span class="s6">0</span>
+        <span class="s0">while True</span><span class="s2">:</span>
+            <span class="s1">result </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">optimize_inner</span><span class="s2">(</span><span class="s1">operations</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_iterations </span><span class="s2">+= </span><span class="s6">1</span>
+            <span class="s0">if </span><span class="s1">result </span><span class="s2">== </span><span class="s1">operations</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">result</span>
+            <span class="s1">operations </span><span class="s2">= </span><span class="s1">result</span>
+
+    <span class="s0">def </span><span class="s1">optimize_inner</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">operations</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Inner optimization loop.&quot;&quot;&quot;</span>
+        <span class="s1">new_operations </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">operation </span><span class="s0">in </span><span class="s1">enumerate</span><span class="s2">(</span><span class="s1">operations</span><span class="s2">):</span>
+            <span class="s1">right </span><span class="s2">= </span><span class="s0">True  </span><span class="s4"># Should we reduce on the right or on the left.</span>
+            <span class="s4"># Compare it to each operation after it</span>
+            <span class="s0">for </span><span class="s1">j</span><span class="s2">, </span><span class="s1">other </span><span class="s0">in </span><span class="s1">enumerate</span><span class="s2">(</span><span class="s1">operations</span><span class="s2">[</span><span class="s1">i </span><span class="s2">+ </span><span class="s6">1 </span><span class="s2">:]):</span>
+                <span class="s1">result </span><span class="s2">= </span><span class="s1">operation</span><span class="s2">.</span><span class="s1">reduce</span><span class="s2">(</span><span class="s1">other</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">result</span><span class="s2">, </span><span class="s1">list</span><span class="s2">):</span>
+                    <span class="s1">in_between </span><span class="s2">= </span><span class="s1">operations</span><span class="s2">[</span><span class="s1">i </span><span class="s2">+ </span><span class="s6">1 </span><span class="s2">: </span><span class="s1">i </span><span class="s2">+ </span><span class="s1">j </span><span class="s2">+ </span><span class="s6">1</span><span class="s2">]</span>
+                    <span class="s0">if </span><span class="s1">right</span><span class="s2">:</span>
+                        <span class="s1">new_operations</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">in_between</span><span class="s2">)</span>
+                        <span class="s1">new_operations</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">result</span><span class="s2">)</span>
+                    <span class="s0">elif </span><span class="s1">all</span><span class="s2">(</span><span class="s1">op</span><span class="s2">.</span><span class="s1">reduce</span><span class="s2">(</span><span class="s1">other</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">) </span><span class="s0">is True for </span><span class="s1">op </span><span class="s0">in </span><span class="s1">in_between</span><span class="s2">):</span>
+                        <span class="s4"># Perform a left reduction if all of the in-between</span>
+                        <span class="s4"># operations can optimize through other.</span>
+                        <span class="s1">new_operations</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">result</span><span class="s2">)</span>
+                        <span class="s1">new_operations</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">in_between</span><span class="s2">)</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s4"># Otherwise keep trying.</span>
+                        <span class="s1">new_operations</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">operation</span><span class="s2">)</span>
+                        <span class="s0">break</span>
+                    <span class="s1">new_operations</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">operations</span><span class="s2">[</span><span class="s1">i </span><span class="s2">+ </span><span class="s1">j </span><span class="s2">+ </span><span class="s6">2 </span><span class="s2">:])</span>
+                    <span class="s0">return </span><span class="s1">new_operations</span>
+                <span class="s0">elif not </span><span class="s1">result</span><span class="s2">:</span>
+                    <span class="s4"># Can't perform a right reduction.</span>
+                    <span class="s1">right </span><span class="s2">= </span><span class="s0">False</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">new_operations</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">operation</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">new_operations</span>
+</pre>
+</body>
+</html>

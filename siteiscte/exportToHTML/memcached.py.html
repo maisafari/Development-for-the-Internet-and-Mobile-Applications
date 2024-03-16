@@ -1,0 +1,211 @@
+<html>
+<head>
+<title>memcached.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+memcached.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;Memcached cache backend&quot;</span>
+
+<span class="s2">import </span><span class="s1">re</span>
+<span class="s2">import </span><span class="s1">time</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">cache</span><span class="s3">.</span><span class="s1">backends</span><span class="s3">.</span><span class="s1">base </span><span class="s2">import </span><span class="s3">(</span>
+    <span class="s1">DEFAULT_TIMEOUT</span><span class="s3">,</span>
+    <span class="s1">BaseCache</span><span class="s3">,</span>
+    <span class="s1">InvalidCacheKey</span><span class="s3">,</span>
+    <span class="s1">memcache_key_warnings</span><span class="s3">,</span>
+<span class="s3">)</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">functional </span><span class="s2">import </span><span class="s1">cached_property</span>
+
+
+<span class="s2">class </span><span class="s1">BaseMemcachedCache</span><span class="s3">(</span><span class="s1">BaseCache</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">server</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">library</span><span class="s3">, </span><span class="s1">value_not_found_exception</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">params</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">server</span><span class="s3">, </span><span class="s1">str</span><span class="s3">):</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_servers </span><span class="s3">= </span><span class="s1">re</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s4">&quot;[;,]&quot;</span><span class="s3">, </span><span class="s1">server</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_servers </span><span class="s3">= </span><span class="s1">server</span>
+
+        <span class="s5"># Exception type raised by the underlying client library for a</span>
+        <span class="s5"># nonexistent key.</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">LibraryValueNotFoundException </span><span class="s3">= </span><span class="s1">value_not_found_exception</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_lib </span><span class="s3">= </span><span class="s1">library</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_class </span><span class="s3">= </span><span class="s1">library</span><span class="s3">.</span><span class="s1">Client</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_options </span><span class="s3">= </span><span class="s1">params</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;OPTIONS&quot;</span><span class="s3">) </span><span class="s2">or </span><span class="s3">{}</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">client_servers</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_servers</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">_cache</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Implement transparent thread-safe access to a memcached client. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_class</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">client_servers</span><span class="s3">, **</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_options</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_backend_timeout</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Memcached deals with long (&gt; 30 days) timeouts in a special 
+        way. Call this function to obtain a safe value for your timeout. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">timeout </span><span class="s3">== </span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">:</span>
+            <span class="s1">timeout </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">default_timeout</span>
+
+        <span class="s2">if </span><span class="s1">timeout </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s5"># Using 0 in memcache sets a non-expiring timeout.</span>
+            <span class="s2">return </span><span class="s6">0</span>
+        <span class="s2">elif </span><span class="s1">int</span><span class="s3">(</span><span class="s1">timeout</span><span class="s3">) == </span><span class="s6">0</span><span class="s3">:</span>
+            <span class="s5"># Other cache backends treat 0 as set-and-expire. To achieve this</span>
+            <span class="s5"># in memcache backends, a negative timeout must be passed.</span>
+            <span class="s1">timeout </span><span class="s3">= -</span><span class="s6">1</span>
+
+        <span class="s2">if </span><span class="s1">timeout </span><span class="s3">&gt; </span><span class="s6">2592000</span><span class="s3">:  </span><span class="s5"># 60*60*24*30, 30 days</span>
+            <span class="s5"># See https://github.com/memcached/memcached/wiki/Programming#expiration</span>
+            <span class="s5"># &quot;Expiration times can be set from 0, meaning &quot;never expire&quot;, to</span>
+            <span class="s5"># 30 days. Any time higher than 30 days is interpreted as a Unix</span>
+            <span class="s5"># timestamp date. If you want to expire an object on January 1st of</span>
+            <span class="s5"># next year, this is how you do that.&quot;</span>
+            <span class="s5">#</span>
+            <span class="s5"># This means that we have to switch to absolute timestamps.</span>
+            <span class="s1">timeout </span><span class="s3">+= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">time</span><span class="s3">.</span><span class="s1">time</span><span class="s3">())</span>
+        <span class="s2">return </span><span class="s1">int</span><span class="s3">(</span><span class="s1">timeout</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">add</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">add</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_backend_timeout</span><span class="s3">(</span><span class="s1">timeout</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">get</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">default</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">default</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">set</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">if not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">set</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_backend_timeout</span><span class="s3">(</span><span class="s1">timeout</span><span class="s3">)):</span>
+            <span class="s5"># Make sure the key doesn't keep its old value in case of failure</span>
+            <span class="s5"># to set (memcached's 1MB limit).</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">delete</span><span class="s3">(</span><span class="s1">key</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">touch</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">touch</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_backend_timeout</span><span class="s3">(</span><span class="s1">timeout</span><span class="s3">)))</span>
+
+    <span class="s2">def </span><span class="s1">delete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">delete</span><span class="s3">(</span><span class="s1">key</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">get_many</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">keys</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key_map </span><span class="s3">= {</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">): </span><span class="s1">key </span><span class="s2">for </span><span class="s1">key </span><span class="s2">in </span><span class="s1">keys</span>
+        <span class="s3">}</span>
+        <span class="s1">ret </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">get_multi</span><span class="s3">(</span><span class="s1">key_map</span><span class="s3">.</span><span class="s1">keys</span><span class="s3">())</span>
+        <span class="s2">return </span><span class="s3">{</span><span class="s1">key_map</span><span class="s3">[</span><span class="s1">k</span><span class="s3">]: </span><span class="s1">v </span><span class="s2">for </span><span class="s1">k</span><span class="s3">, </span><span class="s1">v </span><span class="s2">in </span><span class="s1">ret</span><span class="s3">.</span><span class="s1">items</span><span class="s3">()}</span>
+
+    <span class="s2">def </span><span class="s1">close</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s5"># Many clients don't clean up connections properly.</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">disconnect_all</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">incr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">delta</span><span class="s3">=</span><span class="s6">1</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s5"># Memcached doesn't support negative delta.</span>
+            <span class="s2">if </span><span class="s1">delta </span><span class="s3">&lt; </span><span class="s6">0</span><span class="s3">:</span>
+                <span class="s1">val </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">decr</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, -</span><span class="s1">delta</span><span class="s3">)</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s1">val </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">incr</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">delta</span><span class="s3">)</span>
+        <span class="s5"># Normalize an exception raised by the underlying client library to</span>
+        <span class="s5"># ValueError in the event of a nonexistent key when calling</span>
+        <span class="s5"># incr()/decr().</span>
+        <span class="s2">except </span><span class="s1">self</span><span class="s3">.</span><span class="s1">LibraryValueNotFoundException</span><span class="s3">:</span>
+            <span class="s1">val </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s2">if </span><span class="s1">val </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span><span class="s4">&quot;Key '%s' not found&quot; </span><span class="s3">% </span><span class="s1">key</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">val</span>
+
+    <span class="s2">def </span><span class="s1">set_many</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">data</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">safe_data </span><span class="s3">= {}</span>
+        <span class="s1">original_keys </span><span class="s3">= {}</span>
+        <span class="s2">for </span><span class="s1">key</span><span class="s3">, </span><span class="s1">value </span><span class="s2">in </span><span class="s1">data</span><span class="s3">.</span><span class="s1">items</span><span class="s3">():</span>
+            <span class="s1">safe_key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+            <span class="s1">safe_data</span><span class="s3">[</span><span class="s1">safe_key</span><span class="s3">] = </span><span class="s1">value</span>
+            <span class="s1">original_keys</span><span class="s3">[</span><span class="s1">safe_key</span><span class="s3">] = </span><span class="s1">key</span>
+        <span class="s1">failed_keys </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">set_multi</span><span class="s3">(</span>
+            <span class="s1">safe_data</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_backend_timeout</span><span class="s3">(</span><span class="s1">timeout</span><span class="s3">)</span>
+        <span class="s3">)</span>
+        <span class="s2">return </span><span class="s3">[</span><span class="s1">original_keys</span><span class="s3">[</span><span class="s1">k</span><span class="s3">] </span><span class="s2">for </span><span class="s1">k </span><span class="s2">in </span><span class="s1">failed_keys</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">delete_many</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">keys</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">keys </span><span class="s3">= [</span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">) </span><span class="s2">for </span><span class="s1">key </span><span class="s2">in </span><span class="s1">keys</span><span class="s3">]</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">delete_multi</span><span class="s3">(</span><span class="s1">keys</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">clear</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">flush_all</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">validate_key</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">warning </span><span class="s2">in </span><span class="s1">memcache_key_warnings</span><span class="s3">(</span><span class="s1">key</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">InvalidCacheKey</span><span class="s3">(</span><span class="s1">warning</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">PyLibMCCache</span><span class="s3">(</span><span class="s1">BaseMemcachedCache</span><span class="s3">):</span>
+    <span class="s0">&quot;An implementation of a cache binding using pylibmc&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">server</span><span class="s3">, </span><span class="s1">params</span><span class="s3">):</span>
+        <span class="s2">import </span><span class="s1">pylibmc</span>
+
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span>
+            <span class="s1">server</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">library</span><span class="s3">=</span><span class="s1">pylibmc</span><span class="s3">, </span><span class="s1">value_not_found_exception</span><span class="s3">=</span><span class="s1">pylibmc</span><span class="s3">.</span><span class="s1">NotFound</span>
+        <span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">client_servers</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">output </span><span class="s3">= []</span>
+        <span class="s2">for </span><span class="s1">server </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_servers</span><span class="s3">:</span>
+            <span class="s1">output</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">server</span><span class="s3">.</span><span class="s1">removeprefix</span><span class="s3">(</span><span class="s4">&quot;unix:&quot;</span><span class="s3">))</span>
+        <span class="s2">return </span><span class="s1">output</span>
+
+    <span class="s2">def </span><span class="s1">touch</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">timeout </span><span class="s3">== </span><span class="s6">0</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">delete</span><span class="s3">(</span><span class="s1">key</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">touch</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_backend_timeout</span><span class="s3">(</span><span class="s1">timeout</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">close</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s5"># libmemcached manages its own connections. Don't call disconnect_all()</span>
+        <span class="s5"># as it resets the failover state and creates unnecessary reconnects.</span>
+        <span class="s2">pass</span>
+
+
+<span class="s2">class </span><span class="s1">PyMemcacheCache</span><span class="s3">(</span><span class="s1">BaseMemcachedCache</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;An implementation of a cache binding using pymemcache.&quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">server</span><span class="s3">, </span><span class="s1">params</span><span class="s3">):</span>
+        <span class="s2">import </span><span class="s1">pymemcache</span><span class="s3">.</span><span class="s1">serde</span>
+
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span>
+            <span class="s1">server</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">library</span><span class="s3">=</span><span class="s1">pymemcache</span><span class="s3">, </span><span class="s1">value_not_found_exception</span><span class="s3">=</span><span class="s1">KeyError</span>
+        <span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_class </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_lib</span><span class="s3">.</span><span class="s1">HashClient</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_options </span><span class="s3">= {</span>
+            <span class="s4">&quot;allow_unicode_keys&quot;</span><span class="s3">: </span><span class="s2">True</span><span class="s3">,</span>
+            <span class="s4">&quot;default_noreply&quot;</span><span class="s3">: </span><span class="s2">False</span><span class="s3">,</span>
+            <span class="s4">&quot;serde&quot;</span><span class="s3">: </span><span class="s1">pymemcache</span><span class="s3">.</span><span class="s1">serde</span><span class="s3">.</span><span class="s1">pickle_serde</span><span class="s3">,</span>
+            <span class="s3">**</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_options</span><span class="s3">,</span>
+        <span class="s3">}</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<html>
+<head>
+<title>dummy.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+dummy.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">string</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template </span><span class="s0">import </span><span class="s1">Origin</span><span class="s2">, </span><span class="s1">TemplateDoesNotExist</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">html </span><span class="s0">import </span><span class="s1">conditional_escape</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseEngine</span>
+<span class="s0">from </span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">csrf_input_lazy</span><span class="s2">, </span><span class="s1">csrf_token_lazy</span>
+
+
+<span class="s0">class </span><span class="s1">TemplateStrings</span><span class="s2">(</span><span class="s1">BaseEngine</span><span class="s2">):</span>
+    <span class="s1">app_dirname </span><span class="s2">= </span><span class="s3">&quot;template_strings&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">params</span><span class="s2">):</span>
+        <span class="s1">params </span><span class="s2">= </span><span class="s1">params</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s1">options </span><span class="s2">= </span><span class="s1">params</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s3">&quot;OPTIONS&quot;</span><span class="s2">).</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">options</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span><span class="s3">&quot;Unknown options: {}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">options</span><span class="s2">)))</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">params</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">from_string</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_code</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">Template</span><span class="s2">(</span><span class="s1">template_code</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">):</span>
+        <span class="s1">tried </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">template_file </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">iter_template_filenames</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">):</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s0">with </span><span class="s1">open</span><span class="s2">(</span><span class="s1">template_file</span><span class="s2">, </span><span class="s1">encoding</span><span class="s2">=</span><span class="s3">&quot;utf-8&quot;</span><span class="s2">) </span><span class="s0">as </span><span class="s1">fp</span><span class="s2">:</span>
+                    <span class="s1">template_code </span><span class="s2">= </span><span class="s1">fp</span><span class="s2">.</span><span class="s1">read</span><span class="s2">()</span>
+            <span class="s0">except </span><span class="s1">FileNotFoundError</span><span class="s2">:</span>
+                <span class="s1">tried</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s2">(</span>
+                        <span class="s1">Origin</span><span class="s2">(</span><span class="s1">template_file</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">),</span>
+                        <span class="s3">&quot;Source does not exist&quot;</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">Template</span><span class="s2">(</span><span class="s1">template_code</span><span class="s2">)</span>
+        <span class="s0">raise </span><span class="s1">TemplateDoesNotExist</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">, </span><span class="s1">tried</span><span class="s2">=</span><span class="s1">tried</span><span class="s2">, </span><span class="s1">backend</span><span class="s2">=</span><span class="s1">self</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">Template</span><span class="s2">(</span><span class="s1">string</span><span class="s2">.</span><span class="s1">Template</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">request</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">context </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">context </span><span class="s2">= {}</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">context </span><span class="s2">= {</span><span class="s1">k</span><span class="s2">: </span><span class="s1">conditional_escape</span><span class="s2">(</span><span class="s1">v</span><span class="s2">) </span><span class="s0">for </span><span class="s1">k</span><span class="s2">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">context</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()}</span>
+        <span class="s0">if </span><span class="s1">request </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">context</span><span class="s2">[</span><span class="s3">&quot;csrf_input&quot;</span><span class="s2">] = </span><span class="s1">csrf_input_lazy</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+            <span class="s1">context</span><span class="s2">[</span><span class="s3">&quot;csrf_token&quot;</span><span class="s2">] = </span><span class="s1">csrf_token_lazy</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">safe_substitute</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

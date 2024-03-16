@@ -1,0 +1,368 @@
+<html>
+<head>
+<title>datastructures.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+datastructures.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">copy</span>
+<span class="s0">from </span><span class="s1">collections</span><span class="s2">.</span><span class="s1">abc </span><span class="s0">import </span><span class="s1">Mapping</span>
+
+
+<span class="s0">class </span><span class="s1">OrderedSet</span><span class="s2">:</span>
+    <span class="s3">&quot;&quot;&quot; 
+    A set which keeps the ordering of the inserted items. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">iterable</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">dict </span><span class="s2">= </span><span class="s1">dict</span><span class="s2">.</span><span class="s1">fromkeys</span><span class="s2">(</span><span class="s1">iterable </span><span class="s0">or </span><span class="s2">())</span>
+
+    <span class="s0">def </span><span class="s1">add</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">item</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">dict</span><span class="s2">[</span><span class="s1">item</span><span class="s2">] = </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">remove</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">item</span><span class="s2">):</span>
+        <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">dict</span><span class="s2">[</span><span class="s1">item</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">discard</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">item</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">(</span><span class="s1">item</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+            <span class="s0">pass</span>
+
+    <span class="s0">def </span><span class="s1">__iter__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">iter</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">dict</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__reversed__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">reversed</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">dict</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__contains__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">item</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">item </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">dict</span>
+
+    <span class="s0">def </span><span class="s1">__bool__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">bool</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">dict</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__len__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">len</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">dict</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">data </span><span class="s2">= </span><span class="s1">repr</span><span class="s2">(</span><span class="s1">list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">dict</span><span class="s2">)) </span><span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">dict </span><span class="s0">else </span><span class="s4">&quot;&quot;</span>
+        <span class="s0">return </span><span class="s4">f&quot;</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s0">}</span><span class="s4">(</span><span class="s0">{</span><span class="s1">data</span><span class="s0">}</span><span class="s4">)&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">MultiValueDictKeyError</span><span class="s2">(</span><span class="s1">KeyError</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">MultiValueDict</span><span class="s2">(</span><span class="s1">dict</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    A subclass of dictionary customized to handle multiple values for the 
+    same key. 
+ 
+    &gt;&gt;&gt; d = MultiValueDict({'name': ['Adrian', 'Simon'], 'position': ['Developer']}) 
+    &gt;&gt;&gt; d['name'] 
+    'Simon' 
+    &gt;&gt;&gt; d.getlist('name') 
+    ['Adrian', 'Simon'] 
+    &gt;&gt;&gt; d.getlist('doesnotexist') 
+    [] 
+    &gt;&gt;&gt; d.getlist('doesnotexist', ['Adrian', 'Simon']) 
+    ['Adrian', 'Simon'] 
+    &gt;&gt;&gt; d.get('lastname', 'nonexistent') 
+    'nonexistent' 
+    &gt;&gt;&gt; d.setlist('lastname', ['Holovaty', 'Willison']) 
+ 
+    This class exists to solve the irritating problem raised by cgi.parse_qs, 
+    which returns a list for every key, even though most web forms submit 
+    single name-value pairs. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key_to_list_mapping</span><span class="s2">=()):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">key_to_list_mapping</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s4">&quot;&lt;%s: %s&gt;&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">, </span><span class="s1">super</span><span class="s2">().</span><span class="s1">__repr__</span><span class="s2">())</span>
+
+    <span class="s0">def </span><span class="s1">__getitem__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the last data value for this key, or [] if it's an empty list; 
+        raise KeyError if not found. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">list_ </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">__getitem__</span><span class="s2">(</span><span class="s1">key</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">MultiValueDictKeyError</span><span class="s2">(</span><span class="s1">key</span><span class="s2">)</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">list_</span><span class="s2">[-</span><span class="s5">1</span><span class="s2">]</span>
+        <span class="s0">except </span><span class="s1">IndexError</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s2">[]</span>
+
+    <span class="s0">def </span><span class="s1">__setitem__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__setitem__</span><span class="s2">(</span><span class="s1">key</span><span class="s2">, [</span><span class="s1">value</span><span class="s2">])</span>
+
+    <span class="s0">def </span><span class="s1">__copy__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">([(</span><span class="s1">k</span><span class="s2">, </span><span class="s1">v</span><span class="s2">[:]) </span><span class="s0">for </span><span class="s1">k</span><span class="s2">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lists</span><span class="s2">()])</span>
+
+    <span class="s0">def </span><span class="s1">__deepcopy__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">memo</span><span class="s2">):</span>
+        <span class="s1">result </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">()</span>
+        <span class="s1">memo</span><span class="s2">[</span><span class="s1">id</span><span class="s2">(</span><span class="s1">self</span><span class="s2">)] = </span><span class="s1">result</span>
+        <span class="s0">for </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value </span><span class="s0">in </span><span class="s1">dict</span><span class="s2">.</span><span class="s1">items</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+            <span class="s1">dict</span><span class="s2">.</span><span class="s1">__setitem__</span><span class="s2">(</span>
+                <span class="s1">result</span><span class="s2">, </span><span class="s1">copy</span><span class="s2">.</span><span class="s1">deepcopy</span><span class="s2">(</span><span class="s1">key</span><span class="s2">, </span><span class="s1">memo</span><span class="s2">), </span><span class="s1">copy</span><span class="s2">.</span><span class="s1">deepcopy</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">memo</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">result</span>
+
+    <span class="s0">def </span><span class="s1">__getstate__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">{**</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">, </span><span class="s4">&quot;_data&quot;</span><span class="s2">: {</span><span class="s1">k</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_getlist</span><span class="s2">(</span><span class="s1">k</span><span class="s2">) </span><span class="s0">for </span><span class="s1">k </span><span class="s0">in </span><span class="s1">self</span><span class="s2">}}</span>
+
+    <span class="s0">def </span><span class="s1">__setstate__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">obj_dict</span><span class="s2">):</span>
+        <span class="s1">data </span><span class="s2">= </span><span class="s1">obj_dict</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s4">&quot;_data&quot;</span><span class="s2">, {})</span>
+        <span class="s0">for </span><span class="s1">k</span><span class="s2">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">data</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">setlist</span><span class="s2">(</span><span class="s1">k</span><span class="s2">, </span><span class="s1">v</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">obj_dict</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">default</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the last data value for the passed key. If key doesn't exist 
+        or value is an empty list, return `default`. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">val </span><span class="s2">= </span><span class="s1">self</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]</span>
+        <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">default</span>
+        <span class="s0">if </span><span class="s1">val </span><span class="s2">== []:</span>
+            <span class="s0">return </span><span class="s1">default</span>
+        <span class="s0">return </span><span class="s1">val</span>
+
+    <span class="s0">def </span><span class="s1">_getlist</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">default</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">force_list</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return a list of values for the key. 
+ 
+        Used internally to manipulate values list. If force_list is True, 
+        return a new copy of values. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">values </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">__getitem__</span><span class="s2">(</span><span class="s1">key</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">default </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s2">[]</span>
+            <span class="s0">return </span><span class="s1">default</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">force_list</span><span class="s2">:</span>
+                <span class="s1">values </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">values</span><span class="s2">) </span><span class="s0">if </span><span class="s1">values </span><span class="s0">is not None else None</span>
+            <span class="s0">return </span><span class="s1">values</span>
+
+    <span class="s0">def </span><span class="s1">getlist</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">default</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the list of values for the key. If key doesn't exist, return a 
+        default value. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_getlist</span><span class="s2">(</span><span class="s1">key</span><span class="s2">, </span><span class="s1">default</span><span class="s2">, </span><span class="s1">force_list</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">setlist</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">list_</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__setitem__</span><span class="s2">(</span><span class="s1">key</span><span class="s2">, </span><span class="s1">list_</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">setdefault</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">default</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">key </span><span class="s0">not in </span><span class="s1">self</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">[</span><span class="s1">key</span><span class="s2">] = </span><span class="s1">default</span>
+            <span class="s6"># Do not return default here because __setitem__() may store</span>
+            <span class="s6"># another value -- QueryDict.__setitem__() does. Look it up.</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">setlistdefault</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">default_list</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">key </span><span class="s0">not in </span><span class="s1">self</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">default_list </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s1">default_list </span><span class="s2">= []</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">setlist</span><span class="s2">(</span><span class="s1">key</span><span class="s2">, </span><span class="s1">default_list</span><span class="s2">)</span>
+            <span class="s6"># Do not return default_list here because setlist() may store</span>
+            <span class="s6"># another value -- QueryDict.setlist() does. Look it up.</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_getlist</span><span class="s2">(</span><span class="s1">key</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">appendlist</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Append an item to the internal list associated with key.&quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">setlistdefault</span><span class="s2">(</span><span class="s1">key</span><span class="s2">).</span><span class="s1">append</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">items</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Yield (key, value) pairs, where value is the last item in the list 
+        associated with the key. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">self</span><span class="s2">:</span>
+            <span class="s0">yield </span><span class="s1">key</span><span class="s2">, </span><span class="s1">self</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">lists</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Yield (key, list) pairs.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">iter</span><span class="s2">(</span><span class="s1">super</span><span class="s2">().</span><span class="s1">items</span><span class="s2">())</span>
+
+    <span class="s0">def </span><span class="s1">values</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Yield the last value on every key list.&quot;&quot;&quot;</span>
+        <span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">self</span><span class="s2">:</span>
+            <span class="s0">yield </span><span class="s1">self</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">copy</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Return a shallow copy of this object.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">copy</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">(</span><span class="s1">self</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">update</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Extend rather than replace existing key lists.&quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">args</span><span class="s2">) &gt; </span><span class="s5">1</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span><span class="s4">&quot;update expected at most 1 argument, got %d&quot; </span><span class="s2">% </span><span class="s1">len</span><span class="s2">(</span><span class="s1">args</span><span class="s2">))</span>
+        <span class="s0">if </span><span class="s1">args</span><span class="s2">:</span>
+            <span class="s1">arg </span><span class="s2">= </span><span class="s1">args</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">arg</span><span class="s2">, </span><span class="s1">MultiValueDict</span><span class="s2">):</span>
+                <span class="s0">for </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value_list </span><span class="s0">in </span><span class="s1">arg</span><span class="s2">.</span><span class="s1">lists</span><span class="s2">():</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">setlistdefault</span><span class="s2">(</span><span class="s1">key</span><span class="s2">).</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">value_list</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">arg</span><span class="s2">, </span><span class="s1">Mapping</span><span class="s2">):</span>
+                    <span class="s1">arg </span><span class="s2">= </span><span class="s1">arg</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()</span>
+                <span class="s0">for </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value </span><span class="s0">in </span><span class="s1">arg</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">setlistdefault</span><span class="s2">(</span><span class="s1">key</span><span class="s2">).</span><span class="s1">append</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value </span><span class="s0">in </span><span class="s1">kwargs</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">setlistdefault</span><span class="s2">(</span><span class="s1">key</span><span class="s2">).</span><span class="s1">append</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">dict</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Return current object as a dict with singular values.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s2">{</span><span class="s1">key</span><span class="s2">: </span><span class="s1">self</span><span class="s2">[</span><span class="s1">key</span><span class="s2">] </span><span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">self</span><span class="s2">}</span>
+
+
+<span class="s0">class </span><span class="s1">ImmutableList</span><span class="s2">(</span><span class="s1">tuple</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    A tuple-like object that raises useful errors when it is asked to mutate. 
+ 
+    Example:: 
+ 
+        &gt;&gt;&gt; a = ImmutableList(range(5), warning=&quot;You cannot mutate this.&quot;) 
+        &gt;&gt;&gt; a[3] = '4' 
+        Traceback (most recent call last): 
+            ... 
+        AttributeError: You cannot mutate this. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__new__</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, </span><span class="s1">warning</span><span class="s2">=</span><span class="s4">&quot;ImmutableList object is immutable.&quot;</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">self </span><span class="s2">= </span><span class="s1">tuple</span><span class="s2">.</span><span class="s1">__new__</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">warning </span><span class="s2">= </span><span class="s1">warning</span>
+        <span class="s0">return </span><span class="s1">self</span>
+
+    <span class="s0">def </span><span class="s1">complain</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">raise </span><span class="s1">AttributeError</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">warning</span><span class="s2">)</span>
+
+    <span class="s6"># All list mutation functions complain.</span>
+    <span class="s1">__delitem__ </span><span class="s2">= </span><span class="s1">complain</span>
+    <span class="s1">__delslice__ </span><span class="s2">= </span><span class="s1">complain</span>
+    <span class="s1">__iadd__ </span><span class="s2">= </span><span class="s1">complain</span>
+    <span class="s1">__imul__ </span><span class="s2">= </span><span class="s1">complain</span>
+    <span class="s1">__setitem__ </span><span class="s2">= </span><span class="s1">complain</span>
+    <span class="s1">__setslice__ </span><span class="s2">= </span><span class="s1">complain</span>
+    <span class="s1">append </span><span class="s2">= </span><span class="s1">complain</span>
+    <span class="s1">extend </span><span class="s2">= </span><span class="s1">complain</span>
+    <span class="s1">insert </span><span class="s2">= </span><span class="s1">complain</span>
+    <span class="s1">pop </span><span class="s2">= </span><span class="s1">complain</span>
+    <span class="s1">remove </span><span class="s2">= </span><span class="s1">complain</span>
+    <span class="s1">sort </span><span class="s2">= </span><span class="s1">complain</span>
+    <span class="s1">reverse </span><span class="s2">= </span><span class="s1">complain</span>
+
+
+<span class="s0">class </span><span class="s1">DictWrapper</span><span class="s2">(</span><span class="s1">dict</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Wrap accesses to a dictionary so that certain values (those starting with 
+    the specified prefix) are passed through a function before being returned. 
+    The prefix is removed before looking up the real value. 
+ 
+    Used by the SQL construction code to ensure that values are correctly 
+    quoted before being used. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">data</span><span class="s2">, </span><span class="s1">func</span><span class="s2">, </span><span class="s1">prefix</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">data</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">func </span><span class="s2">= </span><span class="s1">func</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">prefix </span><span class="s2">= </span><span class="s1">prefix</span>
+
+    <span class="s0">def </span><span class="s1">__getitem__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Retrieve the real value after stripping the prefix string (if 
+        present). If the prefix is present, pass the value through self.func 
+        before returning, otherwise return the raw value. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">use_func </span><span class="s2">= </span><span class="s1">key</span><span class="s2">.</span><span class="s1">startswith</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">prefix</span><span class="s2">)</span>
+        <span class="s1">key </span><span class="s2">= </span><span class="s1">key</span><span class="s2">.</span><span class="s1">removeprefix</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">prefix</span><span class="s2">)</span>
+        <span class="s1">value </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">__getitem__</span><span class="s2">(</span><span class="s1">key</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">use_func</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">func</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">value</span>
+
+
+<span class="s0">class </span><span class="s1">CaseInsensitiveMapping</span><span class="s2">(</span><span class="s1">Mapping</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Mapping allowing case-insensitive key lookups. Original case of keys is 
+    preserved for iteration and string representation. 
+ 
+    Example:: 
+ 
+        &gt;&gt;&gt; ci_map = CaseInsensitiveMapping({'name': 'Jane'}) 
+        &gt;&gt;&gt; ci_map['Name'] 
+        Jane 
+        &gt;&gt;&gt; ci_map['NAME'] 
+        Jane 
+        &gt;&gt;&gt; ci_map['name'] 
+        Jane 
+        &gt;&gt;&gt; ci_map  # original case preserved 
+        {'name': 'Jane'} 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">data</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_store </span><span class="s2">= {</span><span class="s1">k</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">(): (</span><span class="s1">k</span><span class="s2">, </span><span class="s1">v</span><span class="s2">) </span><span class="s0">for </span><span class="s1">k</span><span class="s2">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_unpack_items</span><span class="s2">(</span><span class="s1">data</span><span class="s2">)}</span>
+
+    <span class="s0">def </span><span class="s1">__getitem__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_store</span><span class="s2">[</span><span class="s1">key</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">()][</span><span class="s5">1</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">__len__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">len</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_store</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__eq__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">other</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">other</span><span class="s2">, </span><span class="s1">Mapping</span><span class="s2">) </span><span class="s0">and </span><span class="s2">{</span>
+            <span class="s1">k</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">(): </span><span class="s1">v </span><span class="s0">for </span><span class="s1">k</span><span class="s2">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()</span>
+        <span class="s2">} == {</span><span class="s1">k</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">(): </span><span class="s1">v </span><span class="s0">for </span><span class="s1">k</span><span class="s2">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">other</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()}</span>
+
+    <span class="s0">def </span><span class="s1">__iter__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">(</span><span class="s1">original_key </span><span class="s0">for </span><span class="s1">original_key</span><span class="s2">, </span><span class="s1">value </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_store</span><span class="s2">.</span><span class="s1">values</span><span class="s2">())</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">repr</span><span class="s2">({</span><span class="s1">key</span><span class="s2">: </span><span class="s1">value </span><span class="s0">for </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_store</span><span class="s2">.</span><span class="s1">values</span><span class="s2">()})</span>
+
+    <span class="s0">def </span><span class="s1">copy</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span>
+
+    <span class="s2">@</span><span class="s1">staticmethod</span>
+    <span class="s0">def </span><span class="s1">_unpack_items</span><span class="s2">(</span><span class="s1">data</span><span class="s2">):</span>
+        <span class="s6"># Explicitly test for dict first as the common case for performance,</span>
+        <span class="s6"># avoiding abc's __instancecheck__ and _abc_instancecheck for the</span>
+        <span class="s6"># general Mapping case.</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">data</span><span class="s2">, (</span><span class="s1">dict</span><span class="s2">, </span><span class="s1">Mapping</span><span class="s2">)):</span>
+            <span class="s0">yield from </span><span class="s1">data</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()</span>
+            <span class="s0">return</span>
+        <span class="s0">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">elem </span><span class="s0">in </span><span class="s1">enumerate</span><span class="s2">(</span><span class="s1">data</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">elem</span><span class="s2">) != </span><span class="s5">2</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s4">&quot;dictionary update sequence element #{} has length {}; &quot;</span>
+                    <span class="s4">&quot;2 is required.&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">i</span><span class="s2">, </span><span class="s1">len</span><span class="s2">(</span><span class="s1">elem</span><span class="s2">))</span>
+                <span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">elem</span><span class="s2">[</span><span class="s5">0</span><span class="s2">], </span><span class="s1">str</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s4">&quot;Element key %r invalid, only strings are allowed&quot; </span><span class="s2">% </span><span class="s1">elem</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]</span>
+                <span class="s2">)</span>
+            <span class="s0">yield </span><span class="s1">elem</span>
+</pre>
+</body>
+</html>

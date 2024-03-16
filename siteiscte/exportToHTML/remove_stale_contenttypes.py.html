@@ -1,0 +1,135 @@
+<html>
+<head>
+<title>remove_stale_contenttypes.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+.s6 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+remove_stale_contenttypes.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">itertools</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">contenttypes</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">ContentType</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management </span><span class="s0">import </span><span class="s1">BaseCommand</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">, </span><span class="s1">router</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">deletion </span><span class="s0">import </span><span class="s1">Collector</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= </span><span class="s3">&quot;Deletes stale content types in the database.&quot;</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--noinput&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--no-input&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_false&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;interactive&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Tells Django to NOT prompt the user for input of any kind.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--database&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">'Nominates the database to use. Defaults to the &quot;default&quot; database.'</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--include-stale-apps&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Deletes stale content types including ones from previously &quot;</span>
+                <span class="s3">&quot;installed apps that have been removed from INSTALLED_APPS.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">db </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;database&quot;</span><span class="s2">]</span>
+        <span class="s1">include_stale_apps </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;include_stale_apps&quot;</span><span class="s2">]</span>
+        <span class="s1">interactive </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;interactive&quot;</span><span class="s2">]</span>
+        <span class="s1">verbosity </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;verbosity&quot;</span><span class="s2">]</span>
+
+        <span class="s0">if not </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate_model</span><span class="s2">(</span><span class="s1">db</span><span class="s2">, </span><span class="s1">ContentType</span><span class="s2">):</span>
+            <span class="s0">return</span>
+        <span class="s1">ContentType</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">clear_cache</span><span class="s2">()</span>
+
+        <span class="s1">apps_content_types </span><span class="s2">= </span><span class="s1">itertools</span><span class="s2">.</span><span class="s1">groupby</span><span class="s2">(</span>
+            <span class="s1">ContentType</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">using</span><span class="s2">(</span><span class="s1">db</span><span class="s2">).</span><span class="s1">order_by</span><span class="s2">(</span><span class="s3">&quot;app_label&quot;</span><span class="s2">, </span><span class="s3">&quot;model&quot;</span><span class="s2">),</span>
+            <span class="s0">lambda </span><span class="s1">obj</span><span class="s2">: </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">content_types </span><span class="s0">in </span><span class="s1">apps_content_types</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">include_stale_apps </span><span class="s0">and </span><span class="s1">app_label </span><span class="s0">not in </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">app_configs</span><span class="s2">:</span>
+                <span class="s0">continue</span>
+            <span class="s1">to_remove </span><span class="s2">= [</span><span class="s1">ct </span><span class="s0">for </span><span class="s1">ct </span><span class="s0">in </span><span class="s1">content_types </span><span class="s0">if </span><span class="s1">ct</span><span class="s2">.</span><span class="s1">model_class</span><span class="s2">() </span><span class="s0">is None</span><span class="s2">]</span>
+            <span class="s4"># Confirm that the content type is stale before deletion.</span>
+            <span class="s1">using </span><span class="s2">= </span><span class="s1">router</span><span class="s2">.</span><span class="s1">db_for_write</span><span class="s2">(</span><span class="s1">ContentType</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">to_remove</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">interactive</span><span class="s2">:</span>
+                    <span class="s1">ct_info </span><span class="s2">= []</span>
+                    <span class="s0">for </span><span class="s1">ct </span><span class="s0">in </span><span class="s1">to_remove</span><span class="s2">:</span>
+                        <span class="s1">ct_info</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                            <span class="s3">&quot;    - Content type for %s.%s&quot; </span><span class="s2">% (</span><span class="s1">ct</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">ct</span><span class="s2">.</span><span class="s1">model</span><span class="s2">)</span>
+                        <span class="s2">)</span>
+                        <span class="s1">collector </span><span class="s2">= </span><span class="s1">NoFastDeleteCollector</span><span class="s2">(</span><span class="s1">using</span><span class="s2">=</span><span class="s1">using</span><span class="s2">, </span><span class="s1">origin</span><span class="s2">=</span><span class="s1">ct</span><span class="s2">)</span>
+                        <span class="s1">collector</span><span class="s2">.</span><span class="s1">collect</span><span class="s2">([</span><span class="s1">ct</span><span class="s2">])</span>
+
+                        <span class="s0">for </span><span class="s1">obj_type</span><span class="s2">, </span><span class="s1">objs </span><span class="s0">in </span><span class="s1">collector</span><span class="s2">.</span><span class="s1">data</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+                            <span class="s0">if </span><span class="s1">objs </span><span class="s2">!= {</span><span class="s1">ct</span><span class="s2">}:</span>
+                                <span class="s1">ct_info</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                                    <span class="s3">&quot;    - %s %s object(s)&quot;</span>
+                                    <span class="s2">% (</span>
+                                        <span class="s1">len</span><span class="s2">(</span><span class="s1">objs</span><span class="s2">),</span>
+                                        <span class="s1">obj_type</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">label</span><span class="s2">,</span>
+                                    <span class="s2">)</span>
+                                <span class="s2">)</span>
+                    <span class="s1">content_type_display </span><span class="s2">= </span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">ct_info</span><span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                        <span class="s3">&quot;Some content types in your database are stale and can be &quot;</span>
+                        <span class="s3">&quot;deleted.</span><span class="s0">\n</span><span class="s3">&quot;</span>
+                        <span class="s3">&quot;Any objects that depend on these content types will also be &quot;</span>
+                        <span class="s3">&quot;deleted.</span><span class="s0">\n</span><span class="s3">&quot;</span>
+                        <span class="s3">&quot;The content types and dependent objects that would be deleted &quot;</span>
+                        <span class="s3">&quot;are:</span><span class="s0">\n\n</span><span class="s3">&quot;</span>
+                        <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">content_type_display</span><span class="s0">}\n\n</span><span class="s3">&quot;</span>
+                        <span class="s3">&quot;This list doesn't include any cascade deletions to data &quot;</span>
+                        <span class="s3">&quot;outside of Django's</span><span class="s0">\n</span><span class="s3">&quot;</span>
+                        <span class="s3">&quot;models (uncommon).</span><span class="s0">\n\n</span><span class="s3">&quot;</span>
+                        <span class="s3">&quot;Are you sure you want to delete these content types?</span><span class="s0">\n</span><span class="s3">&quot;</span>
+                        <span class="s3">&quot;If you're unsure, answer 'no'.&quot;</span>
+                    <span class="s2">)</span>
+                    <span class="s1">ok_to_delete </span><span class="s2">= </span><span class="s1">input</span><span class="s2">(</span><span class="s3">&quot;Type 'yes' to continue, or 'no' to cancel: &quot;</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">ok_to_delete </span><span class="s2">= </span><span class="s3">&quot;yes&quot;</span>
+
+                <span class="s0">if </span><span class="s1">ok_to_delete </span><span class="s2">== </span><span class="s3">&quot;yes&quot;</span><span class="s2">:</span>
+                    <span class="s0">for </span><span class="s1">ct </span><span class="s0">in </span><span class="s1">to_remove</span><span class="s2">:</span>
+                        <span class="s0">if </span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s5">2</span><span class="s2">:</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                                <span class="s3">&quot;Deleting stale content type '%s | %s'&quot;</span>
+                                <span class="s2">% (</span><span class="s1">ct</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">ct</span><span class="s2">.</span><span class="s1">model</span><span class="s2">)</span>
+                            <span class="s2">)</span>
+                        <span class="s1">ct</span><span class="s2">.</span><span class="s1">delete</span><span class="s2">()</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s0">if </span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s5">2</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot;Stale content types remain.&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">NoFastDeleteCollector</span><span class="s2">(</span><span class="s1">Collector</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">can_fast_delete</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Always load related objects to display them when showing confirmation. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return False</span>
+</pre>
+</body>
+</html>

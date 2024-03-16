@@ -1,0 +1,105 @@
+<html>
+<head>
+<title>sqlmigrate.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+sqlmigrate.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span><span class="s2">, </span><span class="s1">CommandError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">, </span><span class="s1">connections</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">loader </span><span class="s0">import </span><span class="s1">AmbiguityError</span><span class="s2">, </span><span class="s1">MigrationLoader</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= </span><span class="s3">&quot;Prints the SQL statements for the named migration.&quot;</span>
+
+    <span class="s1">output_transaction </span><span class="s2">= </span><span class="s0">True</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;app_label&quot;</span><span class="s2">, </span><span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;App label of the application containing the migration.&quot;</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;migration_name&quot;</span><span class="s2">, </span><span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Migration name to print the SQL for.&quot;</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--database&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">'Nominates a database to create SQL for. Defaults to the &quot;default&quot; '</span>
+                <span class="s3">&quot;database.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--backwards&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Creates SQL to unapply the migration, rather than to apply it&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">execute</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s4"># sqlmigrate doesn't support coloring its output but we need to force</span>
+        <span class="s4"># no_color=True so that the BEGIN/COMMIT statements added by</span>
+        <span class="s4"># output_transaction don't get colored either.</span>
+        <span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;no_color&quot;</span><span class="s2">] = </span><span class="s0">True</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">execute</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s4"># Get the database we're operating from</span>
+        <span class="s1">connection </span><span class="s2">= </span><span class="s1">connections</span><span class="s2">[</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;database&quot;</span><span class="s2">]]</span>
+
+        <span class="s4"># Load up a loader to get all the migration data, but don't replace</span>
+        <span class="s4"># migrations.</span>
+        <span class="s1">loader </span><span class="s2">= </span><span class="s1">MigrationLoader</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">, </span><span class="s1">replace_migrations</span><span class="s2">=</span><span class="s0">False</span><span class="s2">)</span>
+
+        <span class="s4"># Resolve command-line arguments into a migration</span>
+        <span class="s1">app_label</span><span class="s2">, </span><span class="s1">migration_name </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;app_label&quot;</span><span class="s2">], </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;migration_name&quot;</span><span class="s2">]</span>
+        <span class="s4"># Validate app_label</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_config</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">LookupError </span><span class="s0">as </span><span class="s1">err</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s1">str</span><span class="s2">(</span><span class="s1">err</span><span class="s2">))</span>
+        <span class="s0">if </span><span class="s1">app_label </span><span class="s0">not in </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">migrated_apps</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s3">&quot;App '%s' does not have migrations&quot; </span><span class="s2">% </span><span class="s1">app_label</span><span class="s2">)</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">migration </span><span class="s2">= </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">get_migration_by_prefix</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">migration_name</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">AmbiguityError</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s3">&quot;More than one migration matches '%s' in app '%s'. Please be more &quot;</span>
+                <span class="s3">&quot;specific.&quot; </span><span class="s2">% (</span><span class="s1">migration_name</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s3">&quot;Cannot find a migration matching '%s' from app '%s'. Is it in &quot;</span>
+                <span class="s3">&quot;INSTALLED_APPS?&quot; </span><span class="s2">% (</span><span class="s1">migration_name</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s1">target </span><span class="s2">= (</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+
+        <span class="s4"># Show begin/end around output for atomic migrations, if the database</span>
+        <span class="s4"># supports transactional DDL.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">output_transaction </span><span class="s2">= (</span>
+            <span class="s1">migration</span><span class="s2">.</span><span class="s1">atomic </span><span class="s0">and </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">features</span><span class="s2">.</span><span class="s1">can_rollback_ddl</span>
+        <span class="s2">)</span>
+
+        <span class="s4"># Make a plan that represents just the requested migrations and show SQL</span>
+        <span class="s4"># for it</span>
+        <span class="s1">plan </span><span class="s2">= [(</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">nodes</span><span class="s2">[</span><span class="s1">target</span><span class="s2">], </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;backwards&quot;</span><span class="s2">])]</span>
+        <span class="s1">sql_statements </span><span class="s2">= </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">collect_sql</span><span class="s2">(</span><span class="s1">plan</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">sql_statements </span><span class="s0">and </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;verbosity&quot;</span><span class="s2">] &gt;= </span><span class="s5">1</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stderr</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot;No operations found.&quot;</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">sql_statements</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

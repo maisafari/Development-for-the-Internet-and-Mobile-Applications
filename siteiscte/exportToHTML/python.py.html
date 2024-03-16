@@ -1,0 +1,217 @@
+<html>
+<head>
+<title>python.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+python.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+A Python &quot;serializer&quot;. Doesn't do much serializing per se -- just converts to 
+and from basic Python data types (lists, dicts, strings, etc.). Useful as a basis for 
+other serializers. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">apps </span><span class="s2">import </span><span class="s1">apps</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">serializers </span><span class="s2">import </span><span class="s1">base</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db </span><span class="s2">import </span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s3">, </span><span class="s1">models</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">encoding </span><span class="s2">import </span><span class="s1">is_protected_type</span>
+
+
+<span class="s2">class </span><span class="s1">Serializer</span><span class="s3">(</span><span class="s1">base</span><span class="s3">.</span><span class="s1">Serializer</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Serialize a QuerySet to basic Python objects. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">internal_use_only </span><span class="s3">= </span><span class="s2">True</span>
+
+    <span class="s2">def </span><span class="s1">start_serialization</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_current </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">objects </span><span class="s3">= []</span>
+
+    <span class="s2">def </span><span class="s1">end_serialization</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">pass</span>
+
+    <span class="s2">def </span><span class="s1">start_object</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_current </span><span class="s3">= {}</span>
+
+    <span class="s2">def </span><span class="s1">end_object</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">objects</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_dump_object</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">))</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_current </span><span class="s3">= </span><span class="s2">None</span>
+
+    <span class="s2">def </span><span class="s1">get_dump_object</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">):</span>
+        <span class="s1">data </span><span class="s3">= {</span><span class="s4">&quot;model&quot;</span><span class="s3">: </span><span class="s1">str</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">)}</span>
+        <span class="s2">if not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">use_natural_primary_keys </span><span class="s2">or not </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s4">&quot;natural_key&quot;</span><span class="s3">):</span>
+            <span class="s1">data</span><span class="s3">[</span><span class="s4">&quot;pk&quot;</span><span class="s3">] = </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_value_from_field</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">.</span><span class="s1">pk</span><span class="s3">)</span>
+        <span class="s1">data</span><span class="s3">[</span><span class="s4">&quot;fields&quot;</span><span class="s3">] = </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_current</span>
+        <span class="s2">return </span><span class="s1">data</span>
+
+    <span class="s2">def </span><span class="s1">_value_from_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">):</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">field</span><span class="s3">.</span><span class="s1">value_from_object</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">)</span>
+        <span class="s5"># Protected types (i.e., primitives like None, numbers, dates,</span>
+        <span class="s5"># and Decimals) are passed through as is. All other values are</span>
+        <span class="s5"># converted to string first.</span>
+        <span class="s2">return </span><span class="s1">value </span><span class="s2">if </span><span class="s1">is_protected_type</span><span class="s3">(</span><span class="s1">value</span><span class="s3">) </span><span class="s2">else </span><span class="s1">field</span><span class="s3">.</span><span class="s1">value_to_string</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">handle_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_current</span><span class="s3">[</span><span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">] = </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_value_from_field</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">handle_fk_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">use_natural_foreign_keys </span><span class="s2">and </span><span class="s1">hasattr</span><span class="s3">(</span>
+            <span class="s1">field</span><span class="s3">.</span><span class="s1">remote_field</span><span class="s3">.</span><span class="s1">model</span><span class="s3">, </span><span class="s4">&quot;natural_key&quot;</span>
+        <span class="s3">):</span>
+            <span class="s1">related </span><span class="s3">= </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">related</span><span class="s3">:</span>
+                <span class="s1">value </span><span class="s3">= </span><span class="s1">related</span><span class="s3">.</span><span class="s1">natural_key</span><span class="s3">()</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s1">value </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">value </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_value_from_field</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_current</span><span class="s3">[</span><span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">] = </span><span class="s1">value</span>
+
+    <span class="s2">def </span><span class="s1">handle_m2m_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">field</span><span class="s3">.</span><span class="s1">remote_field</span><span class="s3">.</span><span class="s1">through</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">.</span><span class="s1">auto_created</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">use_natural_foreign_keys </span><span class="s2">and </span><span class="s1">hasattr</span><span class="s3">(</span>
+                <span class="s1">field</span><span class="s3">.</span><span class="s1">remote_field</span><span class="s3">.</span><span class="s1">model</span><span class="s3">, </span><span class="s4">&quot;natural_key&quot;</span>
+            <span class="s3">):</span>
+
+                <span class="s2">def </span><span class="s1">m2m_value</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+                    <span class="s2">return </span><span class="s1">value</span><span class="s3">.</span><span class="s1">natural_key</span><span class="s3">()</span>
+
+                <span class="s2">def </span><span class="s1">queryset_iterator</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">):</span>
+                    <span class="s2">return </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">).</span><span class="s1">iterator</span><span class="s3">()</span>
+
+            <span class="s2">else</span><span class="s3">:</span>
+
+                <span class="s2">def </span><span class="s1">m2m_value</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+                    <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_value_from_field</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">value</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">.</span><span class="s1">pk</span><span class="s3">)</span>
+
+                <span class="s2">def </span><span class="s1">queryset_iterator</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">):</span>
+                    <span class="s2">return </span><span class="s3">(</span>
+                        <span class="s1">getattr</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">)</span>
+                        <span class="s3">.</span><span class="s1">select_related</span><span class="s3">(</span><span class="s2">None</span><span class="s3">)</span>
+                        <span class="s3">.</span><span class="s1">only</span><span class="s3">(</span><span class="s4">&quot;pk&quot;</span><span class="s3">)</span>
+                        <span class="s3">.</span><span class="s1">iterator</span><span class="s3">()</span>
+                    <span class="s3">)</span>
+
+            <span class="s1">m2m_iter </span><span class="s3">= </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s4">&quot;_prefetched_objects_cache&quot;</span><span class="s3">, {}).</span><span class="s1">get</span><span class="s3">(</span>
+                <span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">,</span>
+                <span class="s1">queryset_iterator</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">),</span>
+            <span class="s3">)</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_current</span><span class="s3">[</span><span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">] = [</span><span class="s1">m2m_value</span><span class="s3">(</span><span class="s1">related</span><span class="s3">) </span><span class="s2">for </span><span class="s1">related </span><span class="s2">in </span><span class="s1">m2m_iter</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">getvalue</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">objects</span>
+
+
+<span class="s2">def </span><span class="s1">Deserializer</span><span class="s3">(</span>
+    <span class="s1">object_list</span><span class="s3">, *, </span><span class="s1">using</span><span class="s3">=</span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s3">, </span><span class="s1">ignorenonexistent</span><span class="s3">=</span><span class="s2">False</span><span class="s3">, **</span><span class="s1">options</span>
+<span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Deserialize simple Python objects back into Django ORM instances. 
+ 
+    It's expected that you pass the Python objects themselves (instead of a 
+    stream or a string) to the constructor 
+    &quot;&quot;&quot;</span>
+    <span class="s1">handle_forward_references </span><span class="s3">= </span><span class="s1">options</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">(</span><span class="s4">&quot;handle_forward_references&quot;</span><span class="s3">, </span><span class="s2">False</span><span class="s3">)</span>
+    <span class="s1">field_names_cache </span><span class="s3">= {}  </span><span class="s5"># Model: &lt;list of field_names&gt;</span>
+
+    <span class="s2">for </span><span class="s1">d </span><span class="s2">in </span><span class="s1">object_list</span><span class="s3">:</span>
+        <span class="s5"># Look up the model and starting build a dict of data for it.</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">Model </span><span class="s3">= </span><span class="s1">_get_model</span><span class="s3">(</span><span class="s1">d</span><span class="s3">[</span><span class="s4">&quot;model&quot;</span><span class="s3">])</span>
+        <span class="s2">except </span><span class="s1">base</span><span class="s3">.</span><span class="s1">DeserializationError</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">ignorenonexistent</span><span class="s3">:</span>
+                <span class="s2">continue</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s2">raise</span>
+        <span class="s1">data </span><span class="s3">= {}</span>
+        <span class="s2">if </span><span class="s4">&quot;pk&quot; </span><span class="s2">in </span><span class="s1">d</span><span class="s3">:</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s1">data</span><span class="s3">[</span><span class="s1">Model</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">.</span><span class="s1">pk</span><span class="s3">.</span><span class="s1">attname</span><span class="s3">] = </span><span class="s1">Model</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">.</span><span class="s1">pk</span><span class="s3">.</span><span class="s1">to_python</span><span class="s3">(</span><span class="s1">d</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;pk&quot;</span><span class="s3">))</span>
+            <span class="s2">except </span><span class="s1">Exception </span><span class="s2">as </span><span class="s1">e</span><span class="s3">:</span>
+                <span class="s2">raise </span><span class="s1">base</span><span class="s3">.</span><span class="s1">DeserializationError</span><span class="s3">.</span><span class="s1">WithData</span><span class="s3">(</span>
+                    <span class="s1">e</span><span class="s3">, </span><span class="s1">d</span><span class="s3">[</span><span class="s4">&quot;model&quot;</span><span class="s3">], </span><span class="s1">d</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;pk&quot;</span><span class="s3">), </span><span class="s2">None</span>
+                <span class="s3">)</span>
+        <span class="s1">m2m_data </span><span class="s3">= {}</span>
+        <span class="s1">deferred_fields </span><span class="s3">= {}</span>
+
+        <span class="s2">if </span><span class="s1">Model </span><span class="s2">not in </span><span class="s1">field_names_cache</span><span class="s3">:</span>
+            <span class="s1">field_names_cache</span><span class="s3">[</span><span class="s1">Model</span><span class="s3">] = {</span><span class="s1">f</span><span class="s3">.</span><span class="s1">name </span><span class="s2">for </span><span class="s1">f </span><span class="s2">in </span><span class="s1">Model</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">.</span><span class="s1">get_fields</span><span class="s3">()}</span>
+        <span class="s1">field_names </span><span class="s3">= </span><span class="s1">field_names_cache</span><span class="s3">[</span><span class="s1">Model</span><span class="s3">]</span>
+
+        <span class="s5"># Handle each field</span>
+        <span class="s2">for </span><span class="s1">field_name</span><span class="s3">, </span><span class="s1">field_value </span><span class="s2">in </span><span class="s1">d</span><span class="s3">[</span><span class="s4">&quot;fields&quot;</span><span class="s3">].</span><span class="s1">items</span><span class="s3">():</span>
+            <span class="s2">if </span><span class="s1">ignorenonexistent </span><span class="s2">and </span><span class="s1">field_name </span><span class="s2">not in </span><span class="s1">field_names</span><span class="s3">:</span>
+                <span class="s5"># skip fields no longer on model</span>
+                <span class="s2">continue</span>
+
+            <span class="s1">field </span><span class="s3">= </span><span class="s1">Model</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">.</span><span class="s1">get_field</span><span class="s3">(</span><span class="s1">field_name</span><span class="s3">)</span>
+
+            <span class="s5"># Handle M2M relations</span>
+            <span class="s2">if </span><span class="s1">field</span><span class="s3">.</span><span class="s1">remote_field </span><span class="s2">and </span><span class="s1">isinstance</span><span class="s3">(</span>
+                <span class="s1">field</span><span class="s3">.</span><span class="s1">remote_field</span><span class="s3">, </span><span class="s1">models</span><span class="s3">.</span><span class="s1">ManyToManyRel</span>
+            <span class="s3">):</span>
+                <span class="s2">try</span><span class="s3">:</span>
+                    <span class="s1">values </span><span class="s3">= </span><span class="s1">base</span><span class="s3">.</span><span class="s1">deserialize_m2m_values</span><span class="s3">(</span>
+                        <span class="s1">field</span><span class="s3">, </span><span class="s1">field_value</span><span class="s3">, </span><span class="s1">using</span><span class="s3">, </span><span class="s1">handle_forward_references</span>
+                    <span class="s3">)</span>
+                <span class="s2">except </span><span class="s1">base</span><span class="s3">.</span><span class="s1">M2MDeserializationError </span><span class="s2">as </span><span class="s1">e</span><span class="s3">:</span>
+                    <span class="s2">raise </span><span class="s1">base</span><span class="s3">.</span><span class="s1">DeserializationError</span><span class="s3">.</span><span class="s1">WithData</span><span class="s3">(</span>
+                        <span class="s1">e</span><span class="s3">.</span><span class="s1">original_exc</span><span class="s3">, </span><span class="s1">d</span><span class="s3">[</span><span class="s4">&quot;model&quot;</span><span class="s3">], </span><span class="s1">d</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;pk&quot;</span><span class="s3">), </span><span class="s1">e</span><span class="s3">.</span><span class="s1">pk</span>
+                    <span class="s3">)</span>
+                <span class="s2">if </span><span class="s1">values </span><span class="s3">== </span><span class="s1">base</span><span class="s3">.</span><span class="s1">DEFER_FIELD</span><span class="s3">:</span>
+                    <span class="s1">deferred_fields</span><span class="s3">[</span><span class="s1">field</span><span class="s3">] = </span><span class="s1">field_value</span>
+                <span class="s2">else</span><span class="s3">:</span>
+                    <span class="s1">m2m_data</span><span class="s3">[</span><span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">] = </span><span class="s1">values</span>
+            <span class="s5"># Handle FK fields</span>
+            <span class="s2">elif </span><span class="s1">field</span><span class="s3">.</span><span class="s1">remote_field </span><span class="s2">and </span><span class="s1">isinstance</span><span class="s3">(</span>
+                <span class="s1">field</span><span class="s3">.</span><span class="s1">remote_field</span><span class="s3">, </span><span class="s1">models</span><span class="s3">.</span><span class="s1">ManyToOneRel</span>
+            <span class="s3">):</span>
+                <span class="s2">try</span><span class="s3">:</span>
+                    <span class="s1">value </span><span class="s3">= </span><span class="s1">base</span><span class="s3">.</span><span class="s1">deserialize_fk_value</span><span class="s3">(</span>
+                        <span class="s1">field</span><span class="s3">, </span><span class="s1">field_value</span><span class="s3">, </span><span class="s1">using</span><span class="s3">, </span><span class="s1">handle_forward_references</span>
+                    <span class="s3">)</span>
+                <span class="s2">except </span><span class="s1">Exception </span><span class="s2">as </span><span class="s1">e</span><span class="s3">:</span>
+                    <span class="s2">raise </span><span class="s1">base</span><span class="s3">.</span><span class="s1">DeserializationError</span><span class="s3">.</span><span class="s1">WithData</span><span class="s3">(</span>
+                        <span class="s1">e</span><span class="s3">, </span><span class="s1">d</span><span class="s3">[</span><span class="s4">&quot;model&quot;</span><span class="s3">], </span><span class="s1">d</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;pk&quot;</span><span class="s3">), </span><span class="s1">field_value</span>
+                    <span class="s3">)</span>
+                <span class="s2">if </span><span class="s1">value </span><span class="s3">== </span><span class="s1">base</span><span class="s3">.</span><span class="s1">DEFER_FIELD</span><span class="s3">:</span>
+                    <span class="s1">deferred_fields</span><span class="s3">[</span><span class="s1">field</span><span class="s3">] = </span><span class="s1">field_value</span>
+                <span class="s2">else</span><span class="s3">:</span>
+                    <span class="s1">data</span><span class="s3">[</span><span class="s1">field</span><span class="s3">.</span><span class="s1">attname</span><span class="s3">] = </span><span class="s1">value</span>
+            <span class="s5"># Handle all other fields</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s2">try</span><span class="s3">:</span>
+                    <span class="s1">data</span><span class="s3">[</span><span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">] = </span><span class="s1">field</span><span class="s3">.</span><span class="s1">to_python</span><span class="s3">(</span><span class="s1">field_value</span><span class="s3">)</span>
+                <span class="s2">except </span><span class="s1">Exception </span><span class="s2">as </span><span class="s1">e</span><span class="s3">:</span>
+                    <span class="s2">raise </span><span class="s1">base</span><span class="s3">.</span><span class="s1">DeserializationError</span><span class="s3">.</span><span class="s1">WithData</span><span class="s3">(</span>
+                        <span class="s1">e</span><span class="s3">, </span><span class="s1">d</span><span class="s3">[</span><span class="s4">&quot;model&quot;</span><span class="s3">], </span><span class="s1">d</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;pk&quot;</span><span class="s3">), </span><span class="s1">field_value</span>
+                    <span class="s3">)</span>
+
+        <span class="s1">obj </span><span class="s3">= </span><span class="s1">base</span><span class="s3">.</span><span class="s1">build_instance</span><span class="s3">(</span><span class="s1">Model</span><span class="s3">, </span><span class="s1">data</span><span class="s3">, </span><span class="s1">using</span><span class="s3">)</span>
+        <span class="s2">yield </span><span class="s1">base</span><span class="s3">.</span><span class="s1">DeserializedObject</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">m2m_data</span><span class="s3">, </span><span class="s1">deferred_fields</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_get_model</span><span class="s3">(</span><span class="s1">model_identifier</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Look up a model from an &quot;app_label.model_name&quot; string.&quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">apps</span><span class="s3">.</span><span class="s1">get_model</span><span class="s3">(</span><span class="s1">model_identifier</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">LookupError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+        <span class="s2">raise </span><span class="s1">base</span><span class="s3">.</span><span class="s1">DeserializationError</span><span class="s3">(</span>
+            <span class="s4">&quot;Invalid model identifier: '%s'&quot; </span><span class="s3">% </span><span class="s1">model_identifier</span>
+        <span class="s3">)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<html>
+<head>
+<title>actions.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+actions.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Built-in, globally-available admin actions. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib </span><span class="s2">import </span><span class="s1">messages</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">admin </span><span class="s2">import </span><span class="s1">helpers</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">admin</span><span class="s3">.</span><span class="s1">decorators </span><span class="s2">import </span><span class="s1">action</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">admin</span><span class="s3">.</span><span class="s1">utils </span><span class="s2">import </span><span class="s1">model_ngettext</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">exceptions </span><span class="s2">import </span><span class="s1">PermissionDenied</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">template</span><span class="s3">.</span><span class="s1">response </span><span class="s2">import </span><span class="s1">TemplateResponse</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">translation </span><span class="s2">import </span><span class="s1">gettext </span><span class="s2">as </span><span class="s1">_</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">translation </span><span class="s2">import </span><span class="s1">gettext_lazy</span>
+
+
+<span class="s3">@</span><span class="s1">action</span><span class="s3">(</span>
+    <span class="s1">permissions</span><span class="s3">=[</span><span class="s4">&quot;delete&quot;</span><span class="s3">],</span>
+    <span class="s1">description</span><span class="s3">=</span><span class="s1">gettext_lazy</span><span class="s3">(</span><span class="s4">&quot;Delete selected %(verbose_name_plural)s&quot;</span><span class="s3">),</span>
+<span class="s3">)</span>
+<span class="s2">def </span><span class="s1">delete_selected</span><span class="s3">(</span><span class="s1">modeladmin</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">queryset</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Default action which deletes the selected objects. 
+ 
+    This action first displays a confirmation page which shows all the 
+    deletable objects, or, if the user has no permission one of the related 
+    childs (foreignkeys), a &quot;permission denied&quot; message. 
+ 
+    Next, it deletes all selected objects and redirects back to the change list. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">opts </span><span class="s3">= </span><span class="s1">modeladmin</span><span class="s3">.</span><span class="s1">model</span><span class="s3">.</span><span class="s1">_meta</span>
+    <span class="s1">app_label </span><span class="s3">= </span><span class="s1">opts</span><span class="s3">.</span><span class="s1">app_label</span>
+
+    <span class="s5"># Populate deletable_objects, a data structure of all related objects that</span>
+    <span class="s5"># will also be deleted.</span>
+    <span class="s3">(</span>
+        <span class="s1">deletable_objects</span><span class="s3">,</span>
+        <span class="s1">model_count</span><span class="s3">,</span>
+        <span class="s1">perms_needed</span><span class="s3">,</span>
+        <span class="s1">protected</span><span class="s3">,</span>
+    <span class="s3">) = </span><span class="s1">modeladmin</span><span class="s3">.</span><span class="s1">get_deleted_objects</span><span class="s3">(</span><span class="s1">queryset</span><span class="s3">, </span><span class="s1">request</span><span class="s3">)</span>
+
+    <span class="s5"># The user has already confirmed the deletion.</span>
+    <span class="s5"># Do the deletion and return None to display the change list view again.</span>
+    <span class="s2">if </span><span class="s1">request</span><span class="s3">.</span><span class="s1">POST</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;post&quot;</span><span class="s3">) </span><span class="s2">and not </span><span class="s1">protected</span><span class="s3">:</span>
+        <span class="s2">if </span><span class="s1">perms_needed</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">PermissionDenied</span>
+        <span class="s1">n </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">queryset</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">n</span><span class="s3">:</span>
+            <span class="s2">for </span><span class="s1">obj </span><span class="s2">in </span><span class="s1">queryset</span><span class="s3">:</span>
+                <span class="s1">obj_display </span><span class="s3">= </span><span class="s1">str</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">)</span>
+                <span class="s1">modeladmin</span><span class="s3">.</span><span class="s1">log_deletion</span><span class="s3">(</span><span class="s1">request</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">, </span><span class="s1">obj_display</span><span class="s3">)</span>
+            <span class="s1">modeladmin</span><span class="s3">.</span><span class="s1">delete_queryset</span><span class="s3">(</span><span class="s1">request</span><span class="s3">, </span><span class="s1">queryset</span><span class="s3">)</span>
+            <span class="s1">modeladmin</span><span class="s3">.</span><span class="s1">message_user</span><span class="s3">(</span>
+                <span class="s1">request</span><span class="s3">,</span>
+                <span class="s1">_</span><span class="s3">(</span><span class="s4">&quot;Successfully deleted %(count)d %(items)s.&quot;</span><span class="s3">)</span>
+                <span class="s3">% {</span><span class="s4">&quot;count&quot;</span><span class="s3">: </span><span class="s1">n</span><span class="s3">, </span><span class="s4">&quot;items&quot;</span><span class="s3">: </span><span class="s1">model_ngettext</span><span class="s3">(</span><span class="s1">modeladmin</span><span class="s3">.</span><span class="s1">opts</span><span class="s3">, </span><span class="s1">n</span><span class="s3">)},</span>
+                <span class="s1">messages</span><span class="s3">.</span><span class="s1">SUCCESS</span><span class="s3">,</span>
+            <span class="s3">)</span>
+        <span class="s5"># Return None to display the change list page again.</span>
+        <span class="s2">return None</span>
+
+    <span class="s1">objects_name </span><span class="s3">= </span><span class="s1">model_ngettext</span><span class="s3">(</span><span class="s1">queryset</span><span class="s3">)</span>
+
+    <span class="s2">if </span><span class="s1">perms_needed </span><span class="s2">or </span><span class="s1">protected</span><span class="s3">:</span>
+        <span class="s1">title </span><span class="s3">= </span><span class="s1">_</span><span class="s3">(</span><span class="s4">&quot;Cannot delete %(name)s&quot;</span><span class="s3">) % {</span><span class="s4">&quot;name&quot;</span><span class="s3">: </span><span class="s1">objects_name</span><span class="s3">}</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">title </span><span class="s3">= </span><span class="s1">_</span><span class="s3">(</span><span class="s4">&quot;Are you sure?&quot;</span><span class="s3">)</span>
+
+    <span class="s1">context </span><span class="s3">= {</span>
+        <span class="s3">**</span><span class="s1">modeladmin</span><span class="s3">.</span><span class="s1">admin_site</span><span class="s3">.</span><span class="s1">each_context</span><span class="s3">(</span><span class="s1">request</span><span class="s3">),</span>
+        <span class="s4">&quot;title&quot;</span><span class="s3">: </span><span class="s1">title</span><span class="s3">,</span>
+        <span class="s4">&quot;subtitle&quot;</span><span class="s3">: </span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s4">&quot;objects_name&quot;</span><span class="s3">: </span><span class="s1">str</span><span class="s3">(</span><span class="s1">objects_name</span><span class="s3">),</span>
+        <span class="s4">&quot;deletable_objects&quot;</span><span class="s3">: [</span><span class="s1">deletable_objects</span><span class="s3">],</span>
+        <span class="s4">&quot;model_count&quot;</span><span class="s3">: </span><span class="s1">dict</span><span class="s3">(</span><span class="s1">model_count</span><span class="s3">).</span><span class="s1">items</span><span class="s3">(),</span>
+        <span class="s4">&quot;queryset&quot;</span><span class="s3">: </span><span class="s1">queryset</span><span class="s3">,</span>
+        <span class="s4">&quot;perms_lacking&quot;</span><span class="s3">: </span><span class="s1">perms_needed</span><span class="s3">,</span>
+        <span class="s4">&quot;protected&quot;</span><span class="s3">: </span><span class="s1">protected</span><span class="s3">,</span>
+        <span class="s4">&quot;opts&quot;</span><span class="s3">: </span><span class="s1">opts</span><span class="s3">,</span>
+        <span class="s4">&quot;action_checkbox_name&quot;</span><span class="s3">: </span><span class="s1">helpers</span><span class="s3">.</span><span class="s1">ACTION_CHECKBOX_NAME</span><span class="s3">,</span>
+        <span class="s4">&quot;media&quot;</span><span class="s3">: </span><span class="s1">modeladmin</span><span class="s3">.</span><span class="s1">media</span><span class="s3">,</span>
+    <span class="s3">}</span>
+
+    <span class="s1">request</span><span class="s3">.</span><span class="s1">current_app </span><span class="s3">= </span><span class="s1">modeladmin</span><span class="s3">.</span><span class="s1">admin_site</span><span class="s3">.</span><span class="s1">name</span>
+
+    <span class="s5"># Display the confirmation page</span>
+    <span class="s2">return </span><span class="s1">TemplateResponse</span><span class="s3">(</span>
+        <span class="s1">request</span><span class="s3">,</span>
+        <span class="s1">modeladmin</span><span class="s3">.</span><span class="s1">delete_selected_confirmation_template</span>
+        <span class="s2">or </span><span class="s3">[</span>
+            <span class="s4">&quot;admin/%s/%s/delete_selected_confirmation.html&quot;</span>
+            <span class="s3">% (</span><span class="s1">app_label</span><span class="s3">, </span><span class="s1">opts</span><span class="s3">.</span><span class="s1">model_name</span><span class="s3">),</span>
+            <span class="s4">&quot;admin/%s/delete_selected_confirmation.html&quot; </span><span class="s3">% </span><span class="s1">app_label</span><span class="s3">,</span>
+            <span class="s4">&quot;admin/delete_selected_confirmation.html&quot;</span><span class="s3">,</span>
+        <span class="s3">],</span>
+        <span class="s1">context</span><span class="s3">,</span>
+    <span class="s3">)</span>
+</pre>
+</body>
+</html>

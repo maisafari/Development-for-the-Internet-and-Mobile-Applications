@@ -1,0 +1,218 @@
+<html>
+<head>
+<title>generated.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+generated.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core </span><span class="s0">import </span><span class="s1">checks</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">connections</span><span class="s2">, </span><span class="s1">router</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">sql </span><span class="s0">import </span><span class="s1">Query</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+
+<span class="s0">from </span><span class="s2">. </span><span class="s0">import </span><span class="s1">NOT_PROVIDED</span><span class="s2">, </span><span class="s1">Field</span>
+
+<span class="s1">__all__ </span><span class="s2">= [</span><span class="s3">&quot;GeneratedField&quot;</span><span class="s2">]</span>
+
+
+<span class="s0">class </span><span class="s1">GeneratedField</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s1">generated </span><span class="s2">= </span><span class="s0">True</span>
+    <span class="s1">db_returning </span><span class="s2">= </span><span class="s0">True</span>
+
+    <span class="s1">_query </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *, </span><span class="s1">expression</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">db_persist</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">kwargs</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span><span class="s3">&quot;editable&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;GeneratedField cannot be editable.&quot;</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">kwargs</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span><span class="s3">&quot;blank&quot;</span><span class="s2">, </span><span class="s0">True</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;GeneratedField must be blank.&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">kwargs</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;default&quot;</span><span class="s2">, </span><span class="s1">NOT_PROVIDED</span><span class="s2">) </span><span class="s0">is not </span><span class="s1">NOT_PROVIDED</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;GeneratedField cannot have a default.&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">kwargs</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;db_default&quot;</span><span class="s2">, </span><span class="s1">NOT_PROVIDED</span><span class="s2">) </span><span class="s0">is not </span><span class="s1">NOT_PROVIDED</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;GeneratedField cannot have a database default.&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">db_persist </span><span class="s0">not in </span><span class="s2">(</span><span class="s0">True</span><span class="s2">, </span><span class="s0">False</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;GeneratedField.db_persist must be True or False.&quot;</span><span class="s2">)</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">expression </span><span class="s2">= </span><span class="s1">expression</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">output_field </span><span class="s2">= </span><span class="s1">output_field</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">db_persist </span><span class="s2">= </span><span class="s1">db_persist</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(**</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">cached_col</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">expressions </span><span class="s0">import </span><span class="s1">Col</span>
+
+        <span class="s0">return </span><span class="s1">Col</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">db_table</span><span class="s2">, </span><span class="s1">self</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_col</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">alias</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">alias </span><span class="s2">!= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">db_table </span><span class="s0">and </span><span class="s1">output_field </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">output_field </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_col</span><span class="s2">(</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">contribute_to_class</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">contribute_to_class</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_query </span><span class="s2">= </span><span class="s1">Query</span><span class="s2">(</span><span class="s1">model</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">alias_cols</span><span class="s2">=</span><span class="s0">False</span><span class="s2">)</span>
+        <span class="s4"># Register lookups from the output_field class.</span>
+        <span class="s0">for </span><span class="s1">lookup_name</span><span class="s2">, </span><span class="s1">lookup </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">.</span><span class="s1">get_class_lookups</span><span class="s2">().</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">lookup</span><span class="s2">, </span><span class="s1">lookup_name</span><span class="s2">=</span><span class="s1">lookup_name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">generated_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s1">compiler </span><span class="s2">= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">compiler</span><span class="s2">(</span><span class="s3">&quot;SQLCompiler&quot;</span><span class="s2">)(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_query</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">=</span><span class="s1">connection</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s0">None</span>
+        <span class="s2">)</span>
+        <span class="s1">resolved_expression </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">expression</span><span class="s2">.</span><span class="s1">resolve_expression</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_query</span><span class="s2">, </span><span class="s1">allow_joins</span><span class="s2">=</span><span class="s0">False</span>
+        <span class="s2">)</span>
+        <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">compiler</span><span class="s2">.</span><span class="s1">compile</span><span class="s2">(</span><span class="s1">resolved_expression</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">expression</span><span class="s2">, </span><span class="s3">&quot;conditional&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">)</span>
+            <span class="s0">and not </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">features</span><span class="s2">.</span><span class="s1">supports_boolean_expr_in_select_clause</span>
+        <span class="s2">):</span>
+            <span class="s1">sql </span><span class="s2">= </span><span class="s3">f&quot;CASE WHEN </span><span class="s0">{</span><span class="s1">sql</span><span class="s0">} </span><span class="s3">THEN 1 ELSE 0 END&quot;</span>
+        <span class="s0">return </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">params</span>
+
+    <span class="s0">def </span><span class="s1">check</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">databases </span><span class="s2">= </span><span class="s1">kwargs</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;databases&quot;</span><span class="s2">) </span><span class="s0">or </span><span class="s2">[]</span>
+        <span class="s1">errors </span><span class="s2">= [</span>
+            <span class="s2">*</span><span class="s1">super</span><span class="s2">().</span><span class="s1">check</span><span class="s2">(**</span><span class="s1">kwargs</span><span class="s2">),</span>
+            <span class="s2">*</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_check_supported</span><span class="s2">(</span><span class="s1">databases</span><span class="s2">),</span>
+            <span class="s2">*</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_check_persistence</span><span class="s2">(</span><span class="s1">databases</span><span class="s2">),</span>
+        <span class="s2">]</span>
+        <span class="s1">output_field_clone </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">()</span>
+        <span class="s1">output_field_clone</span><span class="s2">.</span><span class="s1">model </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span>
+        <span class="s1">output_field_checks </span><span class="s2">= </span><span class="s1">output_field_clone</span><span class="s2">.</span><span class="s1">check</span><span class="s2">(</span><span class="s1">databases</span><span class="s2">=</span><span class="s1">databases</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">output_field_checks</span><span class="s2">:</span>
+            <span class="s1">separator </span><span class="s2">= </span><span class="s3">&quot;</span><span class="s0">\n    </span><span class="s3">&quot;</span>
+            <span class="s1">error_messages </span><span class="s2">= </span><span class="s1">separator</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span>
+                <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">output_check</span><span class="s2">.</span><span class="s1">msg</span><span class="s0">} </span><span class="s3">(</span><span class="s0">{</span><span class="s1">output_check</span><span class="s2">.</span><span class="s1">id</span><span class="s0">}</span><span class="s3">)&quot;</span>
+                <span class="s0">for </span><span class="s1">output_check </span><span class="s0">in </span><span class="s1">output_field_checks</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">output_check</span><span class="s2">, </span><span class="s1">checks</span><span class="s2">.</span><span class="s1">Error</span><span class="s2">)</span>
+            <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">error_messages</span><span class="s2">:</span>
+                <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s1">checks</span><span class="s2">.</span><span class="s1">Error</span><span class="s2">(</span>
+                        <span class="s3">&quot;GeneratedField.output_field has errors:&quot;</span>
+                        <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">separator</span><span class="s0">}{</span><span class="s1">error_messages</span><span class="s0">}</span><span class="s3">&quot;</span><span class="s2">,</span>
+                        <span class="s1">obj</span><span class="s2">=</span><span class="s1">self</span><span class="s2">,</span>
+                        <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;fields.E223&quot;</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+            <span class="s1">warning_messages </span><span class="s2">= </span><span class="s1">separator</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span>
+                <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">output_check</span><span class="s2">.</span><span class="s1">msg</span><span class="s0">} </span><span class="s3">(</span><span class="s0">{</span><span class="s1">output_check</span><span class="s2">.</span><span class="s1">id</span><span class="s0">}</span><span class="s3">)&quot;</span>
+                <span class="s0">for </span><span class="s1">output_check </span><span class="s0">in </span><span class="s1">output_field_checks</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">output_check</span><span class="s2">, </span><span class="s1">checks</span><span class="s2">.</span><span class="s1">Warning</span><span class="s2">)</span>
+            <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">warning_messages</span><span class="s2">:</span>
+                <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s1">checks</span><span class="s2">.</span><span class="s1">Warning</span><span class="s2">(</span>
+                        <span class="s3">&quot;GeneratedField.output_field has warnings:&quot;</span>
+                        <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">separator</span><span class="s0">}{</span><span class="s1">warning_messages</span><span class="s0">}</span><span class="s3">&quot;</span><span class="s2">,</span>
+                        <span class="s1">obj</span><span class="s2">=</span><span class="s1">self</span><span class="s2">,</span>
+                        <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;fields.W224&quot;</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">errors</span>
+
+    <span class="s0">def </span><span class="s1">_check_supported</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">databases</span><span class="s2">):</span>
+        <span class="s1">errors </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">db </span><span class="s0">in </span><span class="s1">databases</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate_model</span><span class="s2">(</span><span class="s1">db</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">):</span>
+                <span class="s0">continue</span>
+            <span class="s1">connection </span><span class="s2">= </span><span class="s1">connections</span><span class="s2">[</span><span class="s1">db</span><span class="s2">]</span>
+            <span class="s0">if </span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">required_db_vendor</span>
+                <span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">required_db_vendor </span><span class="s2">!= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">vendor</span>
+            <span class="s2">):</span>
+                <span class="s0">continue</span>
+            <span class="s0">if not </span><span class="s2">(</span>
+                <span class="s1">connection</span><span class="s2">.</span><span class="s1">features</span><span class="s2">.</span><span class="s1">supports_virtual_generated_columns</span>
+                <span class="s0">or </span><span class="s3">&quot;supports_stored_generated_columns&quot;</span>
+                <span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">required_db_features</span>
+            <span class="s2">) </span><span class="s0">and not </span><span class="s2">(</span>
+                <span class="s1">connection</span><span class="s2">.</span><span class="s1">features</span><span class="s2">.</span><span class="s1">supports_stored_generated_columns</span>
+                <span class="s0">or </span><span class="s3">&quot;supports_virtual_generated_columns&quot;</span>
+                <span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">required_db_features</span>
+            <span class="s2">):</span>
+                <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s1">checks</span><span class="s2">.</span><span class="s1">Error</span><span class="s2">(</span>
+                        <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">display_name</span><span class="s0">} </span><span class="s3">does not support GeneratedFields.&quot;</span><span class="s2">,</span>
+                        <span class="s1">obj</span><span class="s2">=</span><span class="s1">self</span><span class="s2">,</span>
+                        <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;fields.E220&quot;</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">errors</span>
+
+    <span class="s0">def </span><span class="s1">_check_persistence</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">databases</span><span class="s2">):</span>
+        <span class="s1">errors </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">db </span><span class="s0">in </span><span class="s1">databases</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate_model</span><span class="s2">(</span><span class="s1">db</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">):</span>
+                <span class="s0">continue</span>
+            <span class="s1">connection </span><span class="s2">= </span><span class="s1">connections</span><span class="s2">[</span><span class="s1">db</span><span class="s2">]</span>
+            <span class="s0">if </span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">required_db_vendor</span>
+                <span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">required_db_vendor </span><span class="s2">!= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">vendor</span>
+            <span class="s2">):</span>
+                <span class="s0">continue</span>
+            <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">db_persist </span><span class="s0">and not </span><span class="s2">(</span>
+                <span class="s1">connection</span><span class="s2">.</span><span class="s1">features</span><span class="s2">.</span><span class="s1">supports_virtual_generated_columns</span>
+                <span class="s0">or </span><span class="s3">&quot;supports_virtual_generated_columns&quot;</span>
+                <span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">required_db_features</span>
+            <span class="s2">):</span>
+                <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s1">checks</span><span class="s2">.</span><span class="s1">Error</span><span class="s2">(</span>
+                        <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">display_name</span><span class="s0">} </span><span class="s3">does not support non-persisted &quot;</span>
+                        <span class="s3">&quot;GeneratedFields.&quot;</span><span class="s2">,</span>
+                        <span class="s1">obj</span><span class="s2">=</span><span class="s1">self</span><span class="s2">,</span>
+                        <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;fields.E221&quot;</span><span class="s2">,</span>
+                        <span class="s1">hint</span><span class="s2">=</span><span class="s3">&quot;Set db_persist=True on the field.&quot;</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">db_persist </span><span class="s0">and not </span><span class="s2">(</span>
+                <span class="s1">connection</span><span class="s2">.</span><span class="s1">features</span><span class="s2">.</span><span class="s1">supports_stored_generated_columns</span>
+                <span class="s0">or </span><span class="s3">&quot;supports_stored_generated_columns&quot;</span>
+                <span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">required_db_features</span>
+            <span class="s2">):</span>
+                <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s1">checks</span><span class="s2">.</span><span class="s1">Error</span><span class="s2">(</span>
+                        <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">display_name</span><span class="s0">} </span><span class="s3">does not support persisted &quot;</span>
+                        <span class="s3">&quot;GeneratedFields.&quot;</span><span class="s2">,</span>
+                        <span class="s1">obj</span><span class="s2">=</span><span class="s1">self</span><span class="s2">,</span>
+                        <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;fields.E222&quot;</span><span class="s2">,</span>
+                        <span class="s1">hint</span><span class="s2">=</span><span class="s3">&quot;Set db_persist=False on the field.&quot;</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">errors</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">name</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">deconstruct</span><span class="s2">()</span>
+        <span class="s0">del </span><span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;blank&quot;</span><span class="s2">]</span>
+        <span class="s0">del </span><span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;editable&quot;</span><span class="s2">]</span>
+        <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;db_persist&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">db_persist</span>
+        <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;expression&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">expression</span>
+        <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;output_field&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span>
+        <span class="s0">return </span><span class="s1">name</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs</span>
+
+    <span class="s0">def </span><span class="s1">get_internal_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">.</span><span class="s1">get_internal_type</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">db_parameters</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">.</span><span class="s1">db_parameters</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">db_type_parameters</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">.</span><span class="s1">db_type_parameters</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

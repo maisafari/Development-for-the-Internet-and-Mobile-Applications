@@ -1,0 +1,113 @@
+<html>
+<head>
+<title>geom.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+geom.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">POINTER</span><span class="s2">, </span><span class="s1">c_char_p</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s1">c_ubyte</span><span class="s2">, </span><span class="s1">c_uint</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos</span><span class="s2">.</span><span class="s1">libgeos </span><span class="s0">import </span><span class="s1">CS_PTR</span><span class="s2">, </span><span class="s1">GEOM_PTR</span><span class="s2">, </span><span class="s1">GEOSFuncFactory</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos</span><span class="s2">.</span><span class="s1">prototypes</span><span class="s2">.</span><span class="s1">errcheck </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">check_geom</span><span class="s2">,</span>
+    <span class="s1">check_minus_one</span><span class="s2">,</span>
+    <span class="s1">check_string</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+<span class="s3"># This is the return type used by binary output (WKB, HEX) routines.</span>
+<span class="s1">c_uchar_p </span><span class="s2">= </span><span class="s1">POINTER</span><span class="s2">(</span><span class="s1">c_ubyte</span><span class="s2">)</span>
+
+
+<span class="s3"># We create a simple subclass of c_char_p here because when the response</span>
+<span class="s3"># type is set to c_char_p, you get a _Python_ string and there's no way</span>
+<span class="s3"># to access the string's address inside the error checking function.</span>
+<span class="s3"># In other words, you can't free the memory allocated inside GEOS.  Previously,</span>
+<span class="s3"># the return type would just be omitted and the integer address would be</span>
+<span class="s3"># used -- but this allows us to be specific in the function definition and</span>
+<span class="s3"># keeps the reference so it may be free'd.</span>
+<span class="s0">class </span><span class="s1">geos_char_p</span><span class="s2">(</span><span class="s1">c_char_p</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s3"># ### ctypes factory classes ###</span>
+<span class="s0">class </span><span class="s1">GeomOutput</span><span class="s2">(</span><span class="s1">GEOSFuncFactory</span><span class="s2">):</span>
+    <span class="s4">&quot;For GEOS routines that return a geometry.&quot;</span>
+    <span class="s1">restype </span><span class="s2">= </span><span class="s1">GEOM_PTR</span>
+    <span class="s1">errcheck </span><span class="s2">= </span><span class="s1">staticmethod</span><span class="s2">(</span><span class="s1">check_geom</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">IntFromGeom</span><span class="s2">(</span><span class="s1">GEOSFuncFactory</span><span class="s2">):</span>
+    <span class="s4">&quot;Argument is a geometry, return type is an integer.&quot;</span>
+    <span class="s1">argtypes </span><span class="s2">= [</span><span class="s1">GEOM_PTR</span><span class="s2">]</span>
+    <span class="s1">restype </span><span class="s2">= </span><span class="s1">c_int</span>
+    <span class="s1">errcheck </span><span class="s2">= </span><span class="s1">staticmethod</span><span class="s2">(</span><span class="s1">check_minus_one</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">StringFromGeom</span><span class="s2">(</span><span class="s1">GEOSFuncFactory</span><span class="s2">):</span>
+    <span class="s4">&quot;Argument is a Geometry, return type is a string.&quot;</span>
+    <span class="s1">argtypes </span><span class="s2">= [</span><span class="s1">GEOM_PTR</span><span class="s2">]</span>
+    <span class="s1">restype </span><span class="s2">= </span><span class="s1">geos_char_p</span>
+    <span class="s1">errcheck </span><span class="s2">= </span><span class="s1">staticmethod</span><span class="s2">(</span><span class="s1">check_string</span><span class="s2">)</span>
+
+
+<span class="s3"># ### ctypes prototypes ###</span>
+
+<span class="s3"># The GEOS geometry type, typeid, num_coordinates and number of geometries</span>
+<span class="s1">geos_makevalid </span><span class="s2">= </span><span class="s1">GeomOutput</span><span class="s2">(</span><span class="s5">&quot;GEOSMakeValid&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">GEOM_PTR</span><span class="s2">])</span>
+<span class="s1">geos_normalize </span><span class="s2">= </span><span class="s1">IntFromGeom</span><span class="s2">(</span><span class="s5">&quot;GEOSNormalize&quot;</span><span class="s2">)</span>
+<span class="s1">geos_type </span><span class="s2">= </span><span class="s1">StringFromGeom</span><span class="s2">(</span><span class="s5">&quot;GEOSGeomType&quot;</span><span class="s2">)</span>
+<span class="s1">geos_typeid </span><span class="s2">= </span><span class="s1">IntFromGeom</span><span class="s2">(</span><span class="s5">&quot;GEOSGeomTypeId&quot;</span><span class="s2">)</span>
+<span class="s1">get_dims </span><span class="s2">= </span><span class="s1">GEOSFuncFactory</span><span class="s2">(</span><span class="s5">&quot;GEOSGeom_getDimensions&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">GEOM_PTR</span><span class="s2">], </span><span class="s1">restype</span><span class="s2">=</span><span class="s1">c_int</span><span class="s2">)</span>
+<span class="s1">get_num_coords </span><span class="s2">= </span><span class="s1">IntFromGeom</span><span class="s2">(</span><span class="s5">&quot;GEOSGetNumCoordinates&quot;</span><span class="s2">)</span>
+<span class="s1">get_num_geoms </span><span class="s2">= </span><span class="s1">IntFromGeom</span><span class="s2">(</span><span class="s5">&quot;GEOSGetNumGeometries&quot;</span><span class="s2">)</span>
+
+<span class="s3"># Geometry creation factories</span>
+<span class="s1">create_point </span><span class="s2">= </span><span class="s1">GeomOutput</span><span class="s2">(</span><span class="s5">&quot;GEOSGeom_createPoint&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">CS_PTR</span><span class="s2">])</span>
+<span class="s1">create_linestring </span><span class="s2">= </span><span class="s1">GeomOutput</span><span class="s2">(</span><span class="s5">&quot;GEOSGeom_createLineString&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">CS_PTR</span><span class="s2">])</span>
+<span class="s1">create_linearring </span><span class="s2">= </span><span class="s1">GeomOutput</span><span class="s2">(</span><span class="s5">&quot;GEOSGeom_createLinearRing&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">CS_PTR</span><span class="s2">])</span>
+
+<span class="s3"># Polygon and collection creation routines need argument types defined</span>
+<span class="s3"># for compatibility with some platforms, e.g. macOS ARM64. With argtypes</span>
+<span class="s3"># defined, arrays are automatically cast and byref() calls are not needed.</span>
+<span class="s1">create_polygon </span><span class="s2">= </span><span class="s1">GeomOutput</span><span class="s2">(</span>
+    <span class="s5">&quot;GEOSGeom_createPolygon&quot;</span><span class="s2">,</span>
+    <span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">GEOM_PTR</span><span class="s2">, </span><span class="s1">POINTER</span><span class="s2">(</span><span class="s1">GEOM_PTR</span><span class="s2">), </span><span class="s1">c_uint</span><span class="s2">],</span>
+<span class="s2">)</span>
+<span class="s1">create_empty_polygon </span><span class="s2">= </span><span class="s1">GeomOutput</span><span class="s2">(</span><span class="s5">&quot;GEOSGeom_createEmptyPolygon&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[])</span>
+<span class="s1">create_collection </span><span class="s2">= </span><span class="s1">GeomOutput</span><span class="s2">(</span>
+    <span class="s5">&quot;GEOSGeom_createCollection&quot;</span><span class="s2">,</span>
+    <span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">c_int</span><span class="s2">, </span><span class="s1">POINTER</span><span class="s2">(</span><span class="s1">GEOM_PTR</span><span class="s2">), </span><span class="s1">c_uint</span><span class="s2">],</span>
+<span class="s2">)</span>
+
+<span class="s3"># Ring routines</span>
+<span class="s1">get_extring </span><span class="s2">= </span><span class="s1">GeomOutput</span><span class="s2">(</span><span class="s5">&quot;GEOSGetExteriorRing&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">GEOM_PTR</span><span class="s2">])</span>
+<span class="s1">get_intring </span><span class="s2">= </span><span class="s1">GeomOutput</span><span class="s2">(</span><span class="s5">&quot;GEOSGetInteriorRingN&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">GEOM_PTR</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">])</span>
+<span class="s1">get_nrings </span><span class="s2">= </span><span class="s1">IntFromGeom</span><span class="s2">(</span><span class="s5">&quot;GEOSGetNumInteriorRings&quot;</span><span class="s2">)</span>
+
+<span class="s3"># Collection Routines</span>
+<span class="s1">get_geomn </span><span class="s2">= </span><span class="s1">GeomOutput</span><span class="s2">(</span><span class="s5">&quot;GEOSGetGeometryN&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">GEOM_PTR</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">])</span>
+
+<span class="s3"># Cloning</span>
+<span class="s1">geom_clone </span><span class="s2">= </span><span class="s1">GEOSFuncFactory</span><span class="s2">(</span><span class="s5">&quot;GEOSGeom_clone&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">GEOM_PTR</span><span class="s2">], </span><span class="s1">restype</span><span class="s2">=</span><span class="s1">GEOM_PTR</span><span class="s2">)</span>
+
+<span class="s3"># Destruction routine.</span>
+<span class="s1">destroy_geom </span><span class="s2">= </span><span class="s1">GEOSFuncFactory</span><span class="s2">(</span><span class="s5">&quot;GEOSGeom_destroy&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">GEOM_PTR</span><span class="s2">])</span>
+
+<span class="s3"># SRID routines</span>
+<span class="s1">geos_get_srid </span><span class="s2">= </span><span class="s1">GEOSFuncFactory</span><span class="s2">(</span><span class="s5">&quot;GEOSGetSRID&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">GEOM_PTR</span><span class="s2">], </span><span class="s1">restype</span><span class="s2">=</span><span class="s1">c_int</span><span class="s2">)</span>
+<span class="s1">geos_set_srid </span><span class="s2">= </span><span class="s1">GEOSFuncFactory</span><span class="s2">(</span><span class="s5">&quot;GEOSSetSRID&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">GEOM_PTR</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">])</span>
+</pre>
+</body>
+</html>

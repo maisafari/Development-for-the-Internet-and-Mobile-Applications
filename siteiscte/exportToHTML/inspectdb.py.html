@@ -1,0 +1,39 @@
+<html>
+<head>
+<title>inspectdb.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+inspectdb.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">commands</span><span class="s2">.</span><span class="s1">inspectdb </span><span class="s0">import </span><span class="s1">Command </span><span class="s0">as </span><span class="s1">InspectDBCommand</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">InspectDBCommand</span><span class="s2">):</span>
+    <span class="s1">db_module </span><span class="s2">= </span><span class="s3">&quot;django.contrib.gis.db&quot;</span>
+
+    <span class="s0">def </span><span class="s1">get_field_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">table_name</span><span class="s2">, </span><span class="s1">row</span><span class="s2">):</span>
+        <span class="s1">field_type</span><span class="s2">, </span><span class="s1">field_params</span><span class="s2">, </span><span class="s1">field_notes </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_field_type</span><span class="s2">(</span>
+            <span class="s1">connection</span><span class="s2">, </span><span class="s1">table_name</span><span class="s2">, </span><span class="s1">row</span>
+        <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">field_type </span><span class="s2">== </span><span class="s3">&quot;GeometryField&quot;</span><span class="s2">:</span>
+            <span class="s4"># Getting a more specific field type and any additional parameters</span>
+            <span class="s4"># from the `get_geometry_type` routine for the spatial backend.</span>
+            <span class="s1">field_type</span><span class="s2">, </span><span class="s1">geo_params </span><span class="s2">= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">introspection</span><span class="s2">.</span><span class="s1">get_geometry_type</span><span class="s2">(</span>
+                <span class="s1">table_name</span><span class="s2">, </span><span class="s1">row</span>
+            <span class="s2">)</span>
+            <span class="s1">field_params</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">geo_params</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">field_type</span><span class="s2">, </span><span class="s1">field_params</span><span class="s2">, </span><span class="s1">field_notes</span>
+</pre>
+</body>
+</html>

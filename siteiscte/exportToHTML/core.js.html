@@ -1,0 +1,207 @@
+<html>
+<head>
+<title>core.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #6aab73;}
+.s3 { color: #bcbec4;}
+.s4 { color: #cf8e6d;}
+.s5 { color: #2aacb8;}
+.s6 { color: #42c3d4;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+core.js</font>
+</center></td></tr></table>
+<pre><span class="s0">// Core JavaScript helper functions</span>
+<span class="s2">'use strict'</span><span class="s3">;</span>
+
+<span class="s0">// quickElement(tagType, parentReference [, textInChildNode, attribute, attributeValue ...]);</span>
+<span class="s4">function </span><span class="s1">quickElement</span><span class="s3">() {</span>
+    <span class="s4">const </span><span class="s1">obj </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createElement</span><span class="s3">(</span><span class="s1">arguments</span><span class="s3">[</span><span class="s5">0</span><span class="s3">]);</span>
+    <span class="s4">if </span><span class="s3">(</span><span class="s1">arguments</span><span class="s3">[</span><span class="s5">2</span><span class="s3">]) {</span>
+        <span class="s4">const </span><span class="s1">textNode </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createTextNode</span><span class="s3">(</span><span class="s1">arguments</span><span class="s3">[</span><span class="s5">2</span><span class="s3">]);</span>
+        <span class="s1">obj</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">textNode</span><span class="s3">);</span>
+    <span class="s3">}</span>
+    <span class="s4">const </span><span class="s1">len </span><span class="s3">= </span><span class="s1">arguments</span><span class="s3">.</span><span class="s1">length</span><span class="s3">;</span>
+    <span class="s4">for </span><span class="s3">(</span><span class="s4">let </span><span class="s1">i </span><span class="s3">= </span><span class="s5">3</span><span class="s3">; </span><span class="s1">i </span><span class="s3">&lt; </span><span class="s1">len</span><span class="s3">; </span><span class="s1">i </span><span class="s3">+= </span><span class="s5">2</span><span class="s3">) {</span>
+        <span class="s1">obj</span><span class="s3">.</span><span class="s1">setAttribute</span><span class="s3">(</span><span class="s1">arguments</span><span class="s3">[</span><span class="s1">i</span><span class="s3">], </span><span class="s1">arguments</span><span class="s3">[</span><span class="s1">i </span><span class="s3">+ </span><span class="s5">1</span><span class="s3">]);</span>
+    <span class="s3">}</span>
+    <span class="s1">arguments</span><span class="s3">[</span><span class="s5">1</span><span class="s3">].</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">);</span>
+    <span class="s4">return </span><span class="s1">obj</span><span class="s3">;</span>
+<span class="s3">}</span>
+
+<span class="s0">// &quot;a&quot; is reference to an object</span>
+<span class="s4">function </span><span class="s1">removeChildren</span><span class="s3">(</span><span class="s1">a</span><span class="s3">) {</span>
+    <span class="s4">while </span><span class="s3">(</span><span class="s1">a</span><span class="s3">.</span><span class="s1">hasChildNodes</span><span class="s3">()) {</span>
+        <span class="s1">a</span><span class="s3">.</span><span class="s1">removeChild</span><span class="s3">(</span><span class="s1">a</span><span class="s3">.</span><span class="s1">lastChild</span><span class="s3">);</span>
+    <span class="s3">}</span>
+<span class="s3">}</span>
+
+<span class="s0">// ----------------------------------------------------------------------------</span>
+<span class="s0">// Find-position functions by PPK</span>
+<span class="s0">// See https://www.quirksmode.org/js/findpos.html</span>
+<span class="s0">// ----------------------------------------------------------------------------</span>
+<span class="s4">function </span><span class="s1">findPosX</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">) {</span>
+    <span class="s4">let </span><span class="s1">curleft </span><span class="s3">= </span><span class="s5">0</span><span class="s3">;</span>
+    <span class="s4">if </span><span class="s3">(</span><span class="s1">obj</span><span class="s3">.</span><span class="s1">offsetParent</span><span class="s3">) {</span>
+        <span class="s4">while </span><span class="s3">(</span><span class="s1">obj</span><span class="s3">.</span><span class="s1">offsetParent</span><span class="s3">) {</span>
+            <span class="s1">curleft </span><span class="s3">+= </span><span class="s1">obj</span><span class="s3">.</span><span class="s1">offsetLeft </span><span class="s3">- </span><span class="s1">obj</span><span class="s3">.</span><span class="s1">scrollLeft</span><span class="s3">;</span>
+            <span class="s1">obj </span><span class="s3">= </span><span class="s1">obj</span><span class="s3">.</span><span class="s1">offsetParent</span><span class="s3">;</span>
+        <span class="s3">}</span>
+    <span class="s3">} </span><span class="s4">else if </span><span class="s3">(</span><span class="s1">obj</span><span class="s3">.</span><span class="s1">x</span><span class="s3">) {</span>
+        <span class="s1">curleft </span><span class="s3">+= </span><span class="s1">obj</span><span class="s3">.</span><span class="s1">x</span><span class="s3">;</span>
+    <span class="s3">}</span>
+    <span class="s4">return </span><span class="s1">curleft</span><span class="s3">;</span>
+<span class="s3">}</span>
+
+<span class="s4">function </span><span class="s1">findPosY</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">) {</span>
+    <span class="s4">let </span><span class="s1">curtop </span><span class="s3">= </span><span class="s5">0</span><span class="s3">;</span>
+    <span class="s4">if </span><span class="s3">(</span><span class="s1">obj</span><span class="s3">.</span><span class="s1">offsetParent</span><span class="s3">) {</span>
+        <span class="s4">while </span><span class="s3">(</span><span class="s1">obj</span><span class="s3">.</span><span class="s1">offsetParent</span><span class="s3">) {</span>
+            <span class="s1">curtop </span><span class="s3">+= </span><span class="s1">obj</span><span class="s3">.</span><span class="s1">offsetTop </span><span class="s3">- </span><span class="s1">obj</span><span class="s3">.</span><span class="s1">scrollTop</span><span class="s3">;</span>
+            <span class="s1">obj </span><span class="s3">= </span><span class="s1">obj</span><span class="s3">.</span><span class="s1">offsetParent</span><span class="s3">;</span>
+        <span class="s3">}</span>
+    <span class="s3">} </span><span class="s4">else if </span><span class="s3">(</span><span class="s1">obj</span><span class="s3">.</span><span class="s1">y</span><span class="s3">) {</span>
+        <span class="s1">curtop </span><span class="s3">+= </span><span class="s1">obj</span><span class="s3">.</span><span class="s1">y</span><span class="s3">;</span>
+    <span class="s3">}</span>
+    <span class="s4">return </span><span class="s1">curtop</span><span class="s3">;</span>
+<span class="s3">}</span>
+
+<span class="s0">//-----------------------------------------------------------------------------</span>
+<span class="s0">// Date object extensions</span>
+<span class="s0">// ----------------------------------------------------------------------------</span>
+<span class="s3">{</span>
+    <span class="s1">Date</span><span class="s3">.</span><span class="s1">prototype</span><span class="s3">.</span><span class="s1">getTwelveHours </span><span class="s3">= </span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s4">return this</span><span class="s3">.</span><span class="s1">getHours</span><span class="s3">() % </span><span class="s5">12 </span><span class="s3">|| </span><span class="s5">12</span><span class="s3">;</span>
+    <span class="s3">};</span>
+
+    <span class="s1">Date</span><span class="s3">.</span><span class="s1">prototype</span><span class="s3">.</span><span class="s1">getTwoDigitMonth </span><span class="s3">= </span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s4">return </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">getMonth</span><span class="s3">() &lt; </span><span class="s5">9</span><span class="s3">) ? </span><span class="s2">'0' </span><span class="s3">+ (</span><span class="s4">this</span><span class="s3">.</span><span class="s1">getMonth</span><span class="s3">() + </span><span class="s5">1</span><span class="s3">) : (</span><span class="s4">this</span><span class="s3">.</span><span class="s1">getMonth</span><span class="s3">() + </span><span class="s5">1</span><span class="s3">);</span>
+    <span class="s3">};</span>
+
+    <span class="s1">Date</span><span class="s3">.</span><span class="s1">prototype</span><span class="s3">.</span><span class="s1">getTwoDigitDate </span><span class="s3">= </span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s4">return </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">getDate</span><span class="s3">() &lt; </span><span class="s5">10</span><span class="s3">) ? </span><span class="s2">'0' </span><span class="s3">+ </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getDate</span><span class="s3">() : </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getDate</span><span class="s3">();</span>
+    <span class="s3">};</span>
+
+    <span class="s1">Date</span><span class="s3">.</span><span class="s1">prototype</span><span class="s3">.</span><span class="s1">getTwoDigitTwelveHour </span><span class="s3">= </span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s4">return </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">getTwelveHours</span><span class="s3">() &lt; </span><span class="s5">10</span><span class="s3">) ? </span><span class="s2">'0' </span><span class="s3">+ </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getTwelveHours</span><span class="s3">() : </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getTwelveHours</span><span class="s3">();</span>
+    <span class="s3">};</span>
+
+    <span class="s1">Date</span><span class="s3">.</span><span class="s1">prototype</span><span class="s3">.</span><span class="s1">getTwoDigitHour </span><span class="s3">= </span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s4">return </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">getHours</span><span class="s3">() &lt; </span><span class="s5">10</span><span class="s3">) ? </span><span class="s2">'0' </span><span class="s3">+ </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getHours</span><span class="s3">() : </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getHours</span><span class="s3">();</span>
+    <span class="s3">};</span>
+
+    <span class="s1">Date</span><span class="s3">.</span><span class="s1">prototype</span><span class="s3">.</span><span class="s1">getTwoDigitMinute </span><span class="s3">= </span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s4">return </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">getMinutes</span><span class="s3">() &lt; </span><span class="s5">10</span><span class="s3">) ? </span><span class="s2">'0' </span><span class="s3">+ </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getMinutes</span><span class="s3">() : </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getMinutes</span><span class="s3">();</span>
+    <span class="s3">};</span>
+
+    <span class="s1">Date</span><span class="s3">.</span><span class="s1">prototype</span><span class="s3">.</span><span class="s1">getTwoDigitSecond </span><span class="s3">= </span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s4">return </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">getSeconds</span><span class="s3">() &lt; </span><span class="s5">10</span><span class="s3">) ? </span><span class="s2">'0' </span><span class="s3">+ </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getSeconds</span><span class="s3">() : </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getSeconds</span><span class="s3">();</span>
+    <span class="s3">};</span>
+
+    <span class="s1">Date</span><span class="s3">.</span><span class="s1">prototype</span><span class="s3">.</span><span class="s1">getAbbrevDayName </span><span class="s3">= </span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s4">return typeof </span><span class="s1">window</span><span class="s3">.</span><span class="s1">CalendarNamespace </span><span class="s3">=== </span><span class="s2">&quot;undefined&quot;</span>
+            <span class="s3">? </span><span class="s2">'0' </span><span class="s3">+ </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getDay</span><span class="s3">()</span>
+            <span class="s3">: </span><span class="s1">window</span><span class="s3">.</span><span class="s1">CalendarNamespace</span><span class="s3">.</span><span class="s1">daysOfWeekAbbrev</span><span class="s3">[</span><span class="s4">this</span><span class="s3">.</span><span class="s1">getDay</span><span class="s3">()];</span>
+    <span class="s3">};</span>
+
+    <span class="s1">Date</span><span class="s3">.</span><span class="s1">prototype</span><span class="s3">.</span><span class="s1">getFullDayName </span><span class="s3">= </span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s4">return typeof </span><span class="s1">window</span><span class="s3">.</span><span class="s1">CalendarNamespace </span><span class="s3">=== </span><span class="s2">&quot;undefined&quot;</span>
+            <span class="s3">? </span><span class="s2">'0' </span><span class="s3">+ </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getDay</span><span class="s3">()</span>
+            <span class="s3">: </span><span class="s1">window</span><span class="s3">.</span><span class="s1">CalendarNamespace</span><span class="s3">.</span><span class="s1">daysOfWeek</span><span class="s3">[</span><span class="s4">this</span><span class="s3">.</span><span class="s1">getDay</span><span class="s3">()];</span>
+    <span class="s3">};</span>
+
+    <span class="s1">Date</span><span class="s3">.</span><span class="s1">prototype</span><span class="s3">.</span><span class="s1">getAbbrevMonthName </span><span class="s3">= </span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s4">return typeof </span><span class="s1">window</span><span class="s3">.</span><span class="s1">CalendarNamespace </span><span class="s3">=== </span><span class="s2">&quot;undefined&quot;</span>
+            <span class="s3">? </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getTwoDigitMonth</span><span class="s3">()</span>
+            <span class="s3">: </span><span class="s1">window</span><span class="s3">.</span><span class="s1">CalendarNamespace</span><span class="s3">.</span><span class="s1">monthsOfYearAbbrev</span><span class="s3">[</span><span class="s4">this</span><span class="s3">.</span><span class="s1">getMonth</span><span class="s3">()];</span>
+    <span class="s3">};</span>
+
+    <span class="s1">Date</span><span class="s3">.</span><span class="s1">prototype</span><span class="s3">.</span><span class="s1">getFullMonthName </span><span class="s3">= </span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s4">return typeof </span><span class="s1">window</span><span class="s3">.</span><span class="s1">CalendarNamespace </span><span class="s3">=== </span><span class="s2">&quot;undefined&quot;</span>
+            <span class="s3">? </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getTwoDigitMonth</span><span class="s3">()</span>
+            <span class="s3">: </span><span class="s1">window</span><span class="s3">.</span><span class="s1">CalendarNamespace</span><span class="s3">.</span><span class="s1">monthsOfYear</span><span class="s3">[</span><span class="s4">this</span><span class="s3">.</span><span class="s1">getMonth</span><span class="s3">()];</span>
+    <span class="s3">};</span>
+
+    <span class="s1">Date</span><span class="s3">.</span><span class="s1">prototype</span><span class="s3">.</span><span class="s1">strftime </span><span class="s3">= </span><span class="s4">function</span><span class="s3">(</span><span class="s1">format</span><span class="s3">) {</span>
+        <span class="s4">const </span><span class="s1">fields </span><span class="s3">= {</span>
+            <span class="s1">a</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getAbbrevDayName</span><span class="s3">(),</span>
+            <span class="s1">A</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getFullDayName</span><span class="s3">(),</span>
+            <span class="s1">b</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getAbbrevMonthName</span><span class="s3">(),</span>
+            <span class="s1">B</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getFullMonthName</span><span class="s3">(),</span>
+            <span class="s1">c</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">toString</span><span class="s3">(),</span>
+            <span class="s1">d</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getTwoDigitDate</span><span class="s3">(),</span>
+            <span class="s1">H</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getTwoDigitHour</span><span class="s3">(),</span>
+            <span class="s1">I</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getTwoDigitTwelveHour</span><span class="s3">(),</span>
+            <span class="s1">m</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getTwoDigitMonth</span><span class="s3">(),</span>
+            <span class="s1">M</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getTwoDigitMinute</span><span class="s3">(),</span>
+            <span class="s1">p</span><span class="s3">: (</span><span class="s4">this</span><span class="s3">.</span><span class="s1">getHours</span><span class="s3">() &gt;= </span><span class="s5">12</span><span class="s3">) ? </span><span class="s2">'PM' </span><span class="s3">: </span><span class="s2">'AM'</span><span class="s3">,</span>
+            <span class="s1">S</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getTwoDigitSecond</span><span class="s3">(),</span>
+            <span class="s1">w</span><span class="s3">: </span><span class="s2">'0' </span><span class="s3">+ </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getDay</span><span class="s3">(),</span>
+            <span class="s1">x</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">toLocaleDateString</span><span class="s3">(),</span>
+            <span class="s1">X</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">toLocaleTimeString</span><span class="s3">(),</span>
+            <span class="s1">y</span><span class="s3">: (</span><span class="s2">'' </span><span class="s3">+ </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getFullYear</span><span class="s3">()).</span><span class="s1">substr</span><span class="s3">(</span><span class="s5">2</span><span class="s3">, </span><span class="s5">4</span><span class="s3">),</span>
+            <span class="s1">Y</span><span class="s3">: </span><span class="s2">'' </span><span class="s3">+ </span><span class="s4">this</span><span class="s3">.</span><span class="s1">getFullYear</span><span class="s3">(),</span>
+            <span class="s2">'%'</span><span class="s3">: </span><span class="s2">'%'</span>
+        <span class="s3">};</span>
+        <span class="s4">let </span><span class="s1">result </span><span class="s3">= </span><span class="s2">''</span><span class="s3">, </span><span class="s1">i </span><span class="s3">= </span><span class="s5">0</span><span class="s3">;</span>
+        <span class="s4">while </span><span class="s3">(</span><span class="s1">i </span><span class="s3">&lt; </span><span class="s1">format</span><span class="s3">.</span><span class="s1">length</span><span class="s3">) {</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">format</span><span class="s3">.</span><span class="s1">charAt</span><span class="s3">(</span><span class="s1">i</span><span class="s3">) === </span><span class="s2">'%'</span><span class="s3">) {</span>
+                <span class="s1">result </span><span class="s3">+= </span><span class="s1">fields</span><span class="s3">[</span><span class="s1">format</span><span class="s3">.</span><span class="s1">charAt</span><span class="s3">(</span><span class="s1">i </span><span class="s3">+ </span><span class="s5">1</span><span class="s3">)];</span>
+                <span class="s3">++</span><span class="s1">i</span><span class="s3">;</span>
+            <span class="s3">}</span>
+            <span class="s4">else </span><span class="s3">{</span>
+                <span class="s1">result </span><span class="s3">+= </span><span class="s1">format</span><span class="s3">.</span><span class="s1">charAt</span><span class="s3">(</span><span class="s1">i</span><span class="s3">);</span>
+            <span class="s3">}</span>
+            <span class="s3">++</span><span class="s1">i</span><span class="s3">;</span>
+        <span class="s3">}</span>
+        <span class="s4">return </span><span class="s1">result</span><span class="s3">;</span>
+    <span class="s3">};</span>
+
+    <span class="s0">// ----------------------------------------------------------------------------</span>
+    <span class="s0">// String object extensions</span>
+    <span class="s0">// ----------------------------------------------------------------------------</span>
+    <span class="s1">String</span><span class="s3">.</span><span class="s1">prototype</span><span class="s3">.</span><span class="s1">strptime </span><span class="s3">= </span><span class="s4">function</span><span class="s3">(</span><span class="s1">format</span><span class="s3">) {</span>
+        <span class="s4">const </span><span class="s1">split_format </span><span class="s3">= </span><span class="s1">format</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s6">/[.\-/]/</span><span class="s3">);</span>
+        <span class="s4">const </span><span class="s1">date </span><span class="s3">= </span><span class="s4">this</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s6">/[.\-/]/</span><span class="s3">);</span>
+        <span class="s4">let </span><span class="s1">i </span><span class="s3">= </span><span class="s5">0</span><span class="s3">;</span>
+        <span class="s4">let </span><span class="s1">day</span><span class="s3">, </span><span class="s1">month</span><span class="s3">, </span><span class="s1">year</span><span class="s3">;</span>
+        <span class="s4">while </span><span class="s3">(</span><span class="s1">i </span><span class="s3">&lt; </span><span class="s1">split_format</span><span class="s3">.</span><span class="s1">length</span><span class="s3">) {</span>
+            <span class="s4">switch </span><span class="s3">(</span><span class="s1">split_format</span><span class="s3">[</span><span class="s1">i</span><span class="s3">]) {</span>
+            <span class="s4">case </span><span class="s2">&quot;%d&quot;</span><span class="s3">:</span>
+                <span class="s1">day </span><span class="s3">= </span><span class="s1">date</span><span class="s3">[</span><span class="s1">i</span><span class="s3">];</span>
+                <span class="s4">break</span><span class="s3">;</span>
+            <span class="s4">case </span><span class="s2">&quot;%m&quot;</span><span class="s3">:</span>
+                <span class="s1">month </span><span class="s3">= </span><span class="s1">date</span><span class="s3">[</span><span class="s1">i</span><span class="s3">] - </span><span class="s5">1</span><span class="s3">;</span>
+                <span class="s4">break</span><span class="s3">;</span>
+            <span class="s4">case </span><span class="s2">&quot;%Y&quot;</span><span class="s3">:</span>
+                <span class="s1">year </span><span class="s3">= </span><span class="s1">date</span><span class="s3">[</span><span class="s1">i</span><span class="s3">];</span>
+                <span class="s4">break</span><span class="s3">;</span>
+            <span class="s4">case </span><span class="s2">&quot;%y&quot;</span><span class="s3">:</span>
+                <span class="s0">// A %y value in the range of [00, 68] is in the current</span>
+                <span class="s0">// century, while [69, 99] is in the previous century,</span>
+                <span class="s0">// according to the Open Group Specification.</span>
+                <span class="s4">if </span><span class="s3">(</span><span class="s1">parseInt</span><span class="s3">(</span><span class="s1">date</span><span class="s3">[</span><span class="s1">i</span><span class="s3">], </span><span class="s5">10</span><span class="s3">) &gt;= </span><span class="s5">69</span><span class="s3">) {</span>
+                    <span class="s1">year </span><span class="s3">= </span><span class="s1">date</span><span class="s3">[</span><span class="s1">i</span><span class="s3">];</span>
+                <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+                    <span class="s1">year </span><span class="s3">= (</span><span class="s4">new </span><span class="s1">Date</span><span class="s3">(</span><span class="s1">Date</span><span class="s3">.</span><span class="s1">UTC</span><span class="s3">(</span><span class="s1">date</span><span class="s3">[</span><span class="s1">i</span><span class="s3">], </span><span class="s5">0</span><span class="s3">))).</span><span class="s1">getUTCFullYear</span><span class="s3">() + </span><span class="s5">100</span><span class="s3">;</span>
+                <span class="s3">}</span>
+                <span class="s4">break</span><span class="s3">;</span>
+            <span class="s3">}</span>
+            <span class="s3">++</span><span class="s1">i</span><span class="s3">;</span>
+        <span class="s3">}</span>
+        <span class="s0">// Create Date object from UTC since the parsed value is supposed to be</span>
+        <span class="s0">// in UTC, not local time. Also, the calendar uses UTC functions for</span>
+        <span class="s0">// date extraction.</span>
+        <span class="s4">return new </span><span class="s1">Date</span><span class="s3">(</span><span class="s1">Date</span><span class="s3">.</span><span class="s1">UTC</span><span class="s3">(</span><span class="s1">year</span><span class="s3">, </span><span class="s1">month</span><span class="s3">, </span><span class="s1">day</span><span class="s3">));</span>
+    <span class="s3">};</span>
+<span class="s3">}</span>
+</pre>
+</body>
+</html>

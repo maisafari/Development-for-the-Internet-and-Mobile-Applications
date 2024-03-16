@@ -1,0 +1,337 @@
+<html>
+<head>
+<title>mutable_list.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #5f826b; font-style: italic;}
+.s3 { color: #cf8e6d;}
+.s4 { color: #bcbec4;}
+.s5 { color: #2aacb8;}
+.s6 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+mutable_list.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># Copyright (c) 2008-2009 Aryeh Leib Taurog, all rights reserved.</span>
+<span class="s0"># Released under the New BSD license.</span>
+<span class="s2">&quot;&quot;&quot; 
+This module contains a base type which provides list-style mutations 
+without specific data storage methods. 
+ 
+See also http://static.aryehleib.com/oldsite/MutableLists.html 
+ 
+Author: Aryeh Leib Taurog. 
+&quot;&quot;&quot;</span>
+<span class="s3">from </span><span class="s1">functools </span><span class="s3">import </span><span class="s1">total_ordering</span>
+
+
+<span class="s4">@</span><span class="s1">total_ordering</span>
+<span class="s3">class </span><span class="s1">ListMixin</span><span class="s4">:</span>
+    <span class="s2">&quot;&quot;&quot; 
+    A base class which provides complete list interface. 
+    Derived classes must call ListMixin's __init__() function 
+    and implement the following: 
+ 
+    function _get_single_external(self, i): 
+        Return single item with index i for general use. 
+        The index i will always satisfy 0 &lt;= i &lt; len(self). 
+ 
+    function _get_single_internal(self, i): 
+        Same as above, but for use within the class [Optional] 
+        Note that if _get_single_internal and _get_single_internal return 
+        different types of objects, _set_list must distinguish 
+        between the two and handle each appropriately. 
+ 
+    function _set_list(self, length, items): 
+        Recreate the entire object. 
+ 
+        NOTE: items may be a generator which calls _get_single_internal. 
+        Therefore, it is necessary to cache the values in a temporary: 
+            temp = list(items) 
+        before clobbering the original storage. 
+ 
+    function _set_single(self, i, value): 
+        Set the single item at index i to value [Optional] 
+        If left undefined, all mutations will result in rebuilding 
+        the object using _set_list. 
+ 
+    function __len__(self): 
+        Return the length 
+ 
+    int _minlength: 
+        The minimum legal length [Optional] 
+ 
+    int _maxlength: 
+        The maximum legal length [Optional] 
+ 
+    type or tuple _allowed: 
+        A type or tuple of allowed item types [Optional] 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">_minlength </span><span class="s4">= </span><span class="s5">0</span>
+    <span class="s1">_maxlength </span><span class="s4">= </span><span class="s3">None</span>
+
+    <span class="s0"># ### Python initialization and special list interface methods ###</span>
+
+    <span class="s3">def </span><span class="s1">__init__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, *</span><span class="s1">args</span><span class="s4">, **</span><span class="s1">kwargs</span><span class="s4">):</span>
+        <span class="s3">if not </span><span class="s1">hasattr</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s6">&quot;_get_single_internal&quot;</span><span class="s4">):</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">_get_single_internal </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_get_single_external</span>
+
+        <span class="s3">if not </span><span class="s1">hasattr</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s6">&quot;_set_single&quot;</span><span class="s4">):</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">_set_single </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_set_single_rebuild</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">_assign_extended_slice </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_assign_extended_slice_rebuild</span>
+
+        <span class="s1">super</span><span class="s4">().</span><span class="s1">__init__</span><span class="s4">(*</span><span class="s1">args</span><span class="s4">, **</span><span class="s1">kwargs</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__getitem__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">index</span><span class="s4">):</span>
+        <span class="s2">&quot;Get the item(s) at the specified index/slice.&quot;</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">index</span><span class="s4">, </span><span class="s1">slice</span><span class="s4">):</span>
+            <span class="s3">return </span><span class="s4">[</span>
+                <span class="s1">self</span><span class="s4">.</span><span class="s1">_get_single_external</span><span class="s4">(</span><span class="s1">i</span><span class="s4">) </span><span class="s3">for </span><span class="s1">i </span><span class="s3">in </span><span class="s1">range</span><span class="s4">(*</span><span class="s1">index</span><span class="s4">.</span><span class="s1">indices</span><span class="s4">(</span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)))</span>
+            <span class="s4">]</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">index </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_checkindex</span><span class="s4">(</span><span class="s1">index</span><span class="s4">)</span>
+            <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_get_single_external</span><span class="s4">(</span><span class="s1">index</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__delitem__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">index</span><span class="s4">):</span>
+        <span class="s2">&quot;Delete the item(s) at the specified index/slice.&quot;</span>
+        <span class="s3">if not </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">index</span><span class="s4">, (</span><span class="s1">int</span><span class="s4">, </span><span class="s1">slice</span><span class="s4">)):</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span><span class="s6">&quot;%s is not a legal index&quot; </span><span class="s4">% </span><span class="s1">index</span><span class="s4">)</span>
+
+        <span class="s0"># calculate new length and dimensions</span>
+        <span class="s1">origLen </span><span class="s4">= </span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">index</span><span class="s4">, </span><span class="s1">int</span><span class="s4">):</span>
+            <span class="s1">index </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_checkindex</span><span class="s4">(</span><span class="s1">index</span><span class="s4">)</span>
+            <span class="s1">indexRange </span><span class="s4">= [</span><span class="s1">index</span><span class="s4">]</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">indexRange </span><span class="s4">= </span><span class="s1">range</span><span class="s4">(*</span><span class="s1">index</span><span class="s4">.</span><span class="s1">indices</span><span class="s4">(</span><span class="s1">origLen</span><span class="s4">))</span>
+
+        <span class="s1">newLen </span><span class="s4">= </span><span class="s1">origLen </span><span class="s4">- </span><span class="s1">len</span><span class="s4">(</span><span class="s1">indexRange</span><span class="s4">)</span>
+        <span class="s1">newItems </span><span class="s4">= (</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">_get_single_internal</span><span class="s4">(</span><span class="s1">i</span><span class="s4">) </span><span class="s3">for </span><span class="s1">i </span><span class="s3">in </span><span class="s1">range</span><span class="s4">(</span><span class="s1">origLen</span><span class="s4">) </span><span class="s3">if </span><span class="s1">i </span><span class="s3">not in </span><span class="s1">indexRange</span>
+        <span class="s4">)</span>
+
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">_rebuild</span><span class="s4">(</span><span class="s1">newLen</span><span class="s4">, </span><span class="s1">newItems</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__setitem__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">index</span><span class="s4">, </span><span class="s1">val</span><span class="s4">):</span>
+        <span class="s2">&quot;Set the item(s) at the specified index/slice.&quot;</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">index</span><span class="s4">, </span><span class="s1">slice</span><span class="s4">):</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">_set_slice</span><span class="s4">(</span><span class="s1">index</span><span class="s4">, </span><span class="s1">val</span><span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">index </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_checkindex</span><span class="s4">(</span><span class="s1">index</span><span class="s4">)</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">_check_allowed</span><span class="s4">((</span><span class="s1">val</span><span class="s4">,))</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">_set_single</span><span class="s4">(</span><span class="s1">index</span><span class="s4">, </span><span class="s1">val</span><span class="s4">)</span>
+
+    <span class="s0"># ### Special methods for arithmetic operations ###</span>
+    <span class="s3">def </span><span class="s1">__add__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s2">&quot;add another list-like object&quot;</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">([*</span><span class="s1">self</span><span class="s4">, *</span><span class="s1">other</span><span class="s4">])</span>
+
+    <span class="s3">def </span><span class="s1">__radd__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s2">&quot;add to another list-like object&quot;</span>
+        <span class="s3">return </span><span class="s1">other</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">([*</span><span class="s1">other</span><span class="s4">, *</span><span class="s1">self</span><span class="s4">])</span>
+
+    <span class="s3">def </span><span class="s1">__iadd__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s2">&quot;add another list-like object to self&quot;</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">extend</span><span class="s4">(</span><span class="s1">other</span><span class="s4">)</span>
+        <span class="s3">return </span><span class="s1">self</span>
+
+    <span class="s3">def </span><span class="s1">__mul__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">n</span><span class="s4">):</span>
+        <span class="s2">&quot;multiply&quot;</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">(</span><span class="s1">list</span><span class="s4">(</span><span class="s1">self</span><span class="s4">) * </span><span class="s1">n</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__rmul__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">n</span><span class="s4">):</span>
+        <span class="s2">&quot;multiply&quot;</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">(</span><span class="s1">list</span><span class="s4">(</span><span class="s1">self</span><span class="s4">) * </span><span class="s1">n</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__imul__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">n</span><span class="s4">):</span>
+        <span class="s2">&quot;multiply&quot;</span>
+        <span class="s3">if </span><span class="s1">n </span><span class="s4">&lt;= </span><span class="s5">0</span><span class="s4">:</span>
+            <span class="s3">del </span><span class="s1">self</span><span class="s4">[:]</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">cache </span><span class="s4">= </span><span class="s1">list</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)</span>
+            <span class="s3">for </span><span class="s1">i </span><span class="s3">in </span><span class="s1">range</span><span class="s4">(</span><span class="s1">n </span><span class="s4">- </span><span class="s5">1</span><span class="s4">):</span>
+                <span class="s1">self</span><span class="s4">.</span><span class="s1">extend</span><span class="s4">(</span><span class="s1">cache</span><span class="s4">)</span>
+        <span class="s3">return </span><span class="s1">self</span>
+
+    <span class="s3">def </span><span class="s1">__eq__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s1">olen </span><span class="s4">= </span><span class="s1">len</span><span class="s4">(</span><span class="s1">other</span><span class="s4">)</span>
+        <span class="s3">for </span><span class="s1">i </span><span class="s3">in </span><span class="s1">range</span><span class="s4">(</span><span class="s1">olen</span><span class="s4">):</span>
+            <span class="s3">try</span><span class="s4">:</span>
+                <span class="s1">c </span><span class="s4">= </span><span class="s1">self</span><span class="s4">[</span><span class="s1">i</span><span class="s4">] == </span><span class="s1">other</span><span class="s4">[</span><span class="s1">i</span><span class="s4">]</span>
+            <span class="s3">except </span><span class="s1">IndexError</span><span class="s4">:</span>
+                <span class="s0"># self must be shorter</span>
+                <span class="s3">return False</span>
+            <span class="s3">if not </span><span class="s1">c</span><span class="s4">:</span>
+                <span class="s3">return False</span>
+        <span class="s3">return </span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">) == </span><span class="s1">olen</span>
+
+    <span class="s3">def </span><span class="s1">__lt__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s1">olen </span><span class="s4">= </span><span class="s1">len</span><span class="s4">(</span><span class="s1">other</span><span class="s4">)</span>
+        <span class="s3">for </span><span class="s1">i </span><span class="s3">in </span><span class="s1">range</span><span class="s4">(</span><span class="s1">olen</span><span class="s4">):</span>
+            <span class="s3">try</span><span class="s4">:</span>
+                <span class="s1">c </span><span class="s4">= </span><span class="s1">self</span><span class="s4">[</span><span class="s1">i</span><span class="s4">] &lt; </span><span class="s1">other</span><span class="s4">[</span><span class="s1">i</span><span class="s4">]</span>
+            <span class="s3">except </span><span class="s1">IndexError</span><span class="s4">:</span>
+                <span class="s0"># self must be shorter</span>
+                <span class="s3">return True</span>
+            <span class="s3">if </span><span class="s1">c</span><span class="s4">:</span>
+                <span class="s3">return </span><span class="s1">c</span>
+            <span class="s3">elif </span><span class="s1">other</span><span class="s4">[</span><span class="s1">i</span><span class="s4">] &lt; </span><span class="s1">self</span><span class="s4">[</span><span class="s1">i</span><span class="s4">]:</span>
+                <span class="s3">return False</span>
+        <span class="s3">return </span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">) &lt; </span><span class="s1">olen</span>
+
+    <span class="s0"># ### Public list interface Methods ###</span>
+    <span class="s0"># ## Non-mutating ##</span>
+    <span class="s3">def </span><span class="s1">count</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">val</span><span class="s4">):</span>
+        <span class="s2">&quot;Standard list count method&quot;</span>
+        <span class="s1">count </span><span class="s4">= </span><span class="s5">0</span>
+        <span class="s3">for </span><span class="s1">i </span><span class="s3">in </span><span class="s1">self</span><span class="s4">:</span>
+            <span class="s3">if </span><span class="s1">val </span><span class="s4">== </span><span class="s1">i</span><span class="s4">:</span>
+                <span class="s1">count </span><span class="s4">+= </span><span class="s5">1</span>
+        <span class="s3">return </span><span class="s1">count</span>
+
+    <span class="s3">def </span><span class="s1">index</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">val</span><span class="s4">):</span>
+        <span class="s2">&quot;Standard list index method&quot;</span>
+        <span class="s3">for </span><span class="s1">i </span><span class="s3">in </span><span class="s1">range</span><span class="s4">(</span><span class="s5">0</span><span class="s4">, </span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)):</span>
+            <span class="s3">if </span><span class="s1">self</span><span class="s4">[</span><span class="s1">i</span><span class="s4">] == </span><span class="s1">val</span><span class="s4">:</span>
+                <span class="s3">return </span><span class="s1">i</span>
+        <span class="s3">raise </span><span class="s1">ValueError</span><span class="s4">(</span><span class="s6">&quot;%s not found in object&quot; </span><span class="s4">% </span><span class="s1">val</span><span class="s4">)</span>
+
+    <span class="s0"># ## Mutating ##</span>
+    <span class="s3">def </span><span class="s1">append</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">val</span><span class="s4">):</span>
+        <span class="s2">&quot;Standard list append method&quot;</span>
+        <span class="s1">self</span><span class="s4">[</span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">) :] = [</span><span class="s1">val</span><span class="s4">]</span>
+
+    <span class="s3">def </span><span class="s1">extend</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">vals</span><span class="s4">):</span>
+        <span class="s2">&quot;Standard list extend method&quot;</span>
+        <span class="s1">self</span><span class="s4">[</span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">) :] = </span><span class="s1">vals</span>
+
+    <span class="s3">def </span><span class="s1">insert</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">index</span><span class="s4">, </span><span class="s1">val</span><span class="s4">):</span>
+        <span class="s2">&quot;Standard list insert method&quot;</span>
+        <span class="s3">if not </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">index</span><span class="s4">, </span><span class="s1">int</span><span class="s4">):</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span><span class="s6">&quot;%s is not a legal index&quot; </span><span class="s4">% </span><span class="s1">index</span><span class="s4">)</span>
+        <span class="s1">self</span><span class="s4">[</span><span class="s1">index</span><span class="s4">:</span><span class="s1">index</span><span class="s4">] = [</span><span class="s1">val</span><span class="s4">]</span>
+
+    <span class="s3">def </span><span class="s1">pop</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">index</span><span class="s4">=-</span><span class="s5">1</span><span class="s4">):</span>
+        <span class="s2">&quot;Standard list pop method&quot;</span>
+        <span class="s1">result </span><span class="s4">= </span><span class="s1">self</span><span class="s4">[</span><span class="s1">index</span><span class="s4">]</span>
+        <span class="s3">del </span><span class="s1">self</span><span class="s4">[</span><span class="s1">index</span><span class="s4">]</span>
+        <span class="s3">return </span><span class="s1">result</span>
+
+    <span class="s3">def </span><span class="s1">remove</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">val</span><span class="s4">):</span>
+        <span class="s2">&quot;Standard list remove method&quot;</span>
+        <span class="s3">del </span><span class="s1">self</span><span class="s4">[</span><span class="s1">self</span><span class="s4">.</span><span class="s1">index</span><span class="s4">(</span><span class="s1">val</span><span class="s4">)]</span>
+
+    <span class="s3">def </span><span class="s1">reverse</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;Standard list reverse method&quot;</span>
+        <span class="s1">self</span><span class="s4">[:] = </span><span class="s1">self</span><span class="s4">[-</span><span class="s5">1</span><span class="s4">::-</span><span class="s5">1</span><span class="s4">]</span>
+
+    <span class="s3">def </span><span class="s1">sort</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">key</span><span class="s4">=</span><span class="s3">None</span><span class="s4">, </span><span class="s1">reverse</span><span class="s4">=</span><span class="s3">False</span><span class="s4">):</span>
+        <span class="s2">&quot;Standard list sort method&quot;</span>
+        <span class="s1">self</span><span class="s4">[:] = </span><span class="s1">sorted</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">key</span><span class="s4">=</span><span class="s1">key</span><span class="s4">, </span><span class="s1">reverse</span><span class="s4">=</span><span class="s1">reverse</span><span class="s4">)</span>
+
+    <span class="s0"># ### Private routines ###</span>
+    <span class="s3">def </span><span class="s1">_rebuild</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">newLen</span><span class="s4">, </span><span class="s1">newItems</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">newLen </span><span class="s3">and </span><span class="s1">newLen </span><span class="s4">&lt; </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_minlength</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">ValueError</span><span class="s4">(</span><span class="s6">&quot;Must have at least %d items&quot; </span><span class="s4">% </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_minlength</span><span class="s4">)</span>
+        <span class="s3">if </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_maxlength </span><span class="s3">is not None and </span><span class="s1">newLen </span><span class="s4">&gt; </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_maxlength</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">ValueError</span><span class="s4">(</span><span class="s6">&quot;Cannot have more than %d items&quot; </span><span class="s4">% </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_maxlength</span><span class="s4">)</span>
+
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">_set_list</span><span class="s4">(</span><span class="s1">newLen</span><span class="s4">, </span><span class="s1">newItems</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">_set_single_rebuild</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">index</span><span class="s4">, </span><span class="s1">value</span><span class="s4">):</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">_set_slice</span><span class="s4">(</span><span class="s1">slice</span><span class="s4">(</span><span class="s1">index</span><span class="s4">, </span><span class="s1">index </span><span class="s4">+ </span><span class="s5">1</span><span class="s4">, </span><span class="s5">1</span><span class="s4">), [</span><span class="s1">value</span><span class="s4">])</span>
+
+    <span class="s3">def </span><span class="s1">_checkindex</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">index</span><span class="s4">):</span>
+        <span class="s1">length </span><span class="s4">= </span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)</span>
+        <span class="s3">if </span><span class="s5">0 </span><span class="s4">&lt;= </span><span class="s1">index </span><span class="s4">&lt; </span><span class="s1">length</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">index</span>
+        <span class="s3">if </span><span class="s4">-</span><span class="s1">length </span><span class="s4">&lt;= </span><span class="s1">index </span><span class="s4">&lt; </span><span class="s5">0</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">index </span><span class="s4">+ </span><span class="s1">length</span>
+        <span class="s3">raise </span><span class="s1">IndexError</span><span class="s4">(</span><span class="s6">&quot;invalid index: %s&quot; </span><span class="s4">% </span><span class="s1">index</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">_check_allowed</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">items</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">hasattr</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s6">&quot;_allowed&quot;</span><span class="s4">):</span>
+            <span class="s3">if False in </span><span class="s4">[</span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">val</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_allowed</span><span class="s4">) </span><span class="s3">for </span><span class="s1">val </span><span class="s3">in </span><span class="s1">items</span><span class="s4">]:</span>
+                <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span><span class="s6">&quot;Invalid type encountered in the arguments.&quot;</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">_set_slice</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">index</span><span class="s4">, </span><span class="s1">values</span><span class="s4">):</span>
+        <span class="s2">&quot;Assign values to a slice of the object&quot;</span>
+        <span class="s3">try</span><span class="s4">:</span>
+            <span class="s1">valueList </span><span class="s4">= </span><span class="s1">list</span><span class="s4">(</span><span class="s1">values</span><span class="s4">)</span>
+        <span class="s3">except </span><span class="s1">TypeError</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span><span class="s6">&quot;can only assign an iterable to a slice&quot;</span><span class="s4">)</span>
+
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">_check_allowed</span><span class="s4">(</span><span class="s1">valueList</span><span class="s4">)</span>
+
+        <span class="s1">origLen </span><span class="s4">= </span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)</span>
+        <span class="s1">start</span><span class="s4">, </span><span class="s1">stop</span><span class="s4">, </span><span class="s1">step </span><span class="s4">= </span><span class="s1">index</span><span class="s4">.</span><span class="s1">indices</span><span class="s4">(</span><span class="s1">origLen</span><span class="s4">)</span>
+
+        <span class="s0"># CAREFUL: index.step and step are not the same!</span>
+        <span class="s0"># step will never be None</span>
+        <span class="s3">if </span><span class="s1">index</span><span class="s4">.</span><span class="s1">step </span><span class="s3">is None</span><span class="s4">:</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">_assign_simple_slice</span><span class="s4">(</span><span class="s1">start</span><span class="s4">, </span><span class="s1">stop</span><span class="s4">, </span><span class="s1">valueList</span><span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">_assign_extended_slice</span><span class="s4">(</span><span class="s1">start</span><span class="s4">, </span><span class="s1">stop</span><span class="s4">, </span><span class="s1">step</span><span class="s4">, </span><span class="s1">valueList</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">_assign_extended_slice_rebuild</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">start</span><span class="s4">, </span><span class="s1">stop</span><span class="s4">, </span><span class="s1">step</span><span class="s4">, </span><span class="s1">valueList</span><span class="s4">):</span>
+        <span class="s2">&quot;Assign an extended slice by rebuilding entire list&quot;</span>
+        <span class="s1">indexList </span><span class="s4">= </span><span class="s1">range</span><span class="s4">(</span><span class="s1">start</span><span class="s4">, </span><span class="s1">stop</span><span class="s4">, </span><span class="s1">step</span><span class="s4">)</span>
+        <span class="s0"># extended slice, only allow assigning slice of same size</span>
+        <span class="s3">if </span><span class="s1">len</span><span class="s4">(</span><span class="s1">valueList</span><span class="s4">) != </span><span class="s1">len</span><span class="s4">(</span><span class="s1">indexList</span><span class="s4">):</span>
+            <span class="s3">raise </span><span class="s1">ValueError</span><span class="s4">(</span>
+                <span class="s6">&quot;attempt to assign sequence of size %d &quot;</span>
+                <span class="s6">&quot;to extended slice of size %d&quot; </span><span class="s4">% (</span><span class="s1">len</span><span class="s4">(</span><span class="s1">valueList</span><span class="s4">), </span><span class="s1">len</span><span class="s4">(</span><span class="s1">indexList</span><span class="s4">))</span>
+            <span class="s4">)</span>
+
+        <span class="s0"># we're not changing the length of the sequence</span>
+        <span class="s1">newLen </span><span class="s4">= </span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)</span>
+        <span class="s1">newVals </span><span class="s4">= </span><span class="s1">dict</span><span class="s4">(</span><span class="s1">zip</span><span class="s4">(</span><span class="s1">indexList</span><span class="s4">, </span><span class="s1">valueList</span><span class="s4">))</span>
+
+        <span class="s3">def </span><span class="s1">newItems</span><span class="s4">():</span>
+            <span class="s3">for </span><span class="s1">i </span><span class="s3">in </span><span class="s1">range</span><span class="s4">(</span><span class="s1">newLen</span><span class="s4">):</span>
+                <span class="s3">if </span><span class="s1">i </span><span class="s3">in </span><span class="s1">newVals</span><span class="s4">:</span>
+                    <span class="s3">yield </span><span class="s1">newVals</span><span class="s4">[</span><span class="s1">i</span><span class="s4">]</span>
+                <span class="s3">else</span><span class="s4">:</span>
+                    <span class="s3">yield </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_get_single_internal</span><span class="s4">(</span><span class="s1">i</span><span class="s4">)</span>
+
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">_rebuild</span><span class="s4">(</span><span class="s1">newLen</span><span class="s4">, </span><span class="s1">newItems</span><span class="s4">())</span>
+
+    <span class="s3">def </span><span class="s1">_assign_extended_slice</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">start</span><span class="s4">, </span><span class="s1">stop</span><span class="s4">, </span><span class="s1">step</span><span class="s4">, </span><span class="s1">valueList</span><span class="s4">):</span>
+        <span class="s2">&quot;Assign an extended slice by re-assigning individual items&quot;</span>
+        <span class="s1">indexList </span><span class="s4">= </span><span class="s1">range</span><span class="s4">(</span><span class="s1">start</span><span class="s4">, </span><span class="s1">stop</span><span class="s4">, </span><span class="s1">step</span><span class="s4">)</span>
+        <span class="s0"># extended slice, only allow assigning slice of same size</span>
+        <span class="s3">if </span><span class="s1">len</span><span class="s4">(</span><span class="s1">valueList</span><span class="s4">) != </span><span class="s1">len</span><span class="s4">(</span><span class="s1">indexList</span><span class="s4">):</span>
+            <span class="s3">raise </span><span class="s1">ValueError</span><span class="s4">(</span>
+                <span class="s6">&quot;attempt to assign sequence of size %d &quot;</span>
+                <span class="s6">&quot;to extended slice of size %d&quot; </span><span class="s4">% (</span><span class="s1">len</span><span class="s4">(</span><span class="s1">valueList</span><span class="s4">), </span><span class="s1">len</span><span class="s4">(</span><span class="s1">indexList</span><span class="s4">))</span>
+            <span class="s4">)</span>
+
+        <span class="s3">for </span><span class="s1">i</span><span class="s4">, </span><span class="s1">val </span><span class="s3">in </span><span class="s1">zip</span><span class="s4">(</span><span class="s1">indexList</span><span class="s4">, </span><span class="s1">valueList</span><span class="s4">):</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">_set_single</span><span class="s4">(</span><span class="s1">i</span><span class="s4">, </span><span class="s1">val</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">_assign_simple_slice</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">start</span><span class="s4">, </span><span class="s1">stop</span><span class="s4">, </span><span class="s1">valueList</span><span class="s4">):</span>
+        <span class="s2">&quot;Assign a simple slice; Can assign slice of any length&quot;</span>
+        <span class="s1">origLen </span><span class="s4">= </span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)</span>
+        <span class="s1">stop </span><span class="s4">= </span><span class="s1">max</span><span class="s4">(</span><span class="s1">start</span><span class="s4">, </span><span class="s1">stop</span><span class="s4">)</span>
+        <span class="s1">newLen </span><span class="s4">= </span><span class="s1">origLen </span><span class="s4">- </span><span class="s1">stop </span><span class="s4">+ </span><span class="s1">start </span><span class="s4">+ </span><span class="s1">len</span><span class="s4">(</span><span class="s1">valueList</span><span class="s4">)</span>
+
+        <span class="s3">def </span><span class="s1">newItems</span><span class="s4">():</span>
+            <span class="s3">for </span><span class="s1">i </span><span class="s3">in </span><span class="s1">range</span><span class="s4">(</span><span class="s1">origLen </span><span class="s4">+ </span><span class="s5">1</span><span class="s4">):</span>
+                <span class="s3">if </span><span class="s1">i </span><span class="s4">== </span><span class="s1">start</span><span class="s4">:</span>
+                    <span class="s3">yield from </span><span class="s1">valueList</span>
+
+                <span class="s3">if </span><span class="s1">i </span><span class="s4">&lt; </span><span class="s1">origLen</span><span class="s4">:</span>
+                    <span class="s3">if </span><span class="s1">i </span><span class="s4">&lt; </span><span class="s1">start </span><span class="s3">or </span><span class="s1">i </span><span class="s4">&gt;= </span><span class="s1">stop</span><span class="s4">:</span>
+                        <span class="s3">yield </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_get_single_internal</span><span class="s4">(</span><span class="s1">i</span><span class="s4">)</span>
+
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">_rebuild</span><span class="s4">(</span><span class="s1">newLen</span><span class="s4">, </span><span class="s1">newItems</span><span class="s4">())</span>
+</pre>
+</body>
+</html>

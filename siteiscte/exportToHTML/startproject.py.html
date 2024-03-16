@@ -1,0 +1,42 @@
+<html>
+<head>
+<title>startproject.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+startproject.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">checks</span><span class="s2">.</span><span class="s1">security</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">SECRET_KEY_INSECURE_PREFIX</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">templates </span><span class="s0">import </span><span class="s1">TemplateCommand</span>
+
+<span class="s0">from </span><span class="s2">..</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">get_random_secret_key</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">TemplateCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= (</span>
+        <span class="s3">&quot;Creates a Django project directory structure for the given project &quot;</span>
+        <span class="s3">&quot;name in the current directory or optionally in the given directory.&quot;</span>
+    <span class="s2">)</span>
+    <span class="s1">missing_args_message </span><span class="s2">= </span><span class="s3">&quot;You must provide a project name.&quot;</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">project_name </span><span class="s2">= </span><span class="s1">options</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s3">&quot;name&quot;</span><span class="s2">)</span>
+        <span class="s1">target </span><span class="s2">= </span><span class="s1">options</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s3">&quot;directory&quot;</span><span class="s2">)</span>
+
+        <span class="s4"># Create a random SECRET_KEY to put it in the main settings.</span>
+        <span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;secret_key&quot;</span><span class="s2">] = </span><span class="s1">SECRET_KEY_INSECURE_PREFIX </span><span class="s2">+ </span><span class="s1">get_random_secret_key</span><span class="s2">()</span>
+
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">handle</span><span class="s2">(</span><span class="s3">&quot;project&quot;</span><span class="s2">, </span><span class="s1">project_name</span><span class="s2">, </span><span class="s1">target</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

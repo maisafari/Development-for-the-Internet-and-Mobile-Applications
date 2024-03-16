@@ -1,0 +1,1011 @@
+<html>
+<head>
+<title>state.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #2aacb8;}
+.s5 { color: #5f826b; font-style: italic;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+state.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">copy</span>
+<span class="s0">from </span><span class="s1">collections </span><span class="s0">import </span><span class="s1">defaultdict</span>
+<span class="s0">from </span><span class="s1">contextlib </span><span class="s0">import </span><span class="s1">contextmanager</span>
+<span class="s0">from </span><span class="s1">functools </span><span class="s0">import </span><span class="s1">partial</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">AppConfig</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">registry </span><span class="s0">import </span><span class="s1">Apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">registry </span><span class="s0">import </span><span class="s1">apps </span><span class="s0">as </span><span class="s1">global_apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">FieldDoesNotExist</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">models</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">field_is_referenced</span><span class="s2">, </span><span class="s1">get_references</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">NOT_PROVIDED</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">.</span><span class="s1">related </span><span class="s0">import </span><span class="s1">RECURSIVE_RELATIONSHIP_CONSTANT</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">options </span><span class="s0">import </span><span class="s1">DEFAULT_NAMES</span><span class="s2">, </span><span class="s1">normalize_together</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">make_model_tuple</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">module_loading </span><span class="s0">import </span><span class="s1">import_string</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">version </span><span class="s0">import </span><span class="s1">get_docs_version</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">InvalidBasesError</span>
+<span class="s0">from </span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">resolve_relation</span>
+
+
+<span class="s0">def </span><span class="s1">_get_app_label_and_model_name</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">=</span><span class="s3">&quot;&quot;</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">str</span><span class="s2">):</span>
+        <span class="s1">split </span><span class="s2">= </span><span class="s1">model</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s3">&quot;.&quot;</span><span class="s2">, </span><span class="s4">1</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">split</span><span class="s2">) </span><span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">split</span><span class="s2">) == </span><span class="s4">2 </span><span class="s0">else </span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">split</span><span class="s2">[</span><span class="s4">0</span><span class="s2">])</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span>
+
+
+<span class="s0">def </span><span class="s1">_get_related_models</span><span class="s2">(</span><span class="s1">m</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Return all models that have a direct relationship to the given model.&quot;&quot;&quot;</span>
+    <span class="s1">related_models </span><span class="s2">= [</span>
+        <span class="s1">subclass</span>
+        <span class="s0">for </span><span class="s1">subclass </span><span class="s0">in </span><span class="s1">m</span><span class="s2">.</span><span class="s1">__subclasses__</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">issubclass</span><span class="s2">(</span><span class="s1">subclass</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">Model</span><span class="s2">)</span>
+    <span class="s2">]</span>
+    <span class="s1">related_fields_models </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+    <span class="s0">for </span><span class="s1">f </span><span class="s0">in </span><span class="s1">m</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">get_fields</span><span class="s2">(</span><span class="s1">include_parents</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">include_hidden</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s1">f</span><span class="s2">.</span><span class="s1">is_relation</span>
+            <span class="s0">and </span><span class="s1">f</span><span class="s2">.</span><span class="s1">related_model </span><span class="s0">is not None</span>
+            <span class="s0">and not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">f</span><span class="s2">.</span><span class="s1">related_model</span><span class="s2">, </span><span class="s1">str</span><span class="s2">)</span>
+        <span class="s2">):</span>
+            <span class="s1">related_fields_models</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s1">f</span><span class="s2">.</span><span class="s1">model</span><span class="s2">)</span>
+            <span class="s1">related_models</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">f</span><span class="s2">.</span><span class="s1">related_model</span><span class="s2">)</span>
+    <span class="s6"># Reverse accessors of foreign keys to proxy models are attached to their</span>
+    <span class="s6"># concrete proxied model.</span>
+    <span class="s1">opts </span><span class="s2">= </span><span class="s1">m</span><span class="s2">.</span><span class="s1">_meta</span>
+    <span class="s0">if </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">proxy </span><span class="s0">and </span><span class="s1">m </span><span class="s0">in </span><span class="s1">related_fields_models</span><span class="s2">:</span>
+        <span class="s1">related_models</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">opts</span><span class="s2">.</span><span class="s1">concrete_model</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">related_models</span>
+
+
+<span class="s0">def </span><span class="s1">get_related_models_tuples</span><span class="s2">(</span><span class="s1">model</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Return a list of typical (app_label, model_name) tuples for all related 
+    models for the given model. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s2">{</span>
+        <span class="s2">(</span><span class="s1">rel_mod</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">rel_mod</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">rel_mod </span><span class="s0">in </span><span class="s1">_get_related_models</span><span class="s2">(</span><span class="s1">model</span><span class="s2">)</span>
+    <span class="s2">}</span>
+
+
+<span class="s0">def </span><span class="s1">get_related_models_recursive</span><span class="s2">(</span><span class="s1">model</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Return all models that have a direct or indirect relationship 
+    to the given model. 
+ 
+    Relationships are either defined by explicit relational fields, like 
+    ForeignKey, ManyToManyField or OneToOneField, or by inheriting from another 
+    model (a superclass is related to its subclasses, but not vice versa). Note, 
+    however, that a model inheriting from a concrete model is also related to 
+    its superclass through the implicit *_ptr OneToOneField on the subclass. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">seen </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+    <span class="s1">queue </span><span class="s2">= </span><span class="s1">_get_related_models</span><span class="s2">(</span><span class="s1">model</span><span class="s2">)</span>
+    <span class="s0">for </span><span class="s1">rel_mod </span><span class="s0">in </span><span class="s1">queue</span><span class="s2">:</span>
+        <span class="s1">rel_app_label</span><span class="s2">, </span><span class="s1">rel_model_name </span><span class="s2">= (</span>
+            <span class="s1">rel_mod</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">,</span>
+            <span class="s1">rel_mod</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s0">if </span><span class="s2">(</span><span class="s1">rel_app_label</span><span class="s2">, </span><span class="s1">rel_model_name</span><span class="s2">) </span><span class="s0">in </span><span class="s1">seen</span><span class="s2">:</span>
+            <span class="s0">continue</span>
+        <span class="s1">seen</span><span class="s2">.</span><span class="s1">add</span><span class="s2">((</span><span class="s1">rel_app_label</span><span class="s2">, </span><span class="s1">rel_model_name</span><span class="s2">))</span>
+        <span class="s1">queue</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">_get_related_models</span><span class="s2">(</span><span class="s1">rel_mod</span><span class="s2">))</span>
+    <span class="s0">return </span><span class="s1">seen </span><span class="s2">- {(</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">)}</span>
+
+
+<span class="s0">class </span><span class="s1">ProjectState</span><span class="s2">:</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Represent the entire project's overall state. This is the item that is 
+    passed around - do it here rather than at the app level so that cross-app 
+    FKs/etc. resolve properly. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">models</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">real_apps</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">models </span><span class="s2">= </span><span class="s1">models </span><span class="s0">or </span><span class="s2">{}</span>
+        <span class="s6"># Apps to include from main registry, usually unmigrated ones</span>
+        <span class="s0">if </span><span class="s1">real_apps </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">real_apps </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">assert </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">real_apps</span><span class="s2">, </span><span class="s1">set</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">real_apps </span><span class="s2">= </span><span class="s1">real_apps</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">is_delayed </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s6"># {remote_model_key: {model_key: {field_name: field}}}</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_relations </span><span class="s2">= </span><span class="s0">None</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">relations</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">resolve_fields_and_relations</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations</span>
+
+    <span class="s0">def </span><span class="s1">add_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model_state</span><span class="s2">):</span>
+        <span class="s1">model_key </span><span class="s2">= </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">name_lower</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">] = </span><span class="s1">model_state</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">resolve_model_relations</span><span class="s2">(</span><span class="s1">model_key</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s3">&quot;apps&quot; </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">:  </span><span class="s6"># hasattr would cache the property</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">reload_model</span><span class="s2">(*</span><span class="s1">model_key</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">remove_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">):</span>
+        <span class="s1">model_key </span><span class="s2">= </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span>
+        <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_relations</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s1">model_key</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+            <span class="s6"># Call list() since _relations can change size during iteration.</span>
+            <span class="s0">for </span><span class="s1">related_model_key</span><span class="s2">, </span><span class="s1">model_relations </span><span class="s0">in </span><span class="s1">list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()):</span>
+                <span class="s1">model_relations</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s1">model_key</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+                <span class="s0">if not </span><span class="s1">model_relations</span><span class="s2">:</span>
+                    <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations</span><span class="s2">[</span><span class="s1">related_model_key</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s3">&quot;apps&quot; </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">:  </span><span class="s6"># hasattr would cache the property</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">unregister_model</span><span class="s2">(*</span><span class="s1">model_key</span><span class="s2">)</span>
+            <span class="s6"># Need to do this explicitly since unregister_model() doesn't clear</span>
+            <span class="s6"># the cache automatically (#24513)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">clear_cache</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">rename_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">old_name</span><span class="s2">, </span><span class="s1">new_name</span><span class="s2">):</span>
+        <span class="s6"># Add a new model.</span>
+        <span class="s1">old_name_lower </span><span class="s2">= </span><span class="s1">old_name</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">()</span>
+        <span class="s1">new_name_lower </span><span class="s2">= </span><span class="s1">new_name</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">()</span>
+        <span class="s1">renamed_model </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">old_name_lower</span><span class="s2">].</span><span class="s1">clone</span><span class="s2">()</span>
+        <span class="s1">renamed_model</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">new_name</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">new_name_lower</span><span class="s2">] = </span><span class="s1">renamed_model</span>
+        <span class="s6"># Repoint all fields pointing to the old model to the new one.</span>
+        <span class="s1">old_model_tuple </span><span class="s2">= (</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">old_name_lower</span><span class="s2">)</span>
+        <span class="s1">new_remote_model </span><span class="s2">= </span><span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">app_label</span><span class="s0">}</span><span class="s3">.</span><span class="s0">{</span><span class="s1">new_name</span><span class="s0">}</span><span class="s3">&quot;</span>
+        <span class="s1">to_reload </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+        <span class="s0">for </span><span class="s1">model_state</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">field</span><span class="s2">, </span><span class="s1">reference </span><span class="s0">in </span><span class="s1">get_references</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">, </span><span class="s1">old_model_tuple</span>
+        <span class="s2">):</span>
+            <span class="s1">changed_field </span><span class="s2">= </span><span class="s0">None</span>
+            <span class="s0">if </span><span class="s1">reference</span><span class="s2">.</span><span class="s1">to</span><span class="s2">:</span>
+                <span class="s1">changed_field </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">()</span>
+                <span class="s1">changed_field</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model </span><span class="s2">= </span><span class="s1">new_remote_model</span>
+            <span class="s0">if </span><span class="s1">reference</span><span class="s2">.</span><span class="s1">through</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">changed_field </span><span class="s0">is None</span><span class="s2">:</span>
+                    <span class="s1">changed_field </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">()</span>
+                <span class="s1">changed_field</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">through </span><span class="s2">= </span><span class="s1">new_remote_model</span>
+            <span class="s0">if </span><span class="s1">changed_field</span><span class="s2">:</span>
+                <span class="s1">model_state</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">[</span><span class="s1">name</span><span class="s2">] = </span><span class="s1">changed_field</span>
+                <span class="s1">to_reload</span><span class="s2">.</span><span class="s1">add</span><span class="s2">((</span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">name_lower</span><span class="s2">))</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">old_name_key </span><span class="s2">= </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">old_name_lower</span>
+            <span class="s1">new_name_key </span><span class="s2">= </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">new_name_lower</span>
+            <span class="s0">if </span><span class="s1">old_name_key </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">_relations</span><span class="s2">[</span><span class="s1">new_name_key</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s1">old_name_key</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">model_relations </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations</span><span class="s2">.</span><span class="s1">values</span><span class="s2">():</span>
+                <span class="s0">if </span><span class="s1">old_name_key </span><span class="s0">in </span><span class="s1">model_relations</span><span class="s2">:</span>
+                    <span class="s1">model_relations</span><span class="s2">[</span><span class="s1">new_name_key</span><span class="s2">] = </span><span class="s1">model_relations</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s1">old_name_key</span><span class="s2">)</span>
+        <span class="s6"># Reload models related to old model before removing the old model.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reload_models</span><span class="s2">(</span><span class="s1">to_reload</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+        <span class="s6"># Remove the old model.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">remove_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">old_name_lower</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reload_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">new_name_lower</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">alter_model_options</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">options</span><span class="s2">, </span><span class="s1">option_keys</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">model_state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">]</span>
+        <span class="s1">model_state</span><span class="s2">.</span><span class="s1">options </span><span class="s2">= {**</span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">options</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">}</span>
+        <span class="s0">if </span><span class="s1">option_keys</span><span class="s2">:</span>
+            <span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">option_keys</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">key </span><span class="s0">not in </span><span class="s1">options</span><span class="s2">:</span>
+                    <span class="s1">model_state</span><span class="s2">.</span><span class="s1">options</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s1">key</span><span class="s2">, </span><span class="s0">False</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reload_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">remove_model_options</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">option_name</span><span class="s2">, </span><span class="s1">value_to_remove</span><span class="s2">):</span>
+        <span class="s1">model_state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">objs </span><span class="s2">:= </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">options</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">option_name</span><span class="s2">):</span>
+            <span class="s1">model_state</span><span class="s2">.</span><span class="s1">options</span><span class="s2">[</span><span class="s1">option_name</span><span class="s2">] = [</span>
+                <span class="s1">obj </span><span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">objs </span><span class="s0">if </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">) != </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">value_to_remove</span><span class="s2">)</span>
+            <span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reload_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">alter_model_managers</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">managers</span><span class="s2">):</span>
+        <span class="s1">model_state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">]</span>
+        <span class="s1">model_state</span><span class="s2">.</span><span class="s1">managers </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">managers</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reload_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_append_option</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">option_name</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">):</span>
+        <span class="s1">model_state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">]</span>
+        <span class="s1">model_state</span><span class="s2">.</span><span class="s1">options</span><span class="s2">[</span><span class="s1">option_name</span><span class="s2">] = [*</span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">options</span><span class="s2">[</span><span class="s1">option_name</span><span class="s2">], </span><span class="s1">obj</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reload_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_remove_option</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">option_name</span><span class="s2">, </span><span class="s1">obj_name</span><span class="s2">):</span>
+        <span class="s1">model_state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">]</span>
+        <span class="s1">objs </span><span class="s2">= </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">options</span><span class="s2">[</span><span class="s1">option_name</span><span class="s2">]</span>
+        <span class="s1">model_state</span><span class="s2">.</span><span class="s1">options</span><span class="s2">[</span><span class="s1">option_name</span><span class="s2">] = [</span><span class="s1">obj </span><span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">objs </span><span class="s0">if </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">name </span><span class="s2">!= </span><span class="s1">obj_name</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reload_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">add_index</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">index</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_append_option</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s3">&quot;indexes&quot;</span><span class="s2">, </span><span class="s1">index</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">remove_index</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">index_name</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_remove_option</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s3">&quot;indexes&quot;</span><span class="s2">, </span><span class="s1">index_name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">rename_index</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">old_index_name</span><span class="s2">, </span><span class="s1">new_index_name</span><span class="s2">):</span>
+        <span class="s1">model_state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">]</span>
+        <span class="s1">objs </span><span class="s2">= </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;indexes&quot;</span><span class="s2">]</span>
+
+        <span class="s1">new_indexes </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">objs</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">name </span><span class="s2">== </span><span class="s1">old_index_name</span><span class="s2">:</span>
+                <span class="s1">obj </span><span class="s2">= </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">()</span>
+                <span class="s1">obj</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">new_index_name</span>
+            <span class="s1">new_indexes</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">)</span>
+
+        <span class="s1">model_state</span><span class="s2">.</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;indexes&quot;</span><span class="s2">] = </span><span class="s1">new_indexes</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reload_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">add_constraint</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">constraint</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_append_option</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s3">&quot;constraints&quot;</span><span class="s2">, </span><span class="s1">constraint</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">remove_constraint</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">constraint_name</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_remove_option</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s3">&quot;constraints&quot;</span><span class="s2">, </span><span class="s1">constraint_name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">add_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">field</span><span class="s2">, </span><span class="s1">preserve_default</span><span class="s2">):</span>
+        <span class="s6"># If preserve default is off, don't use the default for future state.</span>
+        <span class="s0">if not </span><span class="s1">preserve_default</span><span class="s2">:</span>
+            <span class="s1">field </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">()</span>
+            <span class="s1">field</span><span class="s2">.</span><span class="s1">default </span><span class="s2">= </span><span class="s1">NOT_PROVIDED</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">field </span><span class="s2">= </span><span class="s1">field</span>
+        <span class="s1">model_key </span><span class="s2">= </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">].</span><span class="s1">fields</span><span class="s2">[</span><span class="s1">name</span><span class="s2">] = </span><span class="s1">field</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">resolve_model_field_relations</span><span class="s2">(</span><span class="s1">model_key</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">field</span><span class="s2">)</span>
+        <span class="s6"># Delay rendering of relationships if it's not a relational field.</span>
+        <span class="s1">delay </span><span class="s2">= </span><span class="s0">not </span><span class="s1">field</span><span class="s2">.</span><span class="s1">is_relation</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reload_model</span><span class="s2">(*</span><span class="s1">model_key</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s1">delay</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">remove_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s1">model_key </span><span class="s2">= </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span>
+        <span class="s1">model_state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">]</span>
+        <span class="s1">old_field </span><span class="s2">= </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s1">name</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">resolve_model_field_relations</span><span class="s2">(</span><span class="s1">model_key</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">old_field</span><span class="s2">)</span>
+        <span class="s6"># Delay rendering of relationships if it's not a relational field.</span>
+        <span class="s1">delay </span><span class="s2">= </span><span class="s0">not </span><span class="s1">old_field</span><span class="s2">.</span><span class="s1">is_relation</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reload_model</span><span class="s2">(*</span><span class="s1">model_key</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s1">delay</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">alter_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">field</span><span class="s2">, </span><span class="s1">preserve_default</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">preserve_default</span><span class="s2">:</span>
+            <span class="s1">field </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">()</span>
+            <span class="s1">field</span><span class="s2">.</span><span class="s1">default </span><span class="s2">= </span><span class="s1">NOT_PROVIDED</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">field </span><span class="s2">= </span><span class="s1">field</span>
+        <span class="s1">model_key </span><span class="s2">= </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span>
+        <span class="s1">fields </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">].</span><span class="s1">fields</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">old_field </span><span class="s2">= </span><span class="s1">fields</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s1">name</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">old_field</span><span class="s2">.</span><span class="s1">is_relation</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">resolve_model_field_relations</span><span class="s2">(</span><span class="s1">model_key</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">old_field</span><span class="s2">)</span>
+            <span class="s1">fields</span><span class="s2">[</span><span class="s1">name</span><span class="s2">] = </span><span class="s1">field</span>
+            <span class="s0">if </span><span class="s1">field</span><span class="s2">.</span><span class="s1">is_relation</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">resolve_model_field_relations</span><span class="s2">(</span><span class="s1">model_key</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">field</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">fields</span><span class="s2">[</span><span class="s1">name</span><span class="s2">] = </span><span class="s1">field</span>
+        <span class="s6"># TODO: investigate if old relational fields must be reloaded or if</span>
+        <span class="s6"># it's sufficient if the new field is (#27737).</span>
+        <span class="s6"># Delay rendering of relationships if it's not a relational field and</span>
+        <span class="s6"># not referenced by a foreign key.</span>
+        <span class="s1">delay </span><span class="s2">= </span><span class="s0">not </span><span class="s1">field</span><span class="s2">.</span><span class="s1">is_relation </span><span class="s0">and not </span><span class="s1">field_is_referenced</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">, </span><span class="s1">model_key</span><span class="s2">, (</span><span class="s1">name</span><span class="s2">, </span><span class="s1">field</span><span class="s2">)</span>
+        <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reload_model</span><span class="s2">(*</span><span class="s1">model_key</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s1">delay</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">rename_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">old_name</span><span class="s2">, </span><span class="s1">new_name</span><span class="s2">):</span>
+        <span class="s1">model_key </span><span class="s2">= </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span>
+        <span class="s1">model_state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">]</span>
+        <span class="s6"># Rename the field.</span>
+        <span class="s1">fields </span><span class="s2">= </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">fields</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">found </span><span class="s2">= </span><span class="s1">fields</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s1">old_name</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">FieldDoesNotExist</span><span class="s2">(</span>
+                <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">app_label</span><span class="s0">}</span><span class="s3">.</span><span class="s0">{</span><span class="s1">model_name</span><span class="s0">} </span><span class="s3">has no field named '</span><span class="s0">{</span><span class="s1">old_name</span><span class="s0">}</span><span class="s3">'&quot;</span>
+            <span class="s2">)</span>
+        <span class="s1">fields</span><span class="s2">[</span><span class="s1">new_name</span><span class="s2">] = </span><span class="s1">found</span>
+        <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">fields</span><span class="s2">.</span><span class="s1">values</span><span class="s2">():</span>
+            <span class="s6"># Fix from_fields to refer to the new field.</span>
+            <span class="s1">from_fields </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s3">&quot;from_fields&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">from_fields</span><span class="s2">:</span>
+                <span class="s1">field</span><span class="s2">.</span><span class="s1">from_fields </span><span class="s2">= </span><span class="s1">tuple</span><span class="s2">(</span>
+                    <span class="s2">[</span>
+                        <span class="s1">new_name </span><span class="s0">if </span><span class="s1">from_field_name </span><span class="s2">== </span><span class="s1">old_name </span><span class="s0">else </span><span class="s1">from_field_name</span>
+                        <span class="s0">for </span><span class="s1">from_field_name </span><span class="s0">in </span><span class="s1">from_fields</span>
+                    <span class="s2">]</span>
+                <span class="s2">)</span>
+        <span class="s6"># Fix index/unique_together to refer to the new field.</span>
+        <span class="s1">options </span><span class="s2">= </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">options</span>
+        <span class="s0">for </span><span class="s1">option </span><span class="s0">in </span><span class="s2">(</span><span class="s3">&quot;index_together&quot;</span><span class="s2">, </span><span class="s3">&quot;unique_together&quot;</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">option </span><span class="s0">in </span><span class="s1">options</span><span class="s2">:</span>
+                <span class="s1">options</span><span class="s2">[</span><span class="s1">option</span><span class="s2">] = [</span>
+                    <span class="s2">[</span><span class="s1">new_name </span><span class="s0">if </span><span class="s1">n </span><span class="s2">== </span><span class="s1">old_name </span><span class="s0">else </span><span class="s1">n </span><span class="s0">for </span><span class="s1">n </span><span class="s0">in </span><span class="s1">together</span><span class="s2">]</span>
+                    <span class="s0">for </span><span class="s1">together </span><span class="s0">in </span><span class="s1">options</span><span class="s2">[</span><span class="s1">option</span><span class="s2">]</span>
+                <span class="s2">]</span>
+        <span class="s6"># Fix to_fields to refer to the new field.</span>
+        <span class="s1">delay </span><span class="s2">= </span><span class="s0">True</span>
+        <span class="s1">references </span><span class="s2">= </span><span class="s1">get_references</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model_key</span><span class="s2">, (</span><span class="s1">old_name</span><span class="s2">, </span><span class="s1">found</span><span class="s2">))</span>
+        <span class="s0">for </span><span class="s2">*</span><span class="s1">_</span><span class="s2">, </span><span class="s1">field</span><span class="s2">, </span><span class="s1">reference </span><span class="s0">in </span><span class="s1">references</span><span class="s2">:</span>
+            <span class="s1">delay </span><span class="s2">= </span><span class="s0">False</span>
+            <span class="s0">if </span><span class="s1">reference</span><span class="s2">.</span><span class="s1">to</span><span class="s2">:</span>
+                <span class="s1">remote_field</span><span class="s2">, </span><span class="s1">to_fields </span><span class="s2">= </span><span class="s1">reference</span><span class="s2">.</span><span class="s1">to</span>
+                <span class="s0">if </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">remote_field</span><span class="s2">, </span><span class="s3">&quot;field_name&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">) == </span><span class="s1">old_name</span><span class="s2">:</span>
+                    <span class="s1">remote_field</span><span class="s2">.</span><span class="s1">field_name </span><span class="s2">= </span><span class="s1">new_name</span>
+                <span class="s0">if </span><span class="s1">to_fields</span><span class="s2">:</span>
+                    <span class="s1">field</span><span class="s2">.</span><span class="s1">to_fields </span><span class="s2">= </span><span class="s1">tuple</span><span class="s2">(</span>
+                        <span class="s2">[</span>
+                            <span class="s1">new_name </span><span class="s0">if </span><span class="s1">to_field_name </span><span class="s2">== </span><span class="s1">old_name </span><span class="s0">else </span><span class="s1">to_field_name</span>
+                            <span class="s0">for </span><span class="s1">to_field_name </span><span class="s0">in </span><span class="s1">to_fields</span>
+                        <span class="s2">]</span>
+                    <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">old_name_lower </span><span class="s2">= </span><span class="s1">old_name</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">()</span>
+            <span class="s1">new_name_lower </span><span class="s2">= </span><span class="s1">new_name</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">()</span>
+            <span class="s0">for </span><span class="s1">to_model </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations</span><span class="s2">.</span><span class="s1">values</span><span class="s2">():</span>
+                <span class="s0">if </span><span class="s1">old_name_lower </span><span class="s0">in </span><span class="s1">to_model</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">]:</span>
+                    <span class="s1">field </span><span class="s2">= </span><span class="s1">to_model</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">].</span><span class="s1">pop</span><span class="s2">(</span><span class="s1">old_name_lower</span><span class="s2">)</span>
+                    <span class="s1">field</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">new_name_lower</span>
+                    <span class="s1">to_model</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">][</span><span class="s1">new_name_lower</span><span class="s2">] = </span><span class="s1">field</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reload_model</span><span class="s2">(*</span><span class="s1">model_key</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s1">delay</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_find_reload_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">delay</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">is_delayed </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s1">related_models </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">old_model </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">LookupError</span><span class="s2">:</span>
+            <span class="s0">pass</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s6"># Get all relations to and from the old model before reloading,</span>
+            <span class="s6"># as _meta.apps may change</span>
+            <span class="s0">if </span><span class="s1">delay</span><span class="s2">:</span>
+                <span class="s1">related_models </span><span class="s2">= </span><span class="s1">get_related_models_tuples</span><span class="s2">(</span><span class="s1">old_model</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">related_models </span><span class="s2">= </span><span class="s1">get_related_models_recursive</span><span class="s2">(</span><span class="s1">old_model</span><span class="s2">)</span>
+
+        <span class="s6"># Get all outgoing references from the model to be rendered</span>
+        <span class="s1">model_state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">)]</span>
+        <span class="s6"># Directly related models are the models pointed to by ForeignKeys,</span>
+        <span class="s6"># OneToOneFields, and ManyToManyFields.</span>
+        <span class="s1">direct_related_models </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+        <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">.</span><span class="s1">values</span><span class="s2">():</span>
+            <span class="s0">if </span><span class="s1">field</span><span class="s2">.</span><span class="s1">is_relation</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">field</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model </span><span class="s2">== </span><span class="s1">RECURSIVE_RELATIONSHIP_CONSTANT</span><span class="s2">:</span>
+                    <span class="s0">continue</span>
+                <span class="s1">rel_app_label</span><span class="s2">, </span><span class="s1">rel_model_name </span><span class="s2">= </span><span class="s1">_get_app_label_and_model_name</span><span class="s2">(</span>
+                    <span class="s1">field</span><span class="s2">.</span><span class="s1">related_model</span><span class="s2">, </span><span class="s1">app_label</span>
+                <span class="s2">)</span>
+                <span class="s1">direct_related_models</span><span class="s2">.</span><span class="s1">add</span><span class="s2">((</span><span class="s1">rel_app_label</span><span class="s2">, </span><span class="s1">rel_model_name</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">()))</span>
+
+        <span class="s6"># For all direct related models recursively get all related models.</span>
+        <span class="s1">related_models</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">direct_related_models</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">rel_app_label</span><span class="s2">, </span><span class="s1">rel_model_name </span><span class="s0">in </span><span class="s1">direct_related_models</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">rel_model </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">rel_app_label</span><span class="s2">, </span><span class="s1">rel_model_name</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">LookupError</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">delay</span><span class="s2">:</span>
+                    <span class="s1">related_models</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">get_related_models_tuples</span><span class="s2">(</span><span class="s1">rel_model</span><span class="s2">))</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">related_models</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">get_related_models_recursive</span><span class="s2">(</span><span class="s1">rel_model</span><span class="s2">))</span>
+
+        <span class="s6"># Include the model itself</span>
+        <span class="s1">related_models</span><span class="s2">.</span><span class="s1">add</span><span class="s2">((</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">))</span>
+
+        <span class="s0">return </span><span class="s1">related_models</span>
+
+    <span class="s0">def </span><span class="s1">reload_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s3">&quot;apps&quot; </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">:  </span><span class="s6"># hasattr would cache the property</span>
+            <span class="s1">related_models </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_find_reload_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_reload</span><span class="s2">(</span><span class="s1">related_models</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">reload_models</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">models</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s3">&quot;apps&quot; </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">:  </span><span class="s6"># hasattr would cache the property</span>
+            <span class="s1">related_models </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+            <span class="s0">for </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name </span><span class="s0">in </span><span class="s1">models</span><span class="s2">:</span>
+                <span class="s1">related_models</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">_find_reload_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">delay</span><span class="s2">)</span>
+                <span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_reload</span><span class="s2">(</span><span class="s1">related_models</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_reload</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">related_models</span><span class="s2">):</span>
+        <span class="s6"># Unregister all related models</span>
+        <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">bulk_update</span><span class="s2">():</span>
+            <span class="s0">for </span><span class="s1">rel_app_label</span><span class="s2">, </span><span class="s1">rel_model_name </span><span class="s0">in </span><span class="s1">related_models</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">unregister_model</span><span class="s2">(</span><span class="s1">rel_app_label</span><span class="s2">, </span><span class="s1">rel_model_name</span><span class="s2">)</span>
+
+        <span class="s1">states_to_be_rendered </span><span class="s2">= []</span>
+        <span class="s6"># Gather all models states of those models that will be rerendered.</span>
+        <span class="s6"># This includes:</span>
+        <span class="s6"># 1. All related models of unmigrated apps</span>
+        <span class="s0">for </span><span class="s1">model_state </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">real_models</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s2">(</span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">name_lower</span><span class="s2">) </span><span class="s0">in </span><span class="s1">related_models</span><span class="s2">:</span>
+                <span class="s1">states_to_be_rendered</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">model_state</span><span class="s2">)</span>
+
+        <span class="s6"># 2. All related models of migrated apps</span>
+        <span class="s0">for </span><span class="s1">rel_app_label</span><span class="s2">, </span><span class="s1">rel_model_name </span><span class="s0">in </span><span class="s1">related_models</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">model_state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">rel_app_label</span><span class="s2">, </span><span class="s1">rel_model_name</span><span class="s2">]</span>
+            <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">states_to_be_rendered</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">model_state</span><span class="s2">)</span>
+
+        <span class="s6"># Render all models</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">render_multiple</span><span class="s2">(</span><span class="s1">states_to_be_rendered</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">update_model_field_relation</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">model</span><span class="s2">,</span>
+        <span class="s1">model_key</span><span class="s2">,</span>
+        <span class="s1">field_name</span><span class="s2">,</span>
+        <span class="s1">field</span><span class="s2">,</span>
+        <span class="s1">concretes</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s1">remote_model_key </span><span class="s2">= </span><span class="s1">resolve_relation</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, *</span><span class="s1">model_key</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">remote_model_key</span><span class="s2">[</span><span class="s4">0</span><span class="s2">] </span><span class="s0">not in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">real_apps </span><span class="s0">and </span><span class="s1">remote_model_key </span><span class="s0">in </span><span class="s1">concretes</span><span class="s2">:</span>
+            <span class="s1">remote_model_key </span><span class="s2">= </span><span class="s1">concretes</span><span class="s2">[</span><span class="s1">remote_model_key</span><span class="s2">]</span>
+        <span class="s1">relations_to_remote_model </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations</span><span class="s2">[</span><span class="s1">remote_model_key</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">field_name </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">].</span><span class="s1">fields</span><span class="s2">:</span>
+            <span class="s6"># The assert holds because it's a new relation, or an altered</span>
+            <span class="s6"># relation, in which case references have been removed by</span>
+            <span class="s6"># alter_field().</span>
+            <span class="s0">assert </span><span class="s1">field_name </span><span class="s0">not in </span><span class="s1">relations_to_remote_model</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">]</span>
+            <span class="s1">relations_to_remote_model</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">][</span><span class="s1">field_name</span><span class="s2">] = </span><span class="s1">field</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">del </span><span class="s1">relations_to_remote_model</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">][</span><span class="s1">field_name</span><span class="s2">]</span>
+            <span class="s0">if not </span><span class="s1">relations_to_remote_model</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">]:</span>
+                <span class="s0">del </span><span class="s1">relations_to_remote_model</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">resolve_model_field_relations</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">model_key</span><span class="s2">,</span>
+        <span class="s1">field_name</span><span class="s2">,</span>
+        <span class="s1">field</span><span class="s2">,</span>
+        <span class="s1">concretes</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s1">remote_field </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">remote_field</span>
+        <span class="s0">if not </span><span class="s1">remote_field</span><span class="s2">:</span>
+            <span class="s0">return</span>
+        <span class="s0">if </span><span class="s1">concretes </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">concretes</span><span class="s2">, </span><span class="s1">_ </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_concrete_models_mapping_and_proxy_models</span><span class="s2">()</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">update_model_field_relation</span><span class="s2">(</span>
+            <span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model</span><span class="s2">,</span>
+            <span class="s1">model_key</span><span class="s2">,</span>
+            <span class="s1">field_name</span><span class="s2">,</span>
+            <span class="s1">field</span><span class="s2">,</span>
+            <span class="s1">concretes</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+        <span class="s1">through </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">remote_field</span><span class="s2">, </span><span class="s3">&quot;through&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">through</span><span class="s2">:</span>
+            <span class="s0">return</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">update_model_field_relation</span><span class="s2">(</span>
+            <span class="s1">through</span><span class="s2">, </span><span class="s1">model_key</span><span class="s2">, </span><span class="s1">field_name</span><span class="s2">, </span><span class="s1">field</span><span class="s2">, </span><span class="s1">concretes</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">resolve_model_relations</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model_key</span><span class="s2">, </span><span class="s1">concretes</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">concretes </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">concretes</span><span class="s2">, </span><span class="s1">_ </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_concrete_models_mapping_and_proxy_models</span><span class="s2">()</span>
+
+        <span class="s1">model_state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">]</span>
+        <span class="s0">for </span><span class="s1">field_name</span><span class="s2">, </span><span class="s1">field </span><span class="s0">in </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">resolve_model_field_relations</span><span class="s2">(</span><span class="s1">model_key</span><span class="s2">, </span><span class="s1">field_name</span><span class="s2">, </span><span class="s1">field</span><span class="s2">, </span><span class="s1">concretes</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">resolve_fields_and_relations</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s6"># Resolve fields.</span>
+        <span class="s0">for </span><span class="s1">model_state </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">values</span><span class="s2">():</span>
+            <span class="s0">for </span><span class="s1">field_name</span><span class="s2">, </span><span class="s1">field </span><span class="s0">in </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+                <span class="s1">field</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">field_name</span>
+        <span class="s6"># Resolve relations.</span>
+        <span class="s6"># {remote_model_key: {model_key: {field_name: field}}}</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_relations </span><span class="s2">= </span><span class="s1">defaultdict</span><span class="s2">(</span><span class="s1">partial</span><span class="s2">(</span><span class="s1">defaultdict</span><span class="s2">, </span><span class="s1">dict</span><span class="s2">))</span>
+        <span class="s1">concretes</span><span class="s2">, </span><span class="s1">proxies </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_concrete_models_mapping_and_proxy_models</span><span class="s2">()</span>
+
+        <span class="s0">for </span><span class="s1">model_key </span><span class="s0">in </span><span class="s1">concretes</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">resolve_model_relations</span><span class="s2">(</span><span class="s1">model_key</span><span class="s2">, </span><span class="s1">concretes</span><span class="s2">)</span>
+
+        <span class="s0">for </span><span class="s1">model_key </span><span class="s0">in </span><span class="s1">proxies</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_relations</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_relations</span><span class="s2">[</span><span class="s1">concretes</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">]]</span>
+
+    <span class="s0">def </span><span class="s1">get_concrete_model_key</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+        <span class="s2">(</span>
+            <span class="s1">concrete_models_mapping</span><span class="s2">,</span>
+            <span class="s1">_</span><span class="s2">,</span>
+        <span class="s2">) = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_concrete_models_mapping_and_proxy_models</span><span class="s2">()</span>
+        <span class="s1">model_key </span><span class="s2">= </span><span class="s1">make_model_tuple</span><span class="s2">(</span><span class="s1">model</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">concrete_models_mapping</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">_get_concrete_models_mapping_and_proxy_models</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">concrete_models_mapping </span><span class="s2">= {}</span>
+        <span class="s1">proxy_models </span><span class="s2">= {}</span>
+        <span class="s6"># Split models to proxy and concrete models.</span>
+        <span class="s0">for </span><span class="s1">model_key</span><span class="s2">, </span><span class="s1">model_state </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s0">if </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">options</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;proxy&quot;</span><span class="s2">):</span>
+                <span class="s1">proxy_models</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">] = </span><span class="s1">model_state</span>
+                <span class="s6"># Find a concrete model for the proxy.</span>
+                <span class="s1">concrete_models_mapping</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">] = (</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">_find_concrete_model_from_proxy</span><span class="s2">(</span>
+                        <span class="s1">proxy_models</span><span class="s2">,</span>
+                        <span class="s1">model_state</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">concrete_models_mapping</span><span class="s2">[</span><span class="s1">model_key</span><span class="s2">] = </span><span class="s1">model_key</span>
+        <span class="s0">return </span><span class="s1">concrete_models_mapping</span><span class="s2">, </span><span class="s1">proxy_models</span>
+
+    <span class="s0">def </span><span class="s1">_find_concrete_model_from_proxy</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">proxy_models</span><span class="s2">, </span><span class="s1">model_state</span><span class="s2">):</span>
+        <span class="s0">for </span><span class="s1">base </span><span class="s0">in </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">bases</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s2">(</span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">base</span><span class="s2">, </span><span class="s1">str</span><span class="s2">) </span><span class="s0">or </span><span class="s1">issubclass</span><span class="s2">(</span><span class="s1">base</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">Model</span><span class="s2">)):</span>
+                <span class="s0">continue</span>
+            <span class="s1">base_key </span><span class="s2">= </span><span class="s1">make_model_tuple</span><span class="s2">(</span><span class="s1">base</span><span class="s2">)</span>
+            <span class="s1">base_state </span><span class="s2">= </span><span class="s1">proxy_models</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">base_key</span><span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">base_state</span><span class="s2">:</span>
+                <span class="s6"># Concrete model found, stop looking at bases.</span>
+                <span class="s0">return </span><span class="s1">base_key</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_find_concrete_model_from_proxy</span><span class="s2">(</span><span class="s1">proxy_models</span><span class="s2">, </span><span class="s1">base_state</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">clone</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot;Return an exact copy of this ProjectState.&quot;&quot;&quot;</span>
+        <span class="s1">new_state </span><span class="s2">= </span><span class="s1">ProjectState</span><span class="s2">(</span>
+            <span class="s1">models</span><span class="s2">={</span><span class="s1">k</span><span class="s2">: </span><span class="s1">v</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">() </span><span class="s0">for </span><span class="s1">k</span><span class="s2">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()},</span>
+            <span class="s1">real_apps</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">real_apps</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s0">if </span><span class="s3">&quot;apps&quot; </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">:</span>
+            <span class="s1">new_state</span><span class="s2">.</span><span class="s1">apps </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">()</span>
+        <span class="s1">new_state</span><span class="s2">.</span><span class="s1">is_delayed </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_delayed</span>
+        <span class="s0">return </span><span class="s1">new_state</span>
+
+    <span class="s0">def </span><span class="s1">clear_delayed_apps_cache</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_delayed </span><span class="s0">and </span><span class="s3">&quot;apps&quot; </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">:</span>
+            <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">[</span><span class="s3">&quot;apps&quot;</span><span class="s2">]</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">apps</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">StateApps</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">real_apps</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">from_apps</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">apps</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot;Take an Apps and return a ProjectState matching it.&quot;&quot;&quot;</span>
+        <span class="s1">app_models </span><span class="s2">= {}</span>
+        <span class="s0">for </span><span class="s1">model </span><span class="s0">in </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_models</span><span class="s2">(</span><span class="s1">include_swapped</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+            <span class="s1">model_state </span><span class="s2">= </span><span class="s1">ModelState</span><span class="s2">.</span><span class="s1">from_model</span><span class="s2">(</span><span class="s1">model</span><span class="s2">)</span>
+            <span class="s1">app_models</span><span class="s2">[(</span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">name_lower</span><span class="s2">)] = </span><span class="s1">model_state</span>
+        <span class="s0">return </span><span class="s1">cls</span><span class="s2">(</span><span class="s1">app_models</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__eq__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">other</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models </span><span class="s2">== </span><span class="s1">other</span><span class="s2">.</span><span class="s1">models </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">real_apps </span><span class="s2">== </span><span class="s1">other</span><span class="s2">.</span><span class="s1">real_apps</span>
+
+
+<span class="s0">class </span><span class="s1">AppConfigStub</span><span class="s2">(</span><span class="s1">AppConfig</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Stub of an AppConfig. Only provides a label and a dict of models.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">label</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">apps </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">models </span><span class="s2">= {}</span>
+        <span class="s6"># App-label and app-name are not the same thing, so technically passing</span>
+        <span class="s6"># in the label here is wrong. In practice, migrations don't care about</span>
+        <span class="s6"># the app name, but we need something unique, and the label works fine.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">label </span><span class="s2">= </span><span class="s1">label</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">label</span>
+
+    <span class="s0">def </span><span class="s1">import_models</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">models </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">all_models</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">label</span><span class="s2">]</span>
+
+
+<span class="s0">class </span><span class="s1">StateApps</span><span class="s2">(</span><span class="s1">Apps</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Subclass of the global Apps registry class to better handle dynamic model 
+    additions and removals. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">real_apps</span><span class="s2">, </span><span class="s1">models</span><span class="s2">, </span><span class="s1">ignore_swappable</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s6"># Any apps in self.real_apps should have all their models included</span>
+        <span class="s6"># in the render. We don't use the original model instances as there</span>
+        <span class="s6"># are some variables that refer to the Apps object.</span>
+        <span class="s6"># FKs/M2Ms from real apps are also not included as they just</span>
+        <span class="s6"># mess things up with partial states (due to lack of dependencies)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">real_models </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">app_label </span><span class="s0">in </span><span class="s1">real_apps</span><span class="s2">:</span>
+            <span class="s1">app </span><span class="s2">= </span><span class="s1">global_apps</span><span class="s2">.</span><span class="s1">get_app_config</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">model </span><span class="s0">in </span><span class="s1">app</span><span class="s2">.</span><span class="s1">get_models</span><span class="s2">():</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">real_models</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">ModelState</span><span class="s2">.</span><span class="s1">from_model</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">exclude_rels</span><span class="s2">=</span><span class="s0">True</span><span class="s2">))</span>
+        <span class="s6"># Populate the app registry with a stub for each application.</span>
+        <span class="s1">app_labels </span><span class="s2">= {</span><span class="s1">model_state</span><span class="s2">.</span><span class="s1">app_label </span><span class="s0">for </span><span class="s1">model_state </span><span class="s0">in </span><span class="s1">models</span><span class="s2">.</span><span class="s1">values</span><span class="s2">()}</span>
+        <span class="s1">app_configs </span><span class="s2">= [</span>
+            <span class="s1">AppConfigStub</span><span class="s2">(</span><span class="s1">label</span><span class="s2">) </span><span class="s0">for </span><span class="s1">label </span><span class="s0">in </span><span class="s1">sorted</span><span class="s2">([*</span><span class="s1">real_apps</span><span class="s2">, *</span><span class="s1">app_labels</span><span class="s2">])</span>
+        <span class="s2">]</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">)</span>
+
+        <span class="s6"># These locks get in the way of copying as implemented in clone(),</span>
+        <span class="s6"># which is called whenever Django duplicates a StateApps before</span>
+        <span class="s6"># updating it.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_lock </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">ready_event </span><span class="s2">= </span><span class="s0">None</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">render_multiple</span><span class="s2">([*</span><span class="s1">models</span><span class="s2">.</span><span class="s1">values</span><span class="s2">(), *</span><span class="s1">self</span><span class="s2">.</span><span class="s1">real_models</span><span class="s2">])</span>
+
+        <span class="s6"># There shouldn't be any operations pending at this point.</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">checks</span><span class="s2">.</span><span class="s1">model_checks </span><span class="s0">import </span><span class="s1">_check_lazy_references</span>
+
+        <span class="s1">ignore </span><span class="s2">= (</span>
+            <span class="s2">{</span><span class="s1">make_model_tuple</span><span class="s2">(</span><span class="s1">settings</span><span class="s2">.</span><span class="s1">AUTH_USER_MODEL</span><span class="s2">)} </span><span class="s0">if </span><span class="s1">ignore_swappable </span><span class="s0">else </span><span class="s1">set</span><span class="s2">()</span>
+        <span class="s2">)</span>
+        <span class="s1">errors </span><span class="s2">= </span><span class="s1">_check_lazy_references</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">ignore</span><span class="s2">=</span><span class="s1">ignore</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">errors</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">error</span><span class="s2">.</span><span class="s1">msg </span><span class="s0">for </span><span class="s1">error </span><span class="s0">in </span><span class="s1">errors</span><span class="s2">))</span>
+
+    <span class="s2">@</span><span class="s1">contextmanager</span>
+    <span class="s0">def </span><span class="s1">bulk_update</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s6"># Avoid clearing each model's cache for each change. Instead, clear</span>
+        <span class="s6"># all caches when we're finished updating the model instances.</span>
+        <span class="s1">ready </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">ready</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">ready </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">yield</span>
+        <span class="s0">finally</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">ready </span><span class="s2">= </span><span class="s1">ready</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">clear_cache</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">render_multiple</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model_states</span><span class="s2">):</span>
+        <span class="s6"># We keep trying to render the models in a loop, ignoring invalid</span>
+        <span class="s6"># base errors, until the size of the unrendered models doesn't</span>
+        <span class="s6"># decrease by at least one, meaning there's a base dependency loop/</span>
+        <span class="s6"># missing base.</span>
+        <span class="s0">if not </span><span class="s1">model_states</span><span class="s2">:</span>
+            <span class="s0">return</span>
+        <span class="s6"># Prevent that all model caches are expired for each render.</span>
+        <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">bulk_update</span><span class="s2">():</span>
+            <span class="s1">unrendered_models </span><span class="s2">= </span><span class="s1">model_states</span>
+            <span class="s0">while </span><span class="s1">unrendered_models</span><span class="s2">:</span>
+                <span class="s1">new_unrendered_models </span><span class="s2">= []</span>
+                <span class="s0">for </span><span class="s1">model </span><span class="s0">in </span><span class="s1">unrendered_models</span><span class="s2">:</span>
+                    <span class="s0">try</span><span class="s2">:</span>
+                        <span class="s1">model</span><span class="s2">.</span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">)</span>
+                    <span class="s0">except </span><span class="s1">InvalidBasesError</span><span class="s2">:</span>
+                        <span class="s1">new_unrendered_models</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">model</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">new_unrendered_models</span><span class="s2">) == </span><span class="s1">len</span><span class="s2">(</span><span class="s1">unrendered_models</span><span class="s2">):</span>
+                    <span class="s0">raise </span><span class="s1">InvalidBasesError</span><span class="s2">(</span>
+                        <span class="s3">&quot;Cannot resolve bases for %r</span><span class="s0">\n</span><span class="s3">This can happen if you are &quot;</span>
+                        <span class="s3">&quot;inheriting models from an app with migrations (e.g. &quot;</span>
+                        <span class="s3">&quot;contrib.auth)</span><span class="s0">\n </span><span class="s3">in an app with no migrations; see &quot;</span>
+                        <span class="s3">&quot;https://docs.djangoproject.com/en/%s/topics/migrations/&quot;</span>
+                        <span class="s3">&quot;#dependencies for more&quot;</span>
+                        <span class="s2">% (</span><span class="s1">new_unrendered_models</span><span class="s2">, </span><span class="s1">get_docs_version</span><span class="s2">())</span>
+                    <span class="s2">)</span>
+                <span class="s1">unrendered_models </span><span class="s2">= </span><span class="s1">new_unrendered_models</span>
+
+    <span class="s0">def </span><span class="s1">clone</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot;Return a clone of this registry.&quot;&quot;&quot;</span>
+        <span class="s1">clone </span><span class="s2">= </span><span class="s1">StateApps</span><span class="s2">([], {})</span>
+        <span class="s1">clone</span><span class="s2">.</span><span class="s1">all_models </span><span class="s2">= </span><span class="s1">copy</span><span class="s2">.</span><span class="s1">deepcopy</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">all_models</span><span class="s2">)</span>
+
+        <span class="s0">for </span><span class="s1">app_label </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_configs</span><span class="s2">:</span>
+            <span class="s1">app_config </span><span class="s2">= </span><span class="s1">AppConfigStub</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">)</span>
+            <span class="s1">app_config</span><span class="s2">.</span><span class="s1">apps </span><span class="s2">= </span><span class="s1">clone</span>
+            <span class="s1">app_config</span><span class="s2">.</span><span class="s1">import_models</span><span class="s2">()</span>
+            <span class="s1">clone</span><span class="s2">.</span><span class="s1">app_configs</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">] = </span><span class="s1">app_config</span>
+
+        <span class="s6"># No need to actually clone them, they'll never change</span>
+        <span class="s1">clone</span><span class="s2">.</span><span class="s1">real_models </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">real_models</span>
+        <span class="s0">return </span><span class="s1">clone</span>
+
+    <span class="s0">def </span><span class="s1">register_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">all_models</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">][</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">] = </span><span class="s1">model</span>
+        <span class="s0">if </span><span class="s1">app_label </span><span class="s0">not in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_configs</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">app_configs</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">] = </span><span class="s1">AppConfigStub</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">app_configs</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">].</span><span class="s1">apps </span><span class="s2">= </span><span class="s1">self</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">app_configs</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">].</span><span class="s1">models</span><span class="s2">[</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">] = </span><span class="s1">model</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">do_pending_operations</span><span class="s2">(</span><span class="s1">model</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">clear_cache</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">unregister_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">all_models</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">][</span><span class="s1">model_name</span><span class="s2">]</span>
+            <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_configs</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">].</span><span class="s1">models</span><span class="s2">[</span><span class="s1">model_name</span><span class="s2">]</span>
+        <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+            <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">ModelState</span><span class="s2">:</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Represent a Django Model. Don't use the actual Model class as it's not 
+    designed to have its options changed - instead, mutate this one and then 
+    render it into a Model as required. 
+ 
+    Note that while you are allowed to mutate .fields, you are not allowed 
+    to mutate the Field instances inside there themselves - you must instead 
+    assign new ones, as these are not detached during a clone. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">fields</span><span class="s2">, </span><span class="s1">options</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">bases</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">managers</span><span class="s2">=</span><span class="s0">None</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">app_label </span><span class="s2">= </span><span class="s1">app_label</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">name</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">fields </span><span class="s2">= </span><span class="s1">dict</span><span class="s2">(</span><span class="s1">fields</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">options </span><span class="s2">= </span><span class="s1">options </span><span class="s0">or </span><span class="s2">{}</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">options</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span><span class="s3">&quot;indexes&quot;</span><span class="s2">, [])</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">options</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span><span class="s3">&quot;constraints&quot;</span><span class="s2">, [])</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">bases </span><span class="s2">= </span><span class="s1">bases </span><span class="s0">or </span><span class="s2">(</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Model</span><span class="s2">,)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">managers </span><span class="s2">= </span><span class="s1">managers </span><span class="s0">or </span><span class="s2">[]</span>
+        <span class="s0">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">field </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s6"># Sanity-check that fields are NOT already bound to a model.</span>
+            <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s3">&quot;model&quot;</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s3">'ModelState.fields cannot be bound to a model - &quot;%s&quot; is.' </span><span class="s2">% </span><span class="s1">name</span>
+                <span class="s2">)</span>
+            <span class="s6"># Sanity-check that relation fields are NOT referring to a model class.</span>
+            <span class="s0">if </span><span class="s1">field</span><span class="s2">.</span><span class="s1">is_relation </span><span class="s0">and </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">related_model</span><span class="s2">, </span><span class="s3">&quot;_meta&quot;</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s3">'ModelState.fields cannot refer to a model class - &quot;%s.to&quot; does. '</span>
+                    <span class="s3">&quot;Use a string reference instead.&quot; </span><span class="s2">% </span><span class="s1">name</span>
+                <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">field</span><span class="s2">.</span><span class="s1">many_to_many </span><span class="s0">and </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">through</span><span class="s2">, </span><span class="s3">&quot;_meta&quot;</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s3">'ModelState.fields cannot refer to a model class - &quot;%s.through&quot; '</span>
+                    <span class="s3">&quot;does. Use a string reference instead.&quot; </span><span class="s2">% </span><span class="s1">name</span>
+                <span class="s2">)</span>
+        <span class="s6"># Sanity-check that indexes have their name set.</span>
+        <span class="s0">for </span><span class="s1">index </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;indexes&quot;</span><span class="s2">]:</span>
+            <span class="s0">if not </span><span class="s1">index</span><span class="s2">.</span><span class="s1">name</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s3">&quot;Indexes passed to ModelState require a name attribute. &quot;</span>
+                    <span class="s3">&quot;%r doesn't have one.&quot; </span><span class="s2">% </span><span class="s1">index</span>
+                <span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">name_lower</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">field_name</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">field_name </span><span class="s2">== </span><span class="s3">&quot;_order&quot;</span><span class="s2">:</span>
+            <span class="s1">field_name </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">options</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;order_with_respect_to&quot;</span><span class="s2">, </span><span class="s1">field_name</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">[</span><span class="s1">field_name</span><span class="s2">]</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">from_model</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">model</span><span class="s2">, </span><span class="s1">exclude_rels</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot;Given a model, return a ModelState representing it.&quot;&quot;&quot;</span>
+        <span class="s6"># Deconstruct the fields</span>
+        <span class="s1">fields </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">local_fields</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s3">&quot;remote_field&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">) </span><span class="s0">and </span><span class="s1">exclude_rels</span><span class="s2">:</span>
+                <span class="s0">continue</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">OrderWrt</span><span class="s2">):</span>
+                <span class="s0">continue</span>
+            <span class="s1">name </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">name</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">fields</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">name</span><span class="s2">, </span><span class="s1">field</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">()))</span>
+            <span class="s0">except </span><span class="s1">TypeError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                    <span class="s3">&quot;Couldn't reconstruct field %s on %s: %s&quot;</span>
+                    <span class="s2">% (</span>
+                        <span class="s1">name</span><span class="s2">,</span>
+                        <span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">label</span><span class="s2">,</span>
+                        <span class="s1">e</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">exclude_rels</span><span class="s2">:</span>
+            <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">local_many_to_many</span><span class="s2">:</span>
+                <span class="s1">name </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">name</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">fields</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">name</span><span class="s2">, </span><span class="s1">field</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">()))</span>
+                <span class="s0">except </span><span class="s1">TypeError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+                    <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                        <span class="s3">&quot;Couldn't reconstruct m2m field %s on %s: %s&quot;</span>
+                        <span class="s2">% (</span>
+                            <span class="s1">name</span><span class="s2">,</span>
+                            <span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">object_name</span><span class="s2">,</span>
+                            <span class="s1">e</span><span class="s2">,</span>
+                        <span class="s2">)</span>
+                    <span class="s2">)</span>
+        <span class="s6"># Extract the options</span>
+        <span class="s1">options </span><span class="s2">= {}</span>
+        <span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s1">DEFAULT_NAMES</span><span class="s2">:</span>
+            <span class="s6"># Ignore some special options</span>
+            <span class="s0">if </span><span class="s1">name </span><span class="s0">in </span><span class="s2">[</span><span class="s3">&quot;apps&quot;</span><span class="s2">, </span><span class="s3">&quot;app_label&quot;</span><span class="s2">]:</span>
+                <span class="s0">continue</span>
+            <span class="s0">elif </span><span class="s1">name </span><span class="s0">in </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">original_attrs</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">name </span><span class="s2">== </span><span class="s3">&quot;unique_together&quot;</span><span class="s2">:</span>
+                    <span class="s1">ut </span><span class="s2">= </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">original_attrs</span><span class="s2">[</span><span class="s3">&quot;unique_together&quot;</span><span class="s2">]</span>
+                    <span class="s1">options</span><span class="s2">[</span><span class="s1">name</span><span class="s2">] = </span><span class="s1">set</span><span class="s2">(</span><span class="s1">normalize_together</span><span class="s2">(</span><span class="s1">ut</span><span class="s2">))</span>
+                <span class="s0">elif </span><span class="s1">name </span><span class="s2">== </span><span class="s3">&quot;index_together&quot;</span><span class="s2">:</span>
+                    <span class="s1">it </span><span class="s2">= </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">original_attrs</span><span class="s2">[</span><span class="s3">&quot;index_together&quot;</span><span class="s2">]</span>
+                    <span class="s1">options</span><span class="s2">[</span><span class="s1">name</span><span class="s2">] = </span><span class="s1">set</span><span class="s2">(</span><span class="s1">normalize_together</span><span class="s2">(</span><span class="s1">it</span><span class="s2">))</span>
+                <span class="s0">elif </span><span class="s1">name </span><span class="s2">== </span><span class="s3">&quot;indexes&quot;</span><span class="s2">:</span>
+                    <span class="s1">indexes </span><span class="s2">= [</span><span class="s1">idx</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">() </span><span class="s0">for </span><span class="s1">idx </span><span class="s0">in </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">indexes</span><span class="s2">]</span>
+                    <span class="s0">for </span><span class="s1">index </span><span class="s0">in </span><span class="s1">indexes</span><span class="s2">:</span>
+                        <span class="s0">if not </span><span class="s1">index</span><span class="s2">.</span><span class="s1">name</span><span class="s2">:</span>
+                            <span class="s1">index</span><span class="s2">.</span><span class="s1">set_name_with_model</span><span class="s2">(</span><span class="s1">model</span><span class="s2">)</span>
+                    <span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;indexes&quot;</span><span class="s2">] = </span><span class="s1">indexes</span>
+                <span class="s0">elif </span><span class="s1">name </span><span class="s2">== </span><span class="s3">&quot;constraints&quot;</span><span class="s2">:</span>
+                    <span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;constraints&quot;</span><span class="s2">] = [</span>
+                        <span class="s1">con</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">() </span><span class="s0">for </span><span class="s1">con </span><span class="s0">in </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">constraints</span>
+                    <span class="s2">]</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">options</span><span class="s2">[</span><span class="s1">name</span><span class="s2">] = </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">original_attrs</span><span class="s2">[</span><span class="s1">name</span><span class="s2">]</span>
+        <span class="s6"># If we're ignoring relationships, remove all field-listing model</span>
+        <span class="s6"># options (that option basically just means &quot;make a stub model&quot;)</span>
+        <span class="s0">if </span><span class="s1">exclude_rels</span><span class="s2">:</span>
+            <span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s2">[</span><span class="s3">&quot;unique_together&quot;</span><span class="s2">, </span><span class="s3">&quot;index_together&quot;</span><span class="s2">, </span><span class="s3">&quot;order_with_respect_to&quot;</span><span class="s2">]:</span>
+                <span class="s0">if </span><span class="s1">key </span><span class="s0">in </span><span class="s1">options</span><span class="s2">:</span>
+                    <span class="s0">del </span><span class="s1">options</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]</span>
+        <span class="s6"># Private fields are ignored, so remove options that refer to them.</span>
+        <span class="s0">elif </span><span class="s1">options</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;order_with_respect_to&quot;</span><span class="s2">) </span><span class="s0">in </span><span class="s2">{</span>
+            <span class="s1">field</span><span class="s2">.</span><span class="s1">name </span><span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">private_fields</span>
+        <span class="s2">}:</span>
+            <span class="s0">del </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;order_with_respect_to&quot;</span><span class="s2">]</span>
+
+        <span class="s0">def </span><span class="s1">flatten_bases</span><span class="s2">(</span><span class="s1">model</span><span class="s2">):</span>
+            <span class="s1">bases </span><span class="s2">= []</span>
+            <span class="s0">for </span><span class="s1">base </span><span class="s0">in </span><span class="s1">model</span><span class="s2">.</span><span class="s1">__bases__</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">base</span><span class="s2">, </span><span class="s3">&quot;_meta&quot;</span><span class="s2">) </span><span class="s0">and </span><span class="s1">base</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">abstract</span><span class="s2">:</span>
+                    <span class="s1">bases</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">flatten_bases</span><span class="s2">(</span><span class="s1">base</span><span class="s2">))</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">bases</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">base</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">bases</span>
+
+        <span class="s6"># We can't rely on __mro__ directly because we only want to flatten</span>
+        <span class="s6"># abstract models and not the whole tree. However by recursing on</span>
+        <span class="s6"># __bases__ we may end up with duplicates and ordering issues, we</span>
+        <span class="s6"># therefore discard any duplicates and reorder the bases according</span>
+        <span class="s6"># to their index in the MRO.</span>
+        <span class="s1">flattened_bases </span><span class="s2">= </span><span class="s1">sorted</span><span class="s2">(</span>
+            <span class="s1">set</span><span class="s2">(</span><span class="s1">flatten_bases</span><span class="s2">(</span><span class="s1">model</span><span class="s2">)), </span><span class="s1">key</span><span class="s2">=</span><span class="s0">lambda </span><span class="s1">x</span><span class="s2">: </span><span class="s1">model</span><span class="s2">.</span><span class="s1">__mro__</span><span class="s2">.</span><span class="s1">index</span><span class="s2">(</span><span class="s1">x</span><span class="s2">)</span>
+        <span class="s2">)</span>
+
+        <span class="s6"># Make our record</span>
+        <span class="s1">bases </span><span class="s2">= </span><span class="s1">tuple</span><span class="s2">(</span>
+            <span class="s2">(</span><span class="s1">base</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">label_lower </span><span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">base</span><span class="s2">, </span><span class="s3">&quot;_meta&quot;</span><span class="s2">) </span><span class="s0">else </span><span class="s1">base</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">base </span><span class="s0">in </span><span class="s1">flattened_bases</span>
+        <span class="s2">)</span>
+        <span class="s6"># Ensure at least one base inherits from models.Model</span>
+        <span class="s0">if not </span><span class="s1">any</span><span class="s2">(</span>
+            <span class="s2">(</span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">base</span><span class="s2">, </span><span class="s1">str</span><span class="s2">) </span><span class="s0">or </span><span class="s1">issubclass</span><span class="s2">(</span><span class="s1">base</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">Model</span><span class="s2">)) </span><span class="s0">for </span><span class="s1">base </span><span class="s0">in </span><span class="s1">bases</span>
+        <span class="s2">):</span>
+            <span class="s1">bases </span><span class="s2">= (</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Model</span><span class="s2">,)</span>
+
+        <span class="s1">managers </span><span class="s2">= []</span>
+        <span class="s1">manager_names </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+        <span class="s1">default_manager_shim </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s0">for </span><span class="s1">manager </span><span class="s0">in </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">managers</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">manager</span><span class="s2">.</span><span class="s1">name </span><span class="s0">in </span><span class="s1">manager_names</span><span class="s2">:</span>
+                <span class="s6"># Skip overridden managers.</span>
+                <span class="s0">continue</span>
+            <span class="s0">elif </span><span class="s1">manager</span><span class="s2">.</span><span class="s1">use_in_migrations</span><span class="s2">:</span>
+                <span class="s6"># Copy managers usable in migrations.</span>
+                <span class="s1">new_manager </span><span class="s2">= </span><span class="s1">copy</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">(</span><span class="s1">manager</span><span class="s2">)</span>
+                <span class="s1">new_manager</span><span class="s2">.</span><span class="s1">_set_creation_counter</span><span class="s2">()</span>
+            <span class="s0">elif </span><span class="s1">manager </span><span class="s0">is </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_base_manager </span><span class="s0">or </span><span class="s1">manager </span><span class="s0">is </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">:</span>
+                <span class="s6"># Shim custom managers used as default and base managers.</span>
+                <span class="s1">new_manager </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">Manager</span><span class="s2">()</span>
+                <span class="s1">new_manager</span><span class="s2">.</span><span class="s1">model </span><span class="s2">= </span><span class="s1">manager</span><span class="s2">.</span><span class="s1">model</span>
+                <span class="s1">new_manager</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">manager</span><span class="s2">.</span><span class="s1">name</span>
+                <span class="s0">if </span><span class="s1">manager </span><span class="s0">is </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">:</span>
+                    <span class="s1">default_manager_shim </span><span class="s2">= </span><span class="s1">new_manager</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">continue</span>
+            <span class="s1">manager_names</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s1">manager</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+            <span class="s1">managers</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">manager</span><span class="s2">.</span><span class="s1">name</span><span class="s2">, </span><span class="s1">new_manager</span><span class="s2">))</span>
+
+        <span class="s6"># Ignore a shimmed default manager called objects if it's the only one.</span>
+        <span class="s0">if </span><span class="s1">managers </span><span class="s2">== [(</span><span class="s3">&quot;objects&quot;</span><span class="s2">, </span><span class="s1">default_manager_shim</span><span class="s2">)]:</span>
+            <span class="s1">managers </span><span class="s2">= []</span>
+
+        <span class="s6"># Construct the new ModelState</span>
+        <span class="s0">return </span><span class="s1">cls</span><span class="s2">(</span>
+            <span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">,</span>
+            <span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">object_name</span><span class="s2">,</span>
+            <span class="s1">fields</span><span class="s2">,</span>
+            <span class="s1">options</span><span class="s2">,</span>
+            <span class="s1">bases</span><span class="s2">,</span>
+            <span class="s1">managers</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">construct_managers</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot;Deep-clone the managers using deconstruction.&quot;&quot;&quot;</span>
+        <span class="s6"># Sort all managers by their creation counter</span>
+        <span class="s1">sorted_managers </span><span class="s2">= </span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">managers</span><span class="s2">, </span><span class="s1">key</span><span class="s2">=</span><span class="s0">lambda </span><span class="s1">v</span><span class="s2">: </span><span class="s1">v</span><span class="s2">[</span><span class="s4">1</span><span class="s2">].</span><span class="s1">creation_counter</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">mgr_name</span><span class="s2">, </span><span class="s1">manager </span><span class="s0">in </span><span class="s1">sorted_managers</span><span class="s2">:</span>
+            <span class="s1">as_manager</span><span class="s2">, </span><span class="s1">manager_path</span><span class="s2">, </span><span class="s1">qs_path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs </span><span class="s2">= </span><span class="s1">manager</span><span class="s2">.</span><span class="s1">deconstruct</span><span class="s2">()</span>
+            <span class="s0">if </span><span class="s1">as_manager</span><span class="s2">:</span>
+                <span class="s1">qs_class </span><span class="s2">= </span><span class="s1">import_string</span><span class="s2">(</span><span class="s1">qs_path</span><span class="s2">)</span>
+                <span class="s0">yield </span><span class="s1">mgr_name</span><span class="s2">, </span><span class="s1">qs_class</span><span class="s2">.</span><span class="s1">as_manager</span><span class="s2">()</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">manager_class </span><span class="s2">= </span><span class="s1">import_string</span><span class="s2">(</span><span class="s1">manager_path</span><span class="s2">)</span>
+                <span class="s0">yield </span><span class="s1">mgr_name</span><span class="s2">, </span><span class="s1">manager_class</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">clone</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot;Return an exact copy of this ModelState.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">(</span>
+            <span class="s1">app_label</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">,</span>
+            <span class="s1">name</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">,</span>
+            <span class="s1">fields</span><span class="s2">=</span><span class="s1">dict</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">),</span>
+            <span class="s6"># Since options are shallow-copied here, operations such as</span>
+            <span class="s6"># AddIndex must replace their option (e.g 'indexes') rather</span>
+            <span class="s6"># than mutating it.</span>
+            <span class="s1">options</span><span class="s2">=</span><span class="s1">dict</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">options</span><span class="s2">),</span>
+            <span class="s1">bases</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">bases</span><span class="s2">,</span>
+            <span class="s1">managers</span><span class="s2">=</span><span class="s1">list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">managers</span><span class="s2">),</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">apps</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot;Create a Model object from our current state into the given apps.&quot;&quot;&quot;</span>
+        <span class="s6"># First, make a Meta object</span>
+        <span class="s1">meta_contents </span><span class="s2">= {</span><span class="s3">&quot;app_label&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s3">&quot;apps&quot;</span><span class="s2">: </span><span class="s1">apps</span><span class="s2">, **</span><span class="s1">self</span><span class="s2">.</span><span class="s1">options</span><span class="s2">}</span>
+        <span class="s1">meta </span><span class="s2">= </span><span class="s1">type</span><span class="s2">(</span><span class="s3">&quot;Meta&quot;</span><span class="s2">, (), </span><span class="s1">meta_contents</span><span class="s2">)</span>
+        <span class="s6"># Then, work out our bases</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">bases </span><span class="s2">= </span><span class="s1">tuple</span><span class="s2">(</span>
+                <span class="s2">(</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">base</span><span class="s2">) </span><span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">base</span><span class="s2">, </span><span class="s1">str</span><span class="s2">) </span><span class="s0">else </span><span class="s1">base</span><span class="s2">)</span>
+                <span class="s0">for </span><span class="s1">base </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">bases</span>
+            <span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">LookupError</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">InvalidBasesError</span><span class="s2">(</span>
+                <span class="s3">&quot;Cannot resolve one or more bases from %r&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">bases</span><span class="s2">,)</span>
+            <span class="s2">)</span>
+        <span class="s6"># Clone fields for the body, add other bits.</span>
+        <span class="s1">body </span><span class="s2">= {</span><span class="s1">name</span><span class="s2">: </span><span class="s1">field</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">() </span><span class="s0">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">field </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()}</span>
+        <span class="s1">body</span><span class="s2">[</span><span class="s3">&quot;Meta&quot;</span><span class="s2">] = </span><span class="s1">meta</span>
+        <span class="s1">body</span><span class="s2">[</span><span class="s3">&quot;__module__&quot;</span><span class="s2">] = </span><span class="s3">&quot;__fake__&quot;</span>
+
+        <span class="s6"># Restore managers</span>
+        <span class="s1">body</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">construct_managers</span><span class="s2">())</span>
+        <span class="s6"># Then, make a Model object (apps.register_model is called in __new__)</span>
+        <span class="s0">return </span><span class="s1">type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">, </span><span class="s1">bases</span><span class="s2">, </span><span class="s1">body</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_index_by_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s0">for </span><span class="s1">index </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;indexes&quot;</span><span class="s2">]:</span>
+            <span class="s0">if </span><span class="s1">index</span><span class="s2">.</span><span class="s1">name </span><span class="s2">== </span><span class="s1">name</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">index</span>
+        <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;No index named %s on model %s&quot; </span><span class="s2">% (</span><span class="s1">name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">))</span>
+
+    <span class="s0">def </span><span class="s1">get_constraint_by_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s0">for </span><span class="s1">constraint </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;constraints&quot;</span><span class="s2">]:</span>
+            <span class="s0">if </span><span class="s1">constraint</span><span class="s2">.</span><span class="s1">name </span><span class="s2">== </span><span class="s1">name</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">constraint</span>
+        <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;No constraint named %s on model %s&quot; </span><span class="s2">% (</span><span class="s1">name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">))</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;&lt;%s: '%s.%s'&gt;&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__eq__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">other</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">(</span>
+            <span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_label </span><span class="s2">== </span><span class="s1">other</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">)</span>
+            <span class="s0">and </span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">== </span><span class="s1">other</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+            <span class="s0">and </span><span class="s2">(</span><span class="s1">len</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">) == </span><span class="s1">len</span><span class="s2">(</span><span class="s1">other</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">))</span>
+            <span class="s0">and </span><span class="s1">all</span><span class="s2">(</span>
+                <span class="s1">k1 </span><span class="s2">== </span><span class="s1">k2 </span><span class="s0">and </span><span class="s1">f1</span><span class="s2">.</span><span class="s1">deconstruct</span><span class="s2">()[</span><span class="s4">1</span><span class="s2">:] == </span><span class="s1">f2</span><span class="s2">.</span><span class="s1">deconstruct</span><span class="s2">()[</span><span class="s4">1</span><span class="s2">:]</span>
+                <span class="s0">for </span><span class="s2">(</span><span class="s1">k1</span><span class="s2">, </span><span class="s1">f1</span><span class="s2">), (</span><span class="s1">k2</span><span class="s2">, </span><span class="s1">f2</span><span class="s2">) </span><span class="s0">in </span><span class="s1">zip</span><span class="s2">(</span>
+                    <span class="s1">sorted</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()),</span>
+                    <span class="s1">sorted</span><span class="s2">(</span><span class="s1">other</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()),</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+            <span class="s0">and </span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">options </span><span class="s2">== </span><span class="s1">other</span><span class="s2">.</span><span class="s1">options</span><span class="s2">)</span>
+            <span class="s0">and </span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">bases </span><span class="s2">== </span><span class="s1">other</span><span class="s2">.</span><span class="s1">bases</span><span class="s2">)</span>
+            <span class="s0">and </span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">managers </span><span class="s2">== </span><span class="s1">other</span><span class="s2">.</span><span class="s1">managers</span><span class="s2">)</span>
+        <span class="s2">)</span>
+</pre>
+</body>
+</html>

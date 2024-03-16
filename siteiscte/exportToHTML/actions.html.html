@@ -1,0 +1,43 @@
+<html>
+<head>
+<title>actions.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #bcbec4;}
+.s1 { color: #d5b778;}
+.s2 { color: #bababa;}
+.s3 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+actions.html</font>
+</center></td></tr></table>
+<pre><span class="s0">{% load i18n %}</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;actions&quot;</span><span class="s1">&gt;</span>
+  <span class="s0">{% block actions %}</span>
+    <span class="s0">{% block actions-form %}</span>
+    <span class="s0">{% for field in action_form %}{% if field.label %}</span><span class="s1">&lt;label&gt;</span><span class="s0">{{ field.label }} {{ field }}</span><span class="s1">&lt;/label&gt;</span><span class="s0">{% else %}{{ field }}{% endif %}{% endfor %}</span>
+    <span class="s0">{% endblock %}</span>
+    <span class="s0">{% block actions-submit %}</span>
+    <span class="s1">&lt;button </span><span class="s2">type</span><span class="s3">=&quot;submit&quot; </span><span class="s2">class</span><span class="s3">=&quot;button&quot; </span><span class="s2">title</span><span class="s3">=&quot;{% translate &quot;</span><span class="s2">Run the selected action</span><span class="s0">&quot; %}&quot; name=&quot;index&quot; value=&quot;{{ action_index|default:0 }}&quot;&gt;{% translate &quot;Go&quot; %}</span><span class="s1">&lt;/button&gt;</span>
+    <span class="s0">{% endblock %}</span>
+    <span class="s0">{% block actions-counter %}</span>
+    <span class="s0">{% if actions_selection_counter %}</span>
+        <span class="s1">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;action-counter&quot; </span><span class="s2">data-actions-icnt</span><span class="s3">=&quot;{{ cl.result_list|length }}&quot;</span><span class="s1">&gt;</span><span class="s0">{{ selection_note }}</span><span class="s1">&lt;/span&gt;</span>
+        <span class="s0">{% if cl.result_count != cl.result_list|length %}</span>
+        <span class="s1">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;all hidden&quot;</span><span class="s1">&gt;</span><span class="s0">{{ selection_note_all }}</span><span class="s1">&lt;/span&gt;</span>
+        <span class="s1">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;question hidden&quot;</span><span class="s1">&gt;</span>
+            <span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;#&quot; </span><span class="s2">title</span><span class="s3">=&quot;{% translate &quot;</span><span class="s2">Click here to select the objects across all pages</span><span class="s0">&quot; %}&quot;&gt;{% blocktranslate with cl.result_count as total_count %}Select all {{ total_count }} {{ module_name }}{% endblocktranslate %}</span><span class="s1">&lt;/a&gt;</span>
+        <span class="s1">&lt;/span&gt;</span>
+        <span class="s1">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;clear hidden&quot;</span><span class="s1">&gt;&lt;a </span><span class="s2">href</span><span class="s3">=&quot;#&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate &quot;Clear selection&quot; %}</span><span class="s1">&lt;/a&gt;&lt;/span&gt;</span>
+        <span class="s0">{% endif %}</span>
+    <span class="s0">{% endif %}</span>
+    <span class="s0">{% endblock %}</span>
+  <span class="s0">{% endblock %}</span>
+<span class="s1">&lt;/div&gt;</span>
+</pre>
+</body>
+</html>

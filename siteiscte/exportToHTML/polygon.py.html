@@ -1,0 +1,212 @@
+<html>
+<head>
+<title>polygon.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #2aacb8;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #7a7e85;}
+.s6 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+polygon.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos </span><span class="s0">import </span><span class="s1">prototypes </span><span class="s0">as </span><span class="s1">capi</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos</span><span class="s2">.</span><span class="s1">geometry </span><span class="s0">import </span><span class="s1">GEOSGeometry</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos</span><span class="s2">.</span><span class="s1">libgeos </span><span class="s0">import </span><span class="s1">GEOM_PTR</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos</span><span class="s2">.</span><span class="s1">linestring </span><span class="s0">import </span><span class="s1">LinearRing</span>
+
+
+<span class="s0">class </span><span class="s1">Polygon</span><span class="s2">(</span><span class="s1">GEOSGeometry</span><span class="s2">):</span>
+    <span class="s1">_minlength </span><span class="s2">= </span><span class="s3">1</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Initialize on an exterior ring and a sequence of holes (both 
+        instances may be either LinearRing instances, or a tuple/list 
+        that may be constructed into a LinearRing). 
+ 
+        Examples of initialization, where shell, hole1, and hole2 are 
+        valid LinearRing geometries: 
+        &gt;&gt;&gt; from django.contrib.gis.geos import LinearRing, Polygon 
+        &gt;&gt;&gt; shell = hole1 = hole2 = LinearRing() 
+        &gt;&gt;&gt; poly = Polygon(shell, hole1, hole2) 
+        &gt;&gt;&gt; poly = Polygon(shell, (hole1, hole2)) 
+ 
+        &gt;&gt;&gt; # Example where a tuple parameters are used: 
+        &gt;&gt;&gt; poly = Polygon(((0, 0), (0, 10), (10, 10), (10, 0), (0, 0)), 
+        ...                ((4, 4), (4, 6), (6, 6), (6, 4), (4, 4))) 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if not </span><span class="s1">args</span><span class="s2">:</span>
+            <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_create_polygon</span><span class="s2">(</span><span class="s3">0</span><span class="s2">, </span><span class="s0">None</span><span class="s2">), **</span><span class="s1">kwargs</span><span class="s2">)</span>
+            <span class="s0">return</span>
+
+        <span class="s5"># Getting the ext_ring and init_holes parameters from the argument list</span>
+        <span class="s1">ext_ring</span><span class="s2">, *</span><span class="s1">init_holes </span><span class="s2">= </span><span class="s1">args</span>
+        <span class="s1">n_holes </span><span class="s2">= </span><span class="s1">len</span><span class="s2">(</span><span class="s1">init_holes</span><span class="s2">)</span>
+
+        <span class="s5"># If initialized as Polygon(shell, (LinearRing, LinearRing))</span>
+        <span class="s5"># [for backward-compatibility]</span>
+        <span class="s0">if </span><span class="s1">n_holes </span><span class="s2">== </span><span class="s3">1 </span><span class="s0">and </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">init_holes</span><span class="s2">[</span><span class="s3">0</span><span class="s2">], (</span><span class="s1">tuple</span><span class="s2">, </span><span class="s1">list</span><span class="s2">)):</span>
+            <span class="s0">if not </span><span class="s1">init_holes</span><span class="s2">[</span><span class="s3">0</span><span class="s2">]:</span>
+                <span class="s1">init_holes </span><span class="s2">= ()</span>
+                <span class="s1">n_holes </span><span class="s2">= </span><span class="s3">0</span>
+            <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">init_holes</span><span class="s2">[</span><span class="s3">0</span><span class="s2">][</span><span class="s3">0</span><span class="s2">], </span><span class="s1">LinearRing</span><span class="s2">):</span>
+                <span class="s1">init_holes </span><span class="s2">= </span><span class="s1">init_holes</span><span class="s2">[</span><span class="s3">0</span><span class="s2">]</span>
+                <span class="s1">n_holes </span><span class="s2">= </span><span class="s1">len</span><span class="s2">(</span><span class="s1">init_holes</span><span class="s2">)</span>
+
+        <span class="s1">polygon </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_create_polygon</span><span class="s2">(</span><span class="s1">n_holes </span><span class="s2">+ </span><span class="s3">1</span><span class="s2">, [</span><span class="s1">ext_ring</span><span class="s2">, *</span><span class="s1">init_holes</span><span class="s2">])</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">polygon</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__iter__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Iterate over each ring in the polygon.&quot;</span>
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range</span><span class="s2">(</span><span class="s1">len</span><span class="s2">(</span><span class="s1">self</span><span class="s2">)):</span>
+            <span class="s0">yield </span><span class="s1">self</span><span class="s2">[</span><span class="s1">i</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">__len__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the number of rings in this Polygon.&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">num_interior_rings </span><span class="s2">+ </span><span class="s3">1</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">from_bbox</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">bbox</span><span class="s2">):</span>
+        <span class="s4">&quot;Construct a Polygon from a bounding box (4-tuple).&quot;</span>
+        <span class="s1">x0</span><span class="s2">, </span><span class="s1">y0</span><span class="s2">, </span><span class="s1">x1</span><span class="s2">, </span><span class="s1">y1 </span><span class="s2">= </span><span class="s1">bbox</span>
+        <span class="s0">for </span><span class="s1">z </span><span class="s0">in </span><span class="s1">bbox</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">z</span><span class="s2">, (</span><span class="s1">float</span><span class="s2">, </span><span class="s1">int</span><span class="s2">)):</span>
+                <span class="s0">return </span><span class="s1">GEOSGeometry</span><span class="s2">(</span>
+                    <span class="s6">&quot;POLYGON((%s %s, %s %s, %s %s, %s %s, %s %s))&quot;</span>
+                    <span class="s2">% (</span><span class="s1">x0</span><span class="s2">, </span><span class="s1">y0</span><span class="s2">, </span><span class="s1">x0</span><span class="s2">, </span><span class="s1">y1</span><span class="s2">, </span><span class="s1">x1</span><span class="s2">, </span><span class="s1">y1</span><span class="s2">, </span><span class="s1">x1</span><span class="s2">, </span><span class="s1">y0</span><span class="s2">, </span><span class="s1">x0</span><span class="s2">, </span><span class="s1">y0</span><span class="s2">)</span>
+                <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">Polygon</span><span class="s2">(((</span><span class="s1">x0</span><span class="s2">, </span><span class="s1">y0</span><span class="s2">), (</span><span class="s1">x0</span><span class="s2">, </span><span class="s1">y1</span><span class="s2">), (</span><span class="s1">x1</span><span class="s2">, </span><span class="s1">y1</span><span class="s2">), (</span><span class="s1">x1</span><span class="s2">, </span><span class="s1">y0</span><span class="s2">), (</span><span class="s1">x0</span><span class="s2">, </span><span class="s1">y0</span><span class="s2">)))</span>
+
+    <span class="s5"># ### These routines are needed for list-like operation w/ListMixin ###</span>
+    <span class="s0">def </span><span class="s1">_create_polygon</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">length</span><span class="s2">, </span><span class="s1">items</span><span class="s2">):</span>
+        <span class="s5"># Instantiate LinearRing objects if necessary, but don't clone them yet</span>
+        <span class="s5"># _construct_ring will throw a TypeError if a parameter isn't a valid ring</span>
+        <span class="s5"># If we cloned the pointers here, we wouldn't be able to clean up</span>
+        <span class="s5"># in case of error.</span>
+        <span class="s0">if not </span><span class="s1">length</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">create_empty_polygon</span><span class="s2">()</span>
+
+        <span class="s1">rings </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">r </span><span class="s0">in </span><span class="s1">items</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">r</span><span class="s2">, </span><span class="s1">GEOM_PTR</span><span class="s2">):</span>
+                <span class="s1">rings</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">r</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">rings</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_construct_ring</span><span class="s2">(</span><span class="s1">r</span><span class="s2">))</span>
+
+        <span class="s1">shell </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_clone</span><span class="s2">(</span><span class="s1">rings</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s3">0</span><span class="s2">))</span>
+
+        <span class="s1">n_holes </span><span class="s2">= </span><span class="s1">length </span><span class="s2">- </span><span class="s3">1</span>
+        <span class="s0">if </span><span class="s1">n_holes</span><span class="s2">:</span>
+            <span class="s1">holes_param </span><span class="s2">= (</span><span class="s1">GEOM_PTR </span><span class="s2">* </span><span class="s1">n_holes</span><span class="s2">)(*[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_clone</span><span class="s2">(</span><span class="s1">r</span><span class="s2">) </span><span class="s0">for </span><span class="s1">r </span><span class="s0">in </span><span class="s1">rings</span><span class="s2">])</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">holes_param </span><span class="s2">= </span><span class="s0">None</span>
+
+        <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">create_polygon</span><span class="s2">(</span><span class="s1">shell</span><span class="s2">, </span><span class="s1">holes_param</span><span class="s2">, </span><span class="s1">n_holes</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_clone</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">g</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">g</span><span class="s2">, </span><span class="s1">GEOM_PTR</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">geom_clone</span><span class="s2">(</span><span class="s1">g</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">geom_clone</span><span class="s2">(</span><span class="s1">g</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_construct_ring</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">param</span><span class="s2">,</span>
+        <span class="s1">msg</span><span class="s2">=(</span>
+            <span class="s6">&quot;Parameter must be a sequence of LinearRings or objects that can &quot;</span>
+            <span class="s6">&quot;initialize to LinearRings&quot;</span>
+        <span class="s2">),</span>
+    <span class="s2">):</span>
+        <span class="s4">&quot;Try to construct a ring from the given parameter.&quot;</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">param</span><span class="s2">, </span><span class="s1">LinearRing</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">param</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">LinearRing</span><span class="s2">(</span><span class="s1">param</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">TypeError</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span><span class="s1">msg</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_set_list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">length</span><span class="s2">, </span><span class="s1">items</span><span class="s2">):</span>
+        <span class="s5"># Getting the current pointer, replacing with the newly constructed</span>
+        <span class="s5"># geometry, and destroying the old geometry.</span>
+        <span class="s1">prev_ptr </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span>
+        <span class="s1">srid </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">srid</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">ptr </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_create_polygon</span><span class="s2">(</span><span class="s1">length</span><span class="s2">, </span><span class="s1">items</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">srid</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">srid </span><span class="s2">= </span><span class="s1">srid</span>
+        <span class="s1">capi</span><span class="s2">.</span><span class="s1">destroy_geom</span><span class="s2">(</span><span class="s1">prev_ptr</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_get_single_internal</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">index</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Return the ring at the specified index. The first index, 0, will 
+        always return the exterior ring.  Indices &gt; 0 will return the 
+        interior ring at the given index (e.g., poly[1] and poly[2] would 
+        return the first and second interior ring, respectively). 
+ 
+        CAREFUL: Internal/External are not the same as Interior/Exterior! 
+        Return a pointer from the existing geometries for use internally by the 
+        object's methods. _get_single_external() returns a clone of the same 
+        geometry for use by external code. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">index </span><span class="s2">== </span><span class="s3">0</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_extring</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s5"># Getting the interior ring, have to subtract 1 from the index.</span>
+            <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_intring</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">index </span><span class="s2">- </span><span class="s3">1</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_get_single_external</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">index</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">GEOSGeometry</span><span class="s2">(</span>
+            <span class="s1">capi</span><span class="s2">.</span><span class="s1">geom_clone</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_single_internal</span><span class="s2">(</span><span class="s1">index</span><span class="s2">)), </span><span class="s1">srid</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">srid</span>
+        <span class="s2">)</span>
+
+    <span class="s1">_set_single </span><span class="s2">= </span><span class="s1">GEOSGeometry</span><span class="s2">.</span><span class="s1">_set_single_rebuild</span>
+    <span class="s1">_assign_extended_slice </span><span class="s2">= </span><span class="s1">GEOSGeometry</span><span class="s2">.</span><span class="s1">_assign_extended_slice_rebuild</span>
+
+    <span class="s5"># #### Polygon Properties ####</span>
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">num_interior_rings</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the number of interior rings.&quot;</span>
+        <span class="s5"># Getting the number of rings</span>
+        <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_nrings</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_get_ext_ring</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Get the exterior ring of the Polygon.&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">[</span><span class="s3">0</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">_set_ext_ring</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">ring</span><span class="s2">):</span>
+        <span class="s4">&quot;Set the exterior ring of the Polygon.&quot;</span>
+        <span class="s1">self</span><span class="s2">[</span><span class="s3">0</span><span class="s2">] = </span><span class="s1">ring</span>
+
+    <span class="s5"># Properties for the exterior ring/shell.</span>
+    <span class="s1">exterior_ring </span><span class="s2">= </span><span class="s1">property</span><span class="s2">(</span><span class="s1">_get_ext_ring</span><span class="s2">, </span><span class="s1">_set_ext_ring</span><span class="s2">)</span>
+    <span class="s1">shell </span><span class="s2">= </span><span class="s1">exterior_ring</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Get the tuple for each ring in this Polygon.&quot;</span>
+        <span class="s0">return </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">self</span><span class="s2">[</span><span class="s1">i</span><span class="s2">].</span><span class="s1">tuple </span><span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range</span><span class="s2">(</span><span class="s1">len</span><span class="s2">(</span><span class="s1">self</span><span class="s2">)))</span>
+
+    <span class="s1">coords </span><span class="s2">= </span><span class="s1">tuple</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">kml</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the KML representation of this Polygon.&quot;</span>
+        <span class="s1">inner_kml </span><span class="s2">= </span><span class="s6">&quot;&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span>
+            <span class="s6">&quot;&lt;innerBoundaryIs&gt;%s&lt;/innerBoundaryIs&gt;&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">[</span><span class="s1">i </span><span class="s2">+ </span><span class="s3">1</span><span class="s2">].</span><span class="s1">kml</span>
+            <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">num_interior_rings</span><span class="s2">)</span>
+        <span class="s2">)</span>
+        <span class="s0">return </span><span class="s6">&quot;&lt;Polygon&gt;&lt;outerBoundaryIs&gt;%s&lt;/outerBoundaryIs&gt;%s&lt;/Polygon&gt;&quot; </span><span class="s2">% (</span>
+            <span class="s1">self</span><span class="s2">[</span><span class="s3">0</span><span class="s2">].</span><span class="s1">kml</span><span class="s2">,</span>
+            <span class="s1">inner_kml</span><span class="s2">,</span>
+        <span class="s2">)</span>
+</pre>
+</body>
+</html>

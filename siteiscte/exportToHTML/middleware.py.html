@@ -1,0 +1,72 @@
+<html>
+<head>
+<title>middleware.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+middleware.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">redirects</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">Redirect</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">sites</span><span class="s2">.</span><span class="s1">shortcuts </span><span class="s0">import </span><span class="s1">get_current_site</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">HttpResponseGone</span><span class="s2">, </span><span class="s1">HttpResponsePermanentRedirect</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">deprecation </span><span class="s0">import </span><span class="s1">MiddlewareMixin</span>
+
+
+<span class="s0">class </span><span class="s1">RedirectFallbackMiddleware</span><span class="s2">(</span><span class="s1">MiddlewareMixin</span><span class="s2">):</span>
+    <span class="s3"># Defined as class-level attributes to be subclassing-friendly.</span>
+    <span class="s1">response_gone_class </span><span class="s2">= </span><span class="s1">HttpResponseGone</span>
+    <span class="s1">response_redirect_class </span><span class="s2">= </span><span class="s1">HttpResponsePermanentRedirect</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">get_response</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">is_installed</span><span class="s2">(</span><span class="s4">&quot;django.contrib.sites&quot;</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                <span class="s4">&quot;You cannot use RedirectFallbackMiddleware when &quot;</span>
+                <span class="s4">&quot;django.contrib.sites is not installed.&quot;</span>
+            <span class="s2">)</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">get_response</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">process_response</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">response</span><span class="s2">):</span>
+        <span class="s3"># No need to check for a redirect for non-404 responses.</span>
+        <span class="s0">if </span><span class="s1">response</span><span class="s2">.</span><span class="s1">status_code </span><span class="s2">!= </span><span class="s5">404</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">response</span>
+
+        <span class="s1">full_path </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">get_full_path</span><span class="s2">()</span>
+        <span class="s1">current_site </span><span class="s2">= </span><span class="s1">get_current_site</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+
+        <span class="s1">r </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">r </span><span class="s2">= </span><span class="s1">Redirect</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">site</span><span class="s2">=</span><span class="s1">current_site</span><span class="s2">, </span><span class="s1">old_path</span><span class="s2">=</span><span class="s1">full_path</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">Redirect</span><span class="s2">.</span><span class="s1">DoesNotExist</span><span class="s2">:</span>
+            <span class="s0">pass</span>
+        <span class="s0">if </span><span class="s1">r </span><span class="s0">is None and </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">APPEND_SLASH </span><span class="s0">and not </span><span class="s1">request</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s4">&quot;/&quot;</span><span class="s2">):</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">r </span><span class="s2">= </span><span class="s1">Redirect</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span>
+                    <span class="s1">site</span><span class="s2">=</span><span class="s1">current_site</span><span class="s2">,</span>
+                    <span class="s1">old_path</span><span class="s2">=</span><span class="s1">request</span><span class="s2">.</span><span class="s1">get_full_path</span><span class="s2">(</span><span class="s1">force_append_slash</span><span class="s2">=</span><span class="s0">True</span><span class="s2">),</span>
+                <span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">Redirect</span><span class="s2">.</span><span class="s1">DoesNotExist</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+        <span class="s0">if </span><span class="s1">r </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">r</span><span class="s2">.</span><span class="s1">new_path </span><span class="s2">== </span><span class="s4">&quot;&quot;</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">response_gone_class</span><span class="s2">()</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">response_redirect_class</span><span class="s2">(</span><span class="s1">r</span><span class="s2">.</span><span class="s1">new_path</span><span class="s2">)</span>
+
+        <span class="s3"># No redirect was found. Return the response.</span>
+        <span class="s0">return </span><span class="s1">response</span>
+</pre>
+</body>
+</html>

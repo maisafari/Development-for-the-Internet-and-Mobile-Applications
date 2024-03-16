@@ -1,0 +1,61 @@
+<html>
+<head>
+<title>asyncio.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+asyncio.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">os</span>
+<span class="s0">from </span><span class="s1">asyncio </span><span class="s0">import </span><span class="s1">get_running_loop</span>
+<span class="s0">from </span><span class="s1">functools </span><span class="s0">import </span><span class="s1">wraps</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">SynchronousOnlyOperation</span>
+
+
+<span class="s0">def </span><span class="s1">async_unsafe</span><span class="s2">(</span><span class="s1">message</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Decorator to mark functions as async-unsafe. Someone trying to access 
+    the function while in an async context will get an error message. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">decorator</span><span class="s2">(</span><span class="s1">func</span><span class="s2">):</span>
+        <span class="s2">@</span><span class="s1">wraps</span><span class="s2">(</span><span class="s1">func</span><span class="s2">)</span>
+        <span class="s0">def </span><span class="s1">inner</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+            <span class="s4"># Detect a running event loop in this thread.</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">get_running_loop</span><span class="s2">()</span>
+            <span class="s0">except </span><span class="s1">RuntimeError</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">if not </span><span class="s1">os</span><span class="s2">.</span><span class="s1">environ</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;DJANGO_ALLOW_ASYNC_UNSAFE&quot;</span><span class="s2">):</span>
+                    <span class="s0">raise </span><span class="s1">SynchronousOnlyOperation</span><span class="s2">(</span><span class="s1">message</span><span class="s2">)</span>
+            <span class="s4"># Pass onward.</span>
+            <span class="s0">return </span><span class="s1">func</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s1">inner</span>
+
+    <span class="s4"># If the message is actually a function, then be a no-arguments decorator.</span>
+    <span class="s0">if </span><span class="s1">callable</span><span class="s2">(</span><span class="s1">message</span><span class="s2">):</span>
+        <span class="s1">func </span><span class="s2">= </span><span class="s1">message</span>
+        <span class="s1">message </span><span class="s2">= (</span>
+            <span class="s5">&quot;You cannot call this from an async context - use a thread or &quot;</span>
+            <span class="s5">&quot;sync_to_async.&quot;</span>
+        <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">decorator</span><span class="s2">(</span><span class="s1">func</span><span class="s2">)</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">decorator</span>
+</pre>
+</body>
+</html>

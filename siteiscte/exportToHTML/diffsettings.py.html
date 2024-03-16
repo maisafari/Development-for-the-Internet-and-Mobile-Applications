@@ -1,0 +1,113 @@
+<html>
+<head>
+<title>diffsettings.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+diffsettings.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span>
+
+
+<span class="s0">def </span><span class="s1">module_to_dict</span><span class="s2">(</span><span class="s1">module</span><span class="s2">, </span><span class="s1">omittable</span><span class="s2">=</span><span class="s0">lambda </span><span class="s1">k</span><span class="s2">: </span><span class="s1">k</span><span class="s2">.</span><span class="s1">startswith</span><span class="s2">(</span><span class="s3">&quot;_&quot;</span><span class="s2">) </span><span class="s0">or not </span><span class="s1">k</span><span class="s2">.</span><span class="s1">isupper</span><span class="s2">()):</span>
+    <span class="s4">&quot;&quot;&quot;Convert a module namespace to a Python dictionary.&quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s2">{</span><span class="s1">k</span><span class="s2">: </span><span class="s1">repr</span><span class="s2">(</span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">module</span><span class="s2">, </span><span class="s1">k</span><span class="s2">)) </span><span class="s0">for </span><span class="s1">k </span><span class="s0">in </span><span class="s1">dir</span><span class="s2">(</span><span class="s1">module</span><span class="s2">) </span><span class="s0">if not </span><span class="s1">omittable</span><span class="s2">(</span><span class="s1">k</span><span class="s2">)}</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= </span><span class="s3">&quot;&quot;&quot;Displays differences between the current settings.py and Django's 
+    default settings.&quot;&quot;&quot;</span>
+
+    <span class="s1">requires_system_checks </span><span class="s2">= []</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--all&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">'Display all settings, regardless of their value. In &quot;hash&quot; '</span>
+                <span class="s3">'mode, default values are prefixed by &quot;###&quot;.'</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--default&quot;</span><span class="s2">,</span>
+            <span class="s1">metavar</span><span class="s2">=</span><span class="s3">&quot;MODULE&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;The settings module to compare the current settings against. Leave &quot;</span>
+                <span class="s3">&quot;empty to compare against Django's default settings.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--output&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s3">&quot;hash&quot;</span><span class="s2">,</span>
+            <span class="s1">choices</span><span class="s2">=(</span><span class="s3">&quot;hash&quot;</span><span class="s2">, </span><span class="s3">&quot;unified&quot;</span><span class="s2">),</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Selects the output format. 'hash' mode displays each changed &quot;</span>
+                <span class="s3">&quot;setting, with the settings that don't appear in the defaults &quot;</span>
+                <span class="s3">&quot;followed by ###. 'unified' mode prefixes the default setting &quot;</span>
+                <span class="s3">&quot;with a minus sign, followed by the changed setting prefixed &quot;</span>
+                <span class="s3">&quot;with a plus sign.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">Settings</span><span class="s2">, </span><span class="s1">global_settings</span><span class="s2">, </span><span class="s1">settings</span>
+
+        <span class="s5"># Because settings are imported lazily, we need to explicitly load them.</span>
+        <span class="s0">if not </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">configured</span><span class="s2">:</span>
+            <span class="s1">settings</span><span class="s2">.</span><span class="s1">_setup</span><span class="s2">()</span>
+
+        <span class="s1">user_settings </span><span class="s2">= </span><span class="s1">module_to_dict</span><span class="s2">(</span><span class="s1">settings</span><span class="s2">.</span><span class="s1">_wrapped</span><span class="s2">)</span>
+        <span class="s1">default </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;default&quot;</span><span class="s2">]</span>
+        <span class="s1">default_settings </span><span class="s2">= </span><span class="s1">module_to_dict</span><span class="s2">(</span>
+            <span class="s1">Settings</span><span class="s2">(</span><span class="s1">default</span><span class="s2">) </span><span class="s0">if </span><span class="s1">default </span><span class="s0">else </span><span class="s1">global_settings</span>
+        <span class="s2">)</span>
+        <span class="s1">output_func </span><span class="s2">= {</span>
+            <span class="s3">&quot;hash&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_hash</span><span class="s2">,</span>
+            <span class="s3">&quot;unified&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_unified</span><span class="s2">,</span>
+        <span class="s2">}[</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;output&quot;</span><span class="s2">]]</span>
+        <span class="s0">return </span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">output_func</span><span class="s2">(</span><span class="s1">user_settings</span><span class="s2">, </span><span class="s1">default_settings</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">))</span>
+
+    <span class="s0">def </span><span class="s1">output_hash</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_settings</span><span class="s2">, </span><span class="s1">default_settings</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s5"># Inspired by Postfix's &quot;postconf -n&quot;.</span>
+        <span class="s1">output </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">user_settings</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">key </span><span class="s0">not in </span><span class="s1">default_settings</span><span class="s2">:</span>
+                <span class="s1">output</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;%s = %s  ###&quot; </span><span class="s2">% (</span><span class="s1">key</span><span class="s2">, </span><span class="s1">user_settings</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]))</span>
+            <span class="s0">elif </span><span class="s1">user_settings</span><span class="s2">[</span><span class="s1">key</span><span class="s2">] != </span><span class="s1">default_settings</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]:</span>
+                <span class="s1">output</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;%s = %s&quot; </span><span class="s2">% (</span><span class="s1">key</span><span class="s2">, </span><span class="s1">user_settings</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]))</span>
+            <span class="s0">elif </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;all&quot;</span><span class="s2">]:</span>
+                <span class="s1">output</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;### %s = %s&quot; </span><span class="s2">% (</span><span class="s1">key</span><span class="s2">, </span><span class="s1">user_settings</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]))</span>
+        <span class="s0">return </span><span class="s1">output</span>
+
+    <span class="s0">def </span><span class="s1">output_unified</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_settings</span><span class="s2">, </span><span class="s1">default_settings</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">output </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">user_settings</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">key </span><span class="s0">not in </span><span class="s1">default_settings</span><span class="s2">:</span>
+                <span class="s1">output</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">SUCCESS</span><span class="s2">(</span><span class="s3">&quot;+ %s = %s&quot; </span><span class="s2">% (</span><span class="s1">key</span><span class="s2">, </span><span class="s1">user_settings</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]))</span>
+                <span class="s2">)</span>
+            <span class="s0">elif </span><span class="s1">user_settings</span><span class="s2">[</span><span class="s1">key</span><span class="s2">] != </span><span class="s1">default_settings</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]:</span>
+                <span class="s1">output</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">ERROR</span><span class="s2">(</span><span class="s3">&quot;- %s = %s&quot; </span><span class="s2">% (</span><span class="s1">key</span><span class="s2">, </span><span class="s1">default_settings</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]))</span>
+                <span class="s2">)</span>
+                <span class="s1">output</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">SUCCESS</span><span class="s2">(</span><span class="s3">&quot;+ %s = %s&quot; </span><span class="s2">% (</span><span class="s1">key</span><span class="s2">, </span><span class="s1">user_settings</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]))</span>
+                <span class="s2">)</span>
+            <span class="s0">elif </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;all&quot;</span><span class="s2">]:</span>
+                <span class="s1">output</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;  %s = %s&quot; </span><span class="s2">% (</span><span class="s1">key</span><span class="s2">, </span><span class="s1">user_settings</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]))</span>
+        <span class="s0">return </span><span class="s1">output</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<html>
+<head>
+<title>debug.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #2aacb8;}
+.s5 { color: #6aab73;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+debug.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">inspect</span>
+<span class="s0">from </span><span class="s1">functools </span><span class="s0">import </span><span class="s1">wraps</span>
+
+<span class="s0">from </span><span class="s1">asgiref</span><span class="s2">.</span><span class="s1">sync </span><span class="s0">import </span><span class="s1">iscoroutinefunction</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">HttpRequest</span>
+
+<span class="s1">coroutine_functions_to_sensitive_variables </span><span class="s2">= {}</span>
+
+
+<span class="s0">def </span><span class="s1">sensitive_variables</span><span class="s2">(*</span><span class="s1">variables</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Indicate which variables used in the decorated function are sensitive so 
+    that those variables can later be treated in a special way, for example 
+    by hiding them when logging unhandled exceptions. 
+ 
+    Accept two forms: 
+ 
+    * with specified variable names: 
+ 
+        @sensitive_variables('user', 'password', 'credit_card') 
+        def my_function(user): 
+            password = user.pass_word 
+            credit_card = user.credit_card_number 
+            ... 
+ 
+    * without any specified variable names, in which case consider all 
+      variables are sensitive: 
+ 
+        @sensitive_variables() 
+        def my_function() 
+            ... 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">variables</span><span class="s2">) == </span><span class="s4">1 </span><span class="s0">and </span><span class="s1">callable</span><span class="s2">(</span><span class="s1">variables</span><span class="s2">[</span><span class="s4">0</span><span class="s2">]):</span>
+        <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+            <span class="s5">&quot;sensitive_variables() must be called to use it as a decorator, &quot;</span>
+            <span class="s5">&quot;e.g., use @sensitive_variables(), not @sensitive_variables.&quot;</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">decorator</span><span class="s2">(</span><span class="s1">func</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">iscoroutinefunction</span><span class="s2">(</span><span class="s1">func</span><span class="s2">):</span>
+            <span class="s1">sensitive_variables_wrapper </span><span class="s2">= </span><span class="s1">func</span>
+
+            <span class="s1">wrapped_func </span><span class="s2">= </span><span class="s1">func</span>
+            <span class="s0">while </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">wrapped_func</span><span class="s2">, </span><span class="s5">&quot;__wrapped__&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">) </span><span class="s0">is not None</span><span class="s2">:</span>
+                <span class="s1">wrapped_func </span><span class="s2">= </span><span class="s1">wrapped_func</span><span class="s2">.</span><span class="s1">__wrapped__</span>
+
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">file_path </span><span class="s2">= </span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">getfile</span><span class="s2">(</span><span class="s1">wrapped_func</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">TypeError</span><span class="s2">:  </span><span class="s6"># Raises for builtins or native functions.</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s5">f&quot;</span><span class="s0">{</span><span class="s1">func</span><span class="s2">.</span><span class="s1">__name__</span><span class="s0">} </span><span class="s5">cannot safely be wrapped by &quot;</span>
+                    <span class="s5">&quot;@sensitive_variables, make it either non-async or defined in a &quot;</span>
+                    <span class="s5">&quot;Python file (not a builtin or from a native extension).&quot;</span>
+                <span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s6"># A source file may not be available (e.g. in .pyc-only builds),</span>
+                <span class="s6"># use the first line number instead.</span>
+                <span class="s1">first_line_number </span><span class="s2">= </span><span class="s1">wrapped_func</span><span class="s2">.</span><span class="s1">__code__</span><span class="s2">.</span><span class="s1">co_firstlineno</span>
+                <span class="s1">key </span><span class="s2">= </span><span class="s1">hash</span><span class="s2">(</span><span class="s5">f&quot;</span><span class="s0">{</span><span class="s1">file_path</span><span class="s0">}</span><span class="s5">:</span><span class="s0">{</span><span class="s1">first_line_number</span><span class="s0">}</span><span class="s5">&quot;</span><span class="s2">)</span>
+
+            <span class="s0">if </span><span class="s1">variables</span><span class="s2">:</span>
+                <span class="s1">coroutine_functions_to_sensitive_variables</span><span class="s2">[</span><span class="s1">key</span><span class="s2">] = </span><span class="s1">variables</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">coroutine_functions_to_sensitive_variables</span><span class="s2">[</span><span class="s1">key</span><span class="s2">] = </span><span class="s5">&quot;__ALL__&quot;</span>
+
+        <span class="s0">else</span><span class="s2">:</span>
+
+            <span class="s2">@</span><span class="s1">wraps</span><span class="s2">(</span><span class="s1">func</span><span class="s2">)</span>
+            <span class="s0">def </span><span class="s1">sensitive_variables_wrapper</span><span class="s2">(*</span><span class="s1">func_args</span><span class="s2">, **</span><span class="s1">func_kwargs</span><span class="s2">):</span>
+                <span class="s0">if </span><span class="s1">variables</span><span class="s2">:</span>
+                    <span class="s1">sensitive_variables_wrapper</span><span class="s2">.</span><span class="s1">sensitive_variables </span><span class="s2">= </span><span class="s1">variables</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">sensitive_variables_wrapper</span><span class="s2">.</span><span class="s1">sensitive_variables </span><span class="s2">= </span><span class="s5">&quot;__ALL__&quot;</span>
+                <span class="s0">return </span><span class="s1">func</span><span class="s2">(*</span><span class="s1">func_args</span><span class="s2">, **</span><span class="s1">func_kwargs</span><span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s1">sensitive_variables_wrapper</span>
+
+    <span class="s0">return </span><span class="s1">decorator</span>
+
+
+<span class="s0">def </span><span class="s1">sensitive_post_parameters</span><span class="s2">(*</span><span class="s1">parameters</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Indicate which POST parameters used in the decorated view are sensitive, 
+    so that those parameters can later be treated in a special way, for example 
+    by hiding them when logging unhandled exceptions. 
+ 
+    Accept two forms: 
+ 
+    * with specified parameters: 
+ 
+        @sensitive_post_parameters('password', 'credit_card') 
+        def my_view(request): 
+            pw = request.POST['password'] 
+            cc = request.POST['credit_card'] 
+            ... 
+ 
+    * without any specified parameters, in which case consider all 
+      variables are sensitive: 
+ 
+        @sensitive_post_parameters() 
+        def my_view(request) 
+            ... 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">parameters</span><span class="s2">) == </span><span class="s4">1 </span><span class="s0">and </span><span class="s1">callable</span><span class="s2">(</span><span class="s1">parameters</span><span class="s2">[</span><span class="s4">0</span><span class="s2">]):</span>
+        <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+            <span class="s5">&quot;sensitive_post_parameters() must be called to use it as a &quot;</span>
+            <span class="s5">&quot;decorator, e.g., use @sensitive_post_parameters(), not &quot;</span>
+            <span class="s5">&quot;@sensitive_post_parameters.&quot;</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">decorator</span><span class="s2">(</span><span class="s1">view</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">iscoroutinefunction</span><span class="s2">(</span><span class="s1">view</span><span class="s2">):</span>
+
+            <span class="s2">@</span><span class="s1">wraps</span><span class="s2">(</span><span class="s1">view</span><span class="s2">)</span>
+            <span class="s0">async def </span><span class="s1">sensitive_post_parameters_wrapper</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+                <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">HttpRequest</span><span class="s2">):</span>
+                    <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                        <span class="s5">&quot;sensitive_post_parameters didn't receive an HttpRequest &quot;</span>
+                        <span class="s5">&quot;object. If you are decorating a classmethod, make sure to use &quot;</span>
+                        <span class="s5">&quot;@method_decorator.&quot;</span>
+                    <span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">parameters</span><span class="s2">:</span>
+                    <span class="s1">request</span><span class="s2">.</span><span class="s1">sensitive_post_parameters </span><span class="s2">= </span><span class="s1">parameters</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">request</span><span class="s2">.</span><span class="s1">sensitive_post_parameters </span><span class="s2">= </span><span class="s5">&quot;__ALL__&quot;</span>
+                <span class="s0">return await </span><span class="s1">view</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s0">else</span><span class="s2">:</span>
+
+            <span class="s2">@</span><span class="s1">wraps</span><span class="s2">(</span><span class="s1">view</span><span class="s2">)</span>
+            <span class="s0">def </span><span class="s1">sensitive_post_parameters_wrapper</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+                <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">HttpRequest</span><span class="s2">):</span>
+                    <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                        <span class="s5">&quot;sensitive_post_parameters didn't receive an HttpRequest &quot;</span>
+                        <span class="s5">&quot;object. If you are decorating a classmethod, make sure to use &quot;</span>
+                        <span class="s5">&quot;@method_decorator.&quot;</span>
+                    <span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">parameters</span><span class="s2">:</span>
+                    <span class="s1">request</span><span class="s2">.</span><span class="s1">sensitive_post_parameters </span><span class="s2">= </span><span class="s1">parameters</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">request</span><span class="s2">.</span><span class="s1">sensitive_post_parameters </span><span class="s2">= </span><span class="s5">&quot;__ALL__&quot;</span>
+                <span class="s0">return </span><span class="s1">view</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s1">sensitive_post_parameters_wrapper</span>
+
+    <span class="s0">return </span><span class="s1">decorator</span>
+</pre>
+</body>
+</html>

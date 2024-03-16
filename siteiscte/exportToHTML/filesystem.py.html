@@ -1,0 +1,66 @@
+<html>
+<head>
+<title>filesystem.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+filesystem.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Wrapper for loading templates from the filesystem. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">exceptions </span><span class="s2">import </span><span class="s1">SuspiciousFileOperation</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">template </span><span class="s2">import </span><span class="s1">Origin</span><span class="s3">, </span><span class="s1">TemplateDoesNotExist</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">_os </span><span class="s2">import </span><span class="s1">safe_join</span>
+
+<span class="s2">from </span><span class="s3">.</span><span class="s1">base </span><span class="s2">import </span><span class="s1">Loader </span><span class="s2">as </span><span class="s1">BaseLoader</span>
+
+
+<span class="s2">class </span><span class="s1">Loader</span><span class="s3">(</span><span class="s1">BaseLoader</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">engine</span><span class="s3">, </span><span class="s1">dirs</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">engine</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">dirs </span><span class="s3">= </span><span class="s1">dirs</span>
+
+    <span class="s2">def </span><span class="s1">get_dirs</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">dirs </span><span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">dirs </span><span class="s2">is not None else </span><span class="s1">self</span><span class="s3">.</span><span class="s1">engine</span><span class="s3">.</span><span class="s1">dirs</span>
+
+    <span class="s2">def </span><span class="s1">get_contents</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">origin</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">with </span><span class="s1">open</span><span class="s3">(</span><span class="s1">origin</span><span class="s3">.</span><span class="s1">name</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">engine</span><span class="s3">.</span><span class="s1">file_charset</span><span class="s3">) </span><span class="s2">as </span><span class="s1">fp</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">fp</span><span class="s3">.</span><span class="s1">read</span><span class="s3">()</span>
+        <span class="s2">except </span><span class="s1">FileNotFoundError</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">TemplateDoesNotExist</span><span class="s3">(</span><span class="s1">origin</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_template_sources</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">template_name</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return an Origin object pointing to an absolute path in each directory 
+        in template_dirs. For security reasons, if a path doesn't lie inside 
+        one of the template_dirs it is excluded from the result set. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">for </span><span class="s1">template_dir </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_dirs</span><span class="s3">():</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s1">name </span><span class="s3">= </span><span class="s1">safe_join</span><span class="s3">(</span><span class="s1">template_dir</span><span class="s3">, </span><span class="s1">template_name</span><span class="s3">)</span>
+            <span class="s2">except </span><span class="s1">SuspiciousFileOperation</span><span class="s3">:</span>
+                <span class="s4"># The joined path was located outside of this template_dir</span>
+                <span class="s4"># (it might be inside another one, so this isn't fatal).</span>
+                <span class="s2">continue</span>
+
+            <span class="s2">yield </span><span class="s1">Origin</span><span class="s3">(</span>
+                <span class="s1">name</span><span class="s3">=</span><span class="s1">name</span><span class="s3">,</span>
+                <span class="s1">template_name</span><span class="s3">=</span><span class="s1">template_name</span><span class="s3">,</span>
+                <span class="s1">loader</span><span class="s3">=</span><span class="s1">self</span><span class="s3">,</span>
+            <span class="s3">)</span>
+</pre>
+</body>
+</html>

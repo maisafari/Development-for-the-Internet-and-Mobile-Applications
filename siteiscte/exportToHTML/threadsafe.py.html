@@ -1,0 +1,99 @@
+<html>
+<head>
+<title>threadsafe.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+threadsafe.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">threading</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">GEOSBase</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos</span><span class="s2">.</span><span class="s1">libgeos </span><span class="s0">import </span><span class="s1">CONTEXT_PTR</span><span class="s2">, </span><span class="s1">error_h</span><span class="s2">, </span><span class="s1">lgeos</span><span class="s2">, </span><span class="s1">notice_h</span>
+
+
+<span class="s0">class </span><span class="s1">GEOSContextHandle</span><span class="s2">(</span><span class="s1">GEOSBase</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;Represent a GEOS context handle.&quot;&quot;&quot;</span>
+
+    <span class="s1">ptr_type </span><span class="s2">= </span><span class="s1">CONTEXT_PTR</span>
+    <span class="s1">destructor </span><span class="s2">= </span><span class="s1">lgeos</span><span class="s2">.</span><span class="s1">finishGEOS_r</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4"># Initializing the context handler for this thread with</span>
+        <span class="s4"># the notice and error handler.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">ptr </span><span class="s2">= </span><span class="s1">lgeos</span><span class="s2">.</span><span class="s1">initGEOS_r</span><span class="s2">(</span><span class="s1">notice_h</span><span class="s2">, </span><span class="s1">error_h</span><span class="s2">)</span>
+
+
+<span class="s4"># Defining a thread-local object and creating an instance</span>
+<span class="s4"># to hold a reference to GEOSContextHandle for this thread.</span>
+<span class="s0">class </span><span class="s1">GEOSContext</span><span class="s2">(</span><span class="s1">threading</span><span class="s2">.</span><span class="s1">local</span><span class="s2">):</span>
+    <span class="s1">handle </span><span class="s2">= </span><span class="s0">None</span>
+
+
+<span class="s1">thread_context </span><span class="s2">= </span><span class="s1">GEOSContext</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">GEOSFunc</span><span class="s2">:</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Serve as a wrapper for GEOS C Functions. Use thread-safe function 
+    variants when available. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">func_name</span><span class="s2">):</span>
+        <span class="s4"># GEOS thread-safe function signatures end with '_r' and take an</span>
+        <span class="s4"># additional context handle parameter.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">cfunc </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">lgeos</span><span class="s2">, </span><span class="s1">func_name </span><span class="s2">+ </span><span class="s5">&quot;_r&quot;</span><span class="s2">)</span>
+        <span class="s4"># Create a reference to thread_context so it's not garbage-collected</span>
+        <span class="s4"># before an attempt to call this object.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">thread_context </span><span class="s2">= </span><span class="s1">thread_context</span>
+
+    <span class="s0">def </span><span class="s1">__call__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">):</span>
+        <span class="s4"># Create a context handle if one doesn't exist for this thread.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">thread_context</span><span class="s2">.</span><span class="s1">handle </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">thread_context</span><span class="s2">.</span><span class="s1">handle </span><span class="s0">or </span><span class="s1">GEOSContextHandle</span><span class="s2">()</span>
+        <span class="s4"># Call the threaded GEOS routine with the pointer of the context handle</span>
+        <span class="s4"># as the first argument.</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">cfunc</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">thread_context</span><span class="s2">.</span><span class="s1">handle</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__str__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">cfunc</span><span class="s2">.</span><span class="s1">__name__</span>
+
+    <span class="s4"># argtypes property</span>
+    <span class="s0">def </span><span class="s1">_get_argtypes</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">cfunc</span><span class="s2">.</span><span class="s1">argtypes</span>
+
+    <span class="s0">def </span><span class="s1">_set_argtypes</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">cfunc</span><span class="s2">.</span><span class="s1">argtypes </span><span class="s2">= [</span><span class="s1">CONTEXT_PTR</span><span class="s2">, *</span><span class="s1">argtypes</span><span class="s2">]</span>
+
+    <span class="s1">argtypes </span><span class="s2">= </span><span class="s1">property</span><span class="s2">(</span><span class="s1">_get_argtypes</span><span class="s2">, </span><span class="s1">_set_argtypes</span><span class="s2">)</span>
+
+    <span class="s4"># restype property</span>
+    <span class="s0">def </span><span class="s1">_get_restype</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">cfunc</span><span class="s2">.</span><span class="s1">restype</span>
+
+    <span class="s0">def </span><span class="s1">_set_restype</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">restype</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">cfunc</span><span class="s2">.</span><span class="s1">restype </span><span class="s2">= </span><span class="s1">restype</span>
+
+    <span class="s1">restype </span><span class="s2">= </span><span class="s1">property</span><span class="s2">(</span><span class="s1">_get_restype</span><span class="s2">, </span><span class="s1">_set_restype</span><span class="s2">)</span>
+
+    <span class="s4"># errcheck property</span>
+    <span class="s0">def </span><span class="s1">_get_errcheck</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">cfunc</span><span class="s2">.</span><span class="s1">errcheck</span>
+
+    <span class="s0">def </span><span class="s1">_set_errcheck</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">errcheck</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">cfunc</span><span class="s2">.</span><span class="s1">errcheck </span><span class="s2">= </span><span class="s1">errcheck</span>
+
+    <span class="s1">errcheck </span><span class="s2">= </span><span class="s1">property</span><span class="s2">(</span><span class="s1">_get_errcheck</span><span class="s2">, </span><span class="s1">_set_errcheck</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

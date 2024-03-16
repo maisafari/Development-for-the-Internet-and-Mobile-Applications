@@ -1,0 +1,120 @@
+<html>
+<head>
+<title>sessions.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+sessions.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+
+<span class="s0">from </span><span class="s2">.. </span><span class="s0">import </span><span class="s1">Tags</span><span class="s2">, </span><span class="s1">Warning</span><span class="s2">, </span><span class="s1">register</span>
+
+
+<span class="s0">def </span><span class="s1">add_session_cookie_message</span><span class="s2">(</span><span class="s1">message</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">message </span><span class="s2">+ (</span>
+        <span class="s3">&quot; Using a secure-only session cookie makes it more difficult for &quot;</span>
+        <span class="s3">&quot;network traffic sniffers to hijack user sessions.&quot;</span>
+    <span class="s2">)</span>
+
+
+<span class="s1">W010 </span><span class="s2">= </span><span class="s1">Warning</span><span class="s2">(</span>
+    <span class="s1">add_session_cookie_message</span><span class="s2">(</span>
+        <span class="s3">&quot;You have 'django.contrib.sessions' in your INSTALLED_APPS, &quot;</span>
+        <span class="s3">&quot;but you have not set SESSION_COOKIE_SECURE to True.&quot;</span>
+    <span class="s2">),</span>
+    <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;security.W010&quot;</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+<span class="s1">W011 </span><span class="s2">= </span><span class="s1">Warning</span><span class="s2">(</span>
+    <span class="s1">add_session_cookie_message</span><span class="s2">(</span>
+        <span class="s3">&quot;You have 'django.contrib.sessions.middleware.SessionMiddleware' &quot;</span>
+        <span class="s3">&quot;in your MIDDLEWARE, but you have not set &quot;</span>
+        <span class="s3">&quot;SESSION_COOKIE_SECURE to True.&quot;</span>
+    <span class="s2">),</span>
+    <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;security.W011&quot;</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+<span class="s1">W012 </span><span class="s2">= </span><span class="s1">Warning</span><span class="s2">(</span>
+    <span class="s1">add_session_cookie_message</span><span class="s2">(</span><span class="s3">&quot;SESSION_COOKIE_SECURE is not set to True.&quot;</span><span class="s2">),</span>
+    <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;security.W012&quot;</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">add_httponly_message</span><span class="s2">(</span><span class="s1">message</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">message </span><span class="s2">+ (</span>
+        <span class="s3">&quot; Using an HttpOnly session cookie makes it more difficult for &quot;</span>
+        <span class="s3">&quot;cross-site scripting attacks to hijack user sessions.&quot;</span>
+    <span class="s2">)</span>
+
+
+<span class="s1">W013 </span><span class="s2">= </span><span class="s1">Warning</span><span class="s2">(</span>
+    <span class="s1">add_httponly_message</span><span class="s2">(</span>
+        <span class="s3">&quot;You have 'django.contrib.sessions' in your INSTALLED_APPS, &quot;</span>
+        <span class="s3">&quot;but you have not set SESSION_COOKIE_HTTPONLY to True.&quot;</span><span class="s2">,</span>
+    <span class="s2">),</span>
+    <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;security.W013&quot;</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+<span class="s1">W014 </span><span class="s2">= </span><span class="s1">Warning</span><span class="s2">(</span>
+    <span class="s1">add_httponly_message</span><span class="s2">(</span>
+        <span class="s3">&quot;You have 'django.contrib.sessions.middleware.SessionMiddleware' &quot;</span>
+        <span class="s3">&quot;in your MIDDLEWARE, but you have not set &quot;</span>
+        <span class="s3">&quot;SESSION_COOKIE_HTTPONLY to True.&quot;</span>
+    <span class="s2">),</span>
+    <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;security.W014&quot;</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+<span class="s1">W015 </span><span class="s2">= </span><span class="s1">Warning</span><span class="s2">(</span>
+    <span class="s1">add_httponly_message</span><span class="s2">(</span><span class="s3">&quot;SESSION_COOKIE_HTTPONLY is not set to True.&quot;</span><span class="s2">),</span>
+    <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;security.W015&quot;</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">(</span><span class="s1">Tags</span><span class="s2">.</span><span class="s1">security</span><span class="s2">, </span><span class="s1">deploy</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">check_session_cookie_secure</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SESSION_COOKIE_SECURE </span><span class="s0">is True</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s2">[]</span>
+    <span class="s1">errors </span><span class="s2">= []</span>
+    <span class="s0">if </span><span class="s1">_session_app</span><span class="s2">():</span>
+        <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">W010</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">_session_middleware</span><span class="s2">():</span>
+        <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">W011</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">errors</span><span class="s2">) &gt; </span><span class="s4">1</span><span class="s2">:</span>
+        <span class="s1">errors </span><span class="s2">= [</span><span class="s1">W012</span><span class="s2">]</span>
+    <span class="s0">return </span><span class="s1">errors</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">(</span><span class="s1">Tags</span><span class="s2">.</span><span class="s1">security</span><span class="s2">, </span><span class="s1">deploy</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">check_session_cookie_httponly</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SESSION_COOKIE_HTTPONLY </span><span class="s0">is True</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s2">[]</span>
+    <span class="s1">errors </span><span class="s2">= []</span>
+    <span class="s0">if </span><span class="s1">_session_app</span><span class="s2">():</span>
+        <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">W013</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">_session_middleware</span><span class="s2">():</span>
+        <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">W014</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">errors</span><span class="s2">) &gt; </span><span class="s4">1</span><span class="s2">:</span>
+        <span class="s1">errors </span><span class="s2">= [</span><span class="s1">W015</span><span class="s2">]</span>
+    <span class="s0">return </span><span class="s1">errors</span>
+
+
+<span class="s0">def </span><span class="s1">_session_middleware</span><span class="s2">():</span>
+    <span class="s0">return </span><span class="s3">&quot;django.contrib.sessions.middleware.SessionMiddleware&quot; </span><span class="s0">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">MIDDLEWARE</span>
+
+
+<span class="s0">def </span><span class="s1">_session_app</span><span class="s2">():</span>
+    <span class="s0">return </span><span class="s3">&quot;django.contrib.sessions&quot; </span><span class="s0">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">INSTALLED_APPS</span>
+</pre>
+</body>
+</html>

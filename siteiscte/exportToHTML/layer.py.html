@@ -1,0 +1,258 @@
+<html>
+<head>
+<title>layer.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #6aab73;}
+.s6 { color: #a5c261;}
+.s7 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+layer.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">byref</span><span class="s2">, </span><span class="s1">c_double</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">GDALBase</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">envelope </span><span class="s0">import </span><span class="s1">Envelope</span><span class="s2">, </span><span class="s1">OGREnvelope</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">error </span><span class="s0">import </span><span class="s1">GDALException</span><span class="s2">, </span><span class="s1">SRSException</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">feature </span><span class="s0">import </span><span class="s1">Feature</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">field </span><span class="s0">import </span><span class="s1">OGRFieldTypes</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">geometries </span><span class="s0">import </span><span class="s1">OGRGeometry</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">geomtype </span><span class="s0">import </span><span class="s1">OGRGeomType</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">prototypes </span><span class="s0">import </span><span class="s1">ds </span><span class="s0">as </span><span class="s1">capi</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">prototypes </span><span class="s0">import </span><span class="s1">geom </span><span class="s0">as </span><span class="s1">geom_api</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">prototypes </span><span class="s0">import </span><span class="s1">srs </span><span class="s0">as </span><span class="s1">srs_api</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">srs </span><span class="s0">import </span><span class="s1">SpatialReference</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">encoding </span><span class="s0">import </span><span class="s1">force_bytes</span><span class="s2">, </span><span class="s1">force_str</span>
+
+
+<span class="s3"># For more information, see the OGR C API source code:</span>
+<span class="s3">#  https://gdal.org/api/vector_c_api.html</span>
+<span class="s3">#</span>
+<span class="s3"># The OGR_L_* routines are relevant here.</span>
+<span class="s0">class </span><span class="s1">Layer</span><span class="s2">(</span><span class="s1">GDALBase</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    A class that wraps an OGR Layer, needs to be instantiated from a DataSource 
+    object. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">layer_ptr</span><span class="s2">, </span><span class="s1">ds</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Initialize on an OGR C pointer to the Layer and the `DataSource` object 
+        that owns this layer.  The `DataSource` object is required so that a 
+        reference to it is kept with this Layer.  This prevents garbage 
+        collection of the `DataSource` while this Layer is still active. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if not </span><span class="s1">layer_ptr</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">GDALException</span><span class="s2">(</span><span class="s5">&quot;Cannot create Layer, invalid pointer given&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">ptr </span><span class="s2">= </span><span class="s1">layer_ptr</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_ds </span><span class="s2">= </span><span class="s1">ds</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_ldefn </span><span class="s2">= </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_layer_defn</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">)</span>
+        <span class="s3"># Does the Layer support random reading?</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_random_read </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_capability</span><span class="s2">(</span><span class="s6">b&quot;RandomRead&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__getitem__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">index</span><span class="s2">):</span>
+        <span class="s4">&quot;Get the Feature at the specified index.&quot;</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">index</span><span class="s2">, </span><span class="s1">int</span><span class="s2">):</span>
+            <span class="s3"># An integer index was given -- we cannot do a check based on the</span>
+            <span class="s3"># number of features because the beginning and ending feature IDs</span>
+            <span class="s3"># are not guaranteed to be 0 and len(layer)-1, respectively.</span>
+            <span class="s0">if </span><span class="s1">index </span><span class="s2">&lt; </span><span class="s7">0</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">IndexError</span><span class="s2">(</span><span class="s5">&quot;Negative indices are not allowed on OGR Layers.&quot;</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_make_feature</span><span class="s2">(</span><span class="s1">index</span><span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">index</span><span class="s2">, </span><span class="s1">slice</span><span class="s2">):</span>
+            <span class="s3"># A slice was given</span>
+            <span class="s1">start</span><span class="s2">, </span><span class="s1">stop</span><span class="s2">, </span><span class="s1">stride </span><span class="s2">= </span><span class="s1">index</span><span class="s2">.</span><span class="s1">indices</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">num_feat</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_make_feature</span><span class="s2">(</span><span class="s1">fid</span><span class="s2">) </span><span class="s0">for </span><span class="s1">fid </span><span class="s0">in </span><span class="s1">range</span><span class="s2">(</span><span class="s1">start</span><span class="s2">, </span><span class="s1">stop</span><span class="s2">, </span><span class="s1">stride</span><span class="s2">)]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                <span class="s5">&quot;Integers and slices may only be used when indexing OGR Layers.&quot;</span>
+            <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__iter__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Iterate over each Feature in the Layer.&quot;</span>
+        <span class="s3"># ResetReading() must be called before iteration is to begin.</span>
+        <span class="s1">capi</span><span class="s2">.</span><span class="s1">reset_reading</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">num_feat</span><span class="s2">):</span>
+            <span class="s0">yield </span><span class="s1">Feature</span><span class="s2">(</span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_next_feature</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">), </span><span class="s1">self</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__len__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;The length is the number of features.&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">num_feat</span>
+
+    <span class="s0">def </span><span class="s1">__str__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;The string name of the layer.&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+
+    <span class="s0">def </span><span class="s1">_make_feature</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">feat_id</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Helper routine for __getitem__ that constructs a Feature from the given 
+        Feature ID.  If the OGR Layer does not support random-access reading, 
+        then each feature of the layer will be incremented through until the 
+        a Feature is found matching the given feature ID. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_random_read</span><span class="s2">:</span>
+            <span class="s3"># If the Layer supports random reading, return.</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">Feature</span><span class="s2">(</span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_feature</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">feat_id</span><span class="s2">), </span><span class="s1">self</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">GDALException</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s3"># Random access isn't supported, have to increment through</span>
+            <span class="s3"># each feature until the given feature ID is encountered.</span>
+            <span class="s0">for </span><span class="s1">feat </span><span class="s0">in </span><span class="s1">self</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">feat</span><span class="s2">.</span><span class="s1">fid </span><span class="s2">== </span><span class="s1">feat_id</span><span class="s2">:</span>
+                    <span class="s0">return </span><span class="s1">feat</span>
+        <span class="s3"># Should have returned a Feature, raise an IndexError.</span>
+        <span class="s0">raise </span><span class="s1">IndexError</span><span class="s2">(</span><span class="s5">&quot;Invalid feature id: %s.&quot; </span><span class="s2">% </span><span class="s1">feat_id</span><span class="s2">)</span>
+
+    <span class="s3"># #### Layer properties ####</span>
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">extent</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the extent (an Envelope) of this layer.&quot;</span>
+        <span class="s1">env </span><span class="s2">= </span><span class="s1">OGREnvelope</span><span class="s2">()</span>
+        <span class="s1">capi</span><span class="s2">.</span><span class="s1">get_extent</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">byref</span><span class="s2">(</span><span class="s1">env</span><span class="s2">), </span><span class="s7">1</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">Envelope</span><span class="s2">(</span><span class="s1">env</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the name of this layer in the Data Source.&quot;</span>
+        <span class="s1">name </span><span class="s2">= </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_fd_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ldefn</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">force_str</span><span class="s2">(</span><span class="s1">name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ds</span><span class="s2">.</span><span class="s1">encoding</span><span class="s2">, </span><span class="s1">strings_only</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">num_feat</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">force</span><span class="s2">=</span><span class="s7">1</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the number of features in the Layer.&quot;</span>
+        <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_feature_count</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">force</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">num_fields</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the number of fields in the Layer.&quot;</span>
+        <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_count</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ldefn</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">geom_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the geometry type (OGRGeomType) of the Layer.&quot;</span>
+        <span class="s0">return </span><span class="s1">OGRGeomType</span><span class="s2">(</span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_fd_geom_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ldefn</span><span class="s2">))</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">srs</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the Spatial Reference used in this Layer.&quot;</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">ptr </span><span class="s2">= </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_layer_srs</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">SpatialReference</span><span class="s2">(</span><span class="s1">srs_api</span><span class="s2">.</span><span class="s1">clone_srs</span><span class="s2">(</span><span class="s1">ptr</span><span class="s2">))</span>
+        <span class="s0">except </span><span class="s1">SRSException</span><span class="s2">:</span>
+            <span class="s0">return None</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">fields</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Return a list of string names corresponding to each of the Fields 
+        available in this Layer. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s2">[</span>
+            <span class="s1">force_str</span><span class="s2">(</span>
+                <span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_name</span><span class="s2">(</span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_defn</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ldefn</span><span class="s2">, </span><span class="s1">i</span><span class="s2">)),</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">_ds</span><span class="s2">.</span><span class="s1">encoding</span><span class="s2">,</span>
+                <span class="s1">strings_only</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+            <span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">num_fields</span><span class="s2">)</span>
+        <span class="s2">]</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">field_types</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Return a list of the types of fields in this Layer.  For example, 
+        return the list [OFTInteger, OFTReal, OFTString] for an OGR layer that 
+        has an integer, a floating-point, and string fields. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s2">[</span>
+            <span class="s1">OGRFieldTypes</span><span class="s2">[</span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_type</span><span class="s2">(</span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_defn</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ldefn</span><span class="s2">, </span><span class="s1">i</span><span class="s2">))]</span>
+            <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">num_fields</span><span class="s2">)</span>
+        <span class="s2">]</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">field_widths</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return a list of the maximum field widths for the features.&quot;</span>
+        <span class="s0">return </span><span class="s2">[</span>
+            <span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_width</span><span class="s2">(</span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_defn</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ldefn</span><span class="s2">, </span><span class="s1">i</span><span class="s2">))</span>
+            <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">num_fields</span><span class="s2">)</span>
+        <span class="s2">]</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">field_precisions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the field precisions for the features.&quot;</span>
+        <span class="s0">return </span><span class="s2">[</span>
+            <span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_precision</span><span class="s2">(</span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_defn</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ldefn</span><span class="s2">, </span><span class="s1">i</span><span class="s2">))</span>
+            <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">num_fields</span><span class="s2">)</span>
+        <span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">_get_spatial_filter</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">OGRGeometry</span><span class="s2">(</span><span class="s1">geom_api</span><span class="s2">.</span><span class="s1">clone_geom</span><span class="s2">(</span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_spatial_filter</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">)))</span>
+        <span class="s0">except </span><span class="s1">GDALException</span><span class="s2">:</span>
+            <span class="s0">return None</span>
+
+    <span class="s0">def </span><span class="s1">_set_spatial_filter</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">filter</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">filter</span><span class="s2">, </span><span class="s1">OGRGeometry</span><span class="s2">):</span>
+            <span class="s1">capi</span><span class="s2">.</span><span class="s1">set_spatial_filter</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">filter</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">filter</span><span class="s2">, (</span><span class="s1">tuple</span><span class="s2">, </span><span class="s1">list</span><span class="s2">)):</span>
+            <span class="s0">if not </span><span class="s1">len</span><span class="s2">(</span><span class="s1">filter</span><span class="s2">) == </span><span class="s7">4</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s5">&quot;Spatial filter list/tuple must have 4 elements.&quot;</span><span class="s2">)</span>
+            <span class="s3"># Map c_double onto params -- if a bad type is passed in it</span>
+            <span class="s3"># will be caught here.</span>
+            <span class="s1">xmin</span><span class="s2">, </span><span class="s1">ymin</span><span class="s2">, </span><span class="s1">xmax</span><span class="s2">, </span><span class="s1">ymax </span><span class="s2">= </span><span class="s1">map</span><span class="s2">(</span><span class="s1">c_double</span><span class="s2">, </span><span class="s1">filter</span><span class="s2">)</span>
+            <span class="s1">capi</span><span class="s2">.</span><span class="s1">set_spatial_filter_rect</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">xmin</span><span class="s2">, </span><span class="s1">ymin</span><span class="s2">, </span><span class="s1">xmax</span><span class="s2">, </span><span class="s1">ymax</span><span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">filter </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">capi</span><span class="s2">.</span><span class="s1">set_spatial_filter</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                <span class="s5">&quot;Spatial filter must be either an OGRGeometry instance, a 4-tuple, or &quot;</span>
+                <span class="s5">&quot;None.&quot;</span>
+            <span class="s2">)</span>
+
+    <span class="s1">spatial_filter </span><span class="s2">= </span><span class="s1">property</span><span class="s2">(</span><span class="s1">_get_spatial_filter</span><span class="s2">, </span><span class="s1">_set_spatial_filter</span><span class="s2">)</span>
+
+    <span class="s3"># #### Layer Methods ####</span>
+    <span class="s0">def </span><span class="s1">get_fields</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">field_name</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Return a list containing the given field name for every Feature 
+        in the Layer. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">field_name </span><span class="s0">not in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">GDALException</span><span class="s2">(</span><span class="s5">&quot;invalid field name: %s&quot; </span><span class="s2">% </span><span class="s1">field_name</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s2">[</span><span class="s1">feat</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">) </span><span class="s0">for </span><span class="s1">feat </span><span class="s0">in </span><span class="s1">self</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">get_geoms</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">geos</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Return a list containing the OGRGeometry for every Feature in 
+        the Layer. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">geos</span><span class="s2">:</span>
+            <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos </span><span class="s0">import </span><span class="s1">GEOSGeometry</span>
+
+            <span class="s0">return </span><span class="s2">[</span><span class="s1">GEOSGeometry</span><span class="s2">(</span><span class="s1">feat</span><span class="s2">.</span><span class="s1">geom</span><span class="s2">.</span><span class="s1">wkb</span><span class="s2">) </span><span class="s0">for </span><span class="s1">feat </span><span class="s0">in </span><span class="s1">self</span><span class="s2">]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s2">[</span><span class="s1">feat</span><span class="s2">.</span><span class="s1">geom </span><span class="s0">for </span><span class="s1">feat </span><span class="s0">in </span><span class="s1">self</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">test_capability</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">capability</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Return a bool indicating whether the this Layer supports the given 
+        capability (a string).  Valid capability strings include: 
+          'RandomRead', 'SequentialWrite', 'RandomWrite', 'FastSpatialFilter', 
+          'FastFeatureCount', 'FastGetExtent', 'CreateField', 'Transactions', 
+          'DeleteFeature', and 'FastSetNextByIndex'. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">bool</span><span class="s2">(</span><span class="s1">capi</span><span class="s2">.</span><span class="s1">test_capability</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">force_bytes</span><span class="s2">(</span><span class="s1">capability</span><span class="s2">)))</span>
+</pre>
+</body>
+</html>

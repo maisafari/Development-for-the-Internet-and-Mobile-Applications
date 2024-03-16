@@ -1,0 +1,77 @@
+<html>
+<head>
+<title>fallback.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+fallback.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">messages</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseStorage</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">messages</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">cookie </span><span class="s0">import </span><span class="s1">CookieStorage</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">messages</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">session </span><span class="s0">import </span><span class="s1">SessionStorage</span>
+
+
+<span class="s0">class </span><span class="s1">FallbackStorage</span><span class="s2">(</span><span class="s1">BaseStorage</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Try to store all messages in the first backend. Store any unstored 
+    messages in each subsequent backend. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">storage_classes </span><span class="s2">= (</span><span class="s1">CookieStorage</span><span class="s2">, </span><span class="s1">SessionStorage</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">storages </span><span class="s2">= [</span>
+            <span class="s1">storage_class</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">) </span><span class="s0">for </span><span class="s1">storage_class </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage_classes</span>
+        <span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_used_storages </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">_get</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Get a single list of messages from all storage backends. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">all_messages </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">storage </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storages</span><span class="s2">:</span>
+            <span class="s1">messages</span><span class="s2">, </span><span class="s1">all_retrieved </span><span class="s2">= </span><span class="s1">storage</span><span class="s2">.</span><span class="s1">_get</span><span class="s2">()</span>
+            <span class="s4"># If the backend hasn't been used, no more retrieval is necessary.</span>
+            <span class="s0">if </span><span class="s1">messages </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s0">break</span>
+            <span class="s0">if </span><span class="s1">messages</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">_used_storages</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s1">storage</span><span class="s2">)</span>
+            <span class="s1">all_messages</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">messages</span><span class="s2">)</span>
+            <span class="s4"># If this storage class contained all the messages, no further</span>
+            <span class="s4"># retrieval is necessary</span>
+            <span class="s0">if </span><span class="s1">all_retrieved</span><span class="s2">:</span>
+                <span class="s0">break</span>
+        <span class="s0">return </span><span class="s1">all_messages</span><span class="s2">, </span><span class="s1">all_retrieved</span>
+
+    <span class="s0">def </span><span class="s1">_store</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">messages</span><span class="s2">, </span><span class="s1">response</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Store the messages and return any unstored messages after trying all 
+        backends. 
+ 
+        For each storage backend, any messages not stored are passed on to the 
+        next backend. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">for </span><span class="s1">storage </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storages</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">messages</span><span class="s2">:</span>
+                <span class="s1">messages </span><span class="s2">= </span><span class="s1">storage</span><span class="s2">.</span><span class="s1">_store</span><span class="s2">(</span><span class="s1">messages</span><span class="s2">, </span><span class="s1">response</span><span class="s2">, </span><span class="s1">remove_oldest</span><span class="s2">=</span><span class="s0">False</span><span class="s2">)</span>
+            <span class="s4"># Even if there are no more messages, continue iterating to ensure</span>
+            <span class="s4"># storages which contained messages are flushed.</span>
+            <span class="s0">elif </span><span class="s1">storage </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_used_storages</span><span class="s2">:</span>
+                <span class="s1">storage</span><span class="s2">.</span><span class="s1">_store</span><span class="s2">([], </span><span class="s1">response</span><span class="s2">)</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">_used_storages</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">(</span><span class="s1">storage</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">messages</span>
+</pre>
+</body>
+</html>

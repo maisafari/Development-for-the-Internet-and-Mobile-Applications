@@ -1,0 +1,339 @@
+<html>
+<head>
+<title>writer.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #2aacb8;}
+.s5 { color: #6aab73;}
+.s6 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+writer.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">re</span>
+<span class="s0">from </span><span class="s1">importlib </span><span class="s0">import </span><span class="s1">import_module</span>
+
+<span class="s0">from </span><span class="s1">django </span><span class="s0">import </span><span class="s1">get_version</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+
+<span class="s3"># SettingsReference imported for backwards compatibility in Django 2.2.</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">SettingsReference  </span><span class="s3"># NOQA</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">migrations</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">loader </span><span class="s0">import </span><span class="s1">MigrationLoader</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">serializer </span><span class="s0">import </span><span class="s1">Serializer</span><span class="s2">, </span><span class="s1">serializer_factory</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">inspect </span><span class="s0">import </span><span class="s1">get_func_args</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">module_loading </span><span class="s0">import </span><span class="s1">module_dir</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">timezone </span><span class="s0">import </span><span class="s1">now</span>
+
+
+<span class="s0">class </span><span class="s1">OperationWriter</span><span class="s2">:</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">operation</span><span class="s2">, </span><span class="s1">indentation</span><span class="s2">=</span><span class="s4">2</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">operation </span><span class="s2">= </span><span class="s1">operation</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">buff </span><span class="s2">= []</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">indentation </span><span class="s2">= </span><span class="s1">indentation</span>
+
+    <span class="s0">def </span><span class="s1">serialize</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">def </span><span class="s1">_write</span><span class="s2">(</span><span class="s1">_arg_name</span><span class="s2">, </span><span class="s1">_arg_value</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">_arg_name </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">operation</span><span class="s2">.</span><span class="s1">serialization_expand_args </span><span class="s0">and </span><span class="s1">isinstance</span><span class="s2">(</span>
+                <span class="s1">_arg_value</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">, </span><span class="s1">dict</span><span class="s2">)</span>
+            <span class="s2">):</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">_arg_value</span><span class="s2">, </span><span class="s1">dict</span><span class="s2">):</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;%s={&quot; </span><span class="s2">% </span><span class="s1">_arg_name</span><span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">indent</span><span class="s2">()</span>
+                    <span class="s0">for </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value </span><span class="s0">in </span><span class="s1">_arg_value</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+                        <span class="s1">key_string</span><span class="s2">, </span><span class="s1">key_imports </span><span class="s2">= </span><span class="s1">MigrationWriter</span><span class="s2">.</span><span class="s1">serialize</span><span class="s2">(</span><span class="s1">key</span><span class="s2">)</span>
+                        <span class="s1">arg_string</span><span class="s2">, </span><span class="s1">arg_imports </span><span class="s2">= </span><span class="s1">MigrationWriter</span><span class="s2">.</span><span class="s1">serialize</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+                        <span class="s1">args </span><span class="s2">= </span><span class="s1">arg_string</span><span class="s2">.</span><span class="s1">splitlines</span><span class="s2">()</span>
+                        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">args</span><span class="s2">) &gt; </span><span class="s4">1</span><span class="s2">:</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;%s: %s&quot; </span><span class="s2">% (</span><span class="s1">key_string</span><span class="s2">, </span><span class="s1">args</span><span class="s2">[</span><span class="s4">0</span><span class="s2">]))</span>
+                            <span class="s0">for </span><span class="s1">arg </span><span class="s0">in </span><span class="s1">args</span><span class="s2">[</span><span class="s4">1</span><span class="s2">:-</span><span class="s4">1</span><span class="s2">]:</span>
+                                <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s1">arg</span><span class="s2">)</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;%s,&quot; </span><span class="s2">% </span><span class="s1">args</span><span class="s2">[-</span><span class="s4">1</span><span class="s2">])</span>
+                        <span class="s0">else</span><span class="s2">:</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;%s: %s,&quot; </span><span class="s2">% (</span><span class="s1">key_string</span><span class="s2">, </span><span class="s1">arg_string</span><span class="s2">))</span>
+                        <span class="s1">imports</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">key_imports</span><span class="s2">)</span>
+                        <span class="s1">imports</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">arg_imports</span><span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">unindent</span><span class="s2">()</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;},&quot;</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;%s=[&quot; </span><span class="s2">% </span><span class="s1">_arg_name</span><span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">indent</span><span class="s2">()</span>
+                    <span class="s0">for </span><span class="s1">item </span><span class="s0">in </span><span class="s1">_arg_value</span><span class="s2">:</span>
+                        <span class="s1">arg_string</span><span class="s2">, </span><span class="s1">arg_imports </span><span class="s2">= </span><span class="s1">MigrationWriter</span><span class="s2">.</span><span class="s1">serialize</span><span class="s2">(</span><span class="s1">item</span><span class="s2">)</span>
+                        <span class="s1">args </span><span class="s2">= </span><span class="s1">arg_string</span><span class="s2">.</span><span class="s1">splitlines</span><span class="s2">()</span>
+                        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">args</span><span class="s2">) &gt; </span><span class="s4">1</span><span class="s2">:</span>
+                            <span class="s0">for </span><span class="s1">arg </span><span class="s0">in </span><span class="s1">args</span><span class="s2">[:-</span><span class="s4">1</span><span class="s2">]:</span>
+                                <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s1">arg</span><span class="s2">)</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;%s,&quot; </span><span class="s2">% </span><span class="s1">args</span><span class="s2">[-</span><span class="s4">1</span><span class="s2">])</span>
+                        <span class="s0">else</span><span class="s2">:</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;%s,&quot; </span><span class="s2">% </span><span class="s1">arg_string</span><span class="s2">)</span>
+                        <span class="s1">imports</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">arg_imports</span><span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">unindent</span><span class="s2">()</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;],&quot;</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">arg_string</span><span class="s2">, </span><span class="s1">arg_imports </span><span class="s2">= </span><span class="s1">MigrationWriter</span><span class="s2">.</span><span class="s1">serialize</span><span class="s2">(</span><span class="s1">_arg_value</span><span class="s2">)</span>
+                <span class="s1">args </span><span class="s2">= </span><span class="s1">arg_string</span><span class="s2">.</span><span class="s1">splitlines</span><span class="s2">()</span>
+                <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">args</span><span class="s2">) &gt; </span><span class="s4">1</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;%s=%s&quot; </span><span class="s2">% (</span><span class="s1">_arg_name</span><span class="s2">, </span><span class="s1">args</span><span class="s2">[</span><span class="s4">0</span><span class="s2">]))</span>
+                    <span class="s0">for </span><span class="s1">arg </span><span class="s0">in </span><span class="s1">args</span><span class="s2">[</span><span class="s4">1</span><span class="s2">:-</span><span class="s4">1</span><span class="s2">]:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s1">arg</span><span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;%s,&quot; </span><span class="s2">% </span><span class="s1">args</span><span class="s2">[-</span><span class="s4">1</span><span class="s2">])</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;%s=%s,&quot; </span><span class="s2">% (</span><span class="s1">_arg_name</span><span class="s2">, </span><span class="s1">arg_string</span><span class="s2">))</span>
+                <span class="s1">imports</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">arg_imports</span><span class="s2">)</span>
+
+        <span class="s1">imports </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+        <span class="s1">name</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">operation</span><span class="s2">.</span><span class="s1">deconstruct</span><span class="s2">()</span>
+        <span class="s1">operation_args </span><span class="s2">= </span><span class="s1">get_func_args</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">operation</span><span class="s2">.</span><span class="s1">__init__</span><span class="s2">)</span>
+
+        <span class="s3"># See if this operation is in django.db.migrations. If it is,</span>
+        <span class="s3"># We can just use the fact we already have that imported,</span>
+        <span class="s3"># otherwise, we need to add an import for the operation class.</span>
+        <span class="s0">if </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">migrations</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s0">None</span><span class="s2">) == </span><span class="s1">self</span><span class="s2">.</span><span class="s1">operation</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;migrations.%s(&quot; </span><span class="s2">% </span><span class="s1">name</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">imports</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s5">&quot;import %s&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">operation</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__module__</span><span class="s2">))</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;%s.%s(&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">operation</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__module__</span><span class="s2">, </span><span class="s1">name</span><span class="s2">))</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">indent</span><span class="s2">()</span>
+
+        <span class="s0">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">arg </span><span class="s0">in </span><span class="s1">enumerate</span><span class="s2">(</span><span class="s1">args</span><span class="s2">):</span>
+            <span class="s1">arg_value </span><span class="s2">= </span><span class="s1">arg</span>
+            <span class="s1">arg_name </span><span class="s2">= </span><span class="s1">operation_args</span><span class="s2">[</span><span class="s1">i</span><span class="s2">]</span>
+            <span class="s1">_write</span><span class="s2">(</span><span class="s1">arg_name</span><span class="s2">, </span><span class="s1">arg_value</span><span class="s2">)</span>
+
+        <span class="s1">i </span><span class="s2">= </span><span class="s1">len</span><span class="s2">(</span><span class="s1">args</span><span class="s2">)</span>
+        <span class="s3"># Only iterate over remaining arguments</span>
+        <span class="s0">for </span><span class="s1">arg_name </span><span class="s0">in </span><span class="s1">operation_args</span><span class="s2">[</span><span class="s1">i</span><span class="s2">:]:</span>
+            <span class="s0">if </span><span class="s1">arg_name </span><span class="s0">in </span><span class="s1">kwargs</span><span class="s2">:  </span><span class="s3"># Don't sort to maintain signature order</span>
+                <span class="s1">arg_value </span><span class="s2">= </span><span class="s1">kwargs</span><span class="s2">[</span><span class="s1">arg_name</span><span class="s2">]</span>
+                <span class="s1">_write</span><span class="s2">(</span><span class="s1">arg_name</span><span class="s2">, </span><span class="s1">arg_value</span><span class="s2">)</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">unindent</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">feed</span><span class="s2">(</span><span class="s5">&quot;),&quot;</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">render</span><span class="s2">(), </span><span class="s1">imports</span>
+
+    <span class="s0">def </span><span class="s1">indent</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">indentation </span><span class="s2">+= </span><span class="s4">1</span>
+
+    <span class="s0">def </span><span class="s1">unindent</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">indentation </span><span class="s2">-= </span><span class="s4">1</span>
+
+    <span class="s0">def </span><span class="s1">feed</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">line</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">buff</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s5">&quot; &quot; </span><span class="s2">* (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">indentation </span><span class="s2">* </span><span class="s4">4</span><span class="s2">) + </span><span class="s1">line</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s5">&quot;</span><span class="s0">\n</span><span class="s5">&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">buff</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">MigrationWriter</span><span class="s2">:</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Take a Migration instance and is able to produce the contents 
+    of the migration file from it. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">include_header</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">migration </span><span class="s2">= </span><span class="s1">migration</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">include_header </span><span class="s2">= </span><span class="s1">include_header</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">needs_manual_porting </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s0">def </span><span class="s1">as_string</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot;Return a string of the file contents.&quot;&quot;&quot;</span>
+        <span class="s1">items </span><span class="s2">= {</span>
+            <span class="s5">&quot;replaces_str&quot;</span><span class="s2">: </span><span class="s5">&quot;&quot;</span><span class="s2">,</span>
+            <span class="s5">&quot;initial_str&quot;</span><span class="s2">: </span><span class="s5">&quot;&quot;</span><span class="s2">,</span>
+        <span class="s2">}</span>
+
+        <span class="s1">imports </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+
+        <span class="s3"># Deconstruct operations</span>
+        <span class="s1">operations </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">operation </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">operations</span><span class="s2">:</span>
+            <span class="s1">operation_string</span><span class="s2">, </span><span class="s1">operation_imports </span><span class="s2">= </span><span class="s1">OperationWriter</span><span class="s2">(</span><span class="s1">operation</span><span class="s2">).</span><span class="s1">serialize</span><span class="s2">()</span>
+            <span class="s1">imports</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">operation_imports</span><span class="s2">)</span>
+            <span class="s1">operations</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">operation_string</span><span class="s2">)</span>
+        <span class="s1">items</span><span class="s2">[</span><span class="s5">&quot;operations&quot;</span><span class="s2">] = </span><span class="s5">&quot;</span><span class="s0">\n</span><span class="s5">&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">operations</span><span class="s2">) + </span><span class="s5">&quot;</span><span class="s0">\n</span><span class="s5">&quot; </span><span class="s0">if </span><span class="s1">operations </span><span class="s0">else </span><span class="s5">&quot;&quot;</span>
+
+        <span class="s3"># Format dependencies and write out swappable dependencies right</span>
+        <span class="s1">dependencies </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">dependency </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">dependencies</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">dependency</span><span class="s2">[</span><span class="s4">0</span><span class="s2">] == </span><span class="s5">&quot;__setting__&quot;</span><span class="s2">:</span>
+                <span class="s1">dependencies</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s5">&quot;        migrations.swappable_dependency(settings.%s),&quot;</span>
+                    <span class="s2">% </span><span class="s1">dependency</span><span class="s2">[</span><span class="s4">1</span><span class="s2">]</span>
+                <span class="s2">)</span>
+                <span class="s1">imports</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s5">&quot;from django.conf import settings&quot;</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">dependencies</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s5">&quot;        %s,&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">serialize</span><span class="s2">(</span><span class="s1">dependency</span><span class="s2">)[</span><span class="s4">0</span><span class="s2">])</span>
+        <span class="s1">items</span><span class="s2">[</span><span class="s5">&quot;dependencies&quot;</span><span class="s2">] = (</span>
+            <span class="s5">&quot;</span><span class="s0">\n</span><span class="s5">&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">dependencies</span><span class="s2">)) + </span><span class="s5">&quot;</span><span class="s0">\n</span><span class="s5">&quot; </span><span class="s0">if </span><span class="s1">dependencies </span><span class="s0">else </span><span class="s5">&quot;&quot;</span>
+        <span class="s2">)</span>
+
+        <span class="s3"># Format imports nicely, swapping imports of functions from migration files</span>
+        <span class="s3"># for comments</span>
+        <span class="s1">migration_imports </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+        <span class="s0">for </span><span class="s1">line </span><span class="s0">in </span><span class="s1">list</span><span class="s2">(</span><span class="s1">imports</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">re</span><span class="s2">.</span><span class="s1">match</span><span class="s2">(</span><span class="s5">r&quot;^import (.*)\.\d+[^\s]*$&quot;</span><span class="s2">, </span><span class="s1">line</span><span class="s2">):</span>
+                <span class="s1">migration_imports</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s1">line</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s5">&quot;import&quot;</span><span class="s2">)[</span><span class="s4">1</span><span class="s2">].</span><span class="s1">strip</span><span class="s2">())</span>
+                <span class="s1">imports</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">(</span><span class="s1">line</span><span class="s2">)</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">needs_manual_porting </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s3"># django.db.migrations is always used, but models import may not be.</span>
+        <span class="s3"># If models import exists, merge it with migrations import.</span>
+        <span class="s0">if </span><span class="s5">&quot;from django.db import models&quot; </span><span class="s0">in </span><span class="s1">imports</span><span class="s2">:</span>
+            <span class="s1">imports</span><span class="s2">.</span><span class="s1">discard</span><span class="s2">(</span><span class="s5">&quot;from django.db import models&quot;</span><span class="s2">)</span>
+            <span class="s1">imports</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s5">&quot;from django.db import migrations, models&quot;</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">imports</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s5">&quot;from django.db import migrations&quot;</span><span class="s2">)</span>
+
+        <span class="s3"># Sort imports by the package / module to be imported (the part after</span>
+        <span class="s3"># &quot;from&quot; in &quot;from ... import ...&quot; or after &quot;import&quot; in &quot;import ...&quot;).</span>
+        <span class="s3"># First group the &quot;import&quot; statements, then &quot;from ... import ...&quot;.</span>
+        <span class="s1">sorted_imports </span><span class="s2">= </span><span class="s1">sorted</span><span class="s2">(</span>
+            <span class="s1">imports</span><span class="s2">, </span><span class="s1">key</span><span class="s2">=</span><span class="s0">lambda </span><span class="s1">i</span><span class="s2">: (</span><span class="s1">i</span><span class="s2">.</span><span class="s1">split</span><span class="s2">()[</span><span class="s4">0</span><span class="s2">] == </span><span class="s5">&quot;from&quot;</span><span class="s2">, </span><span class="s1">i</span><span class="s2">.</span><span class="s1">split</span><span class="s2">()[</span><span class="s4">1</span><span class="s2">])</span>
+        <span class="s2">)</span>
+        <span class="s1">items</span><span class="s2">[</span><span class="s5">&quot;imports&quot;</span><span class="s2">] = </span><span class="s5">&quot;</span><span class="s0">\n</span><span class="s5">&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">sorted_imports</span><span class="s2">) + </span><span class="s5">&quot;</span><span class="s0">\n</span><span class="s5">&quot; </span><span class="s0">if </span><span class="s1">imports </span><span class="s0">else </span><span class="s5">&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">migration_imports</span><span class="s2">:</span>
+            <span class="s1">items</span><span class="s2">[</span><span class="s5">&quot;imports&quot;</span><span class="s2">] += (</span>
+                <span class="s5">&quot;</span><span class="s0">\n\n</span><span class="s5"># Functions from the following migrations need manual &quot;</span>
+                <span class="s5">&quot;copying.</span><span class="s0">\n</span><span class="s5"># Move them and any dependencies into this file, &quot;</span>
+                <span class="s5">&quot;then update the</span><span class="s0">\n</span><span class="s5"># RunPython operations to refer to the local &quot;</span>
+                <span class="s5">&quot;versions:</span><span class="s0">\n</span><span class="s5"># %s&quot;</span>
+            <span class="s2">) % </span><span class="s5">&quot;</span><span class="s0">\n</span><span class="s5"># &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">migration_imports</span><span class="s2">))</span>
+        <span class="s3"># If there's a replaces, make a string for it</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">replaces</span><span class="s2">:</span>
+            <span class="s1">items</span><span class="s2">[</span><span class="s5">&quot;replaces_str&quot;</span><span class="s2">] = (</span>
+                <span class="s5">&quot;</span><span class="s0">\n    </span><span class="s5">replaces = %s</span><span class="s0">\n</span><span class="s5">&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">serialize</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">replaces</span><span class="s2">)[</span><span class="s4">0</span><span class="s2">]</span>
+            <span class="s2">)</span>
+        <span class="s3"># Hinting that goes into comment</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">include_header</span><span class="s2">:</span>
+            <span class="s1">items</span><span class="s2">[</span><span class="s5">&quot;migration_header&quot;</span><span class="s2">] = </span><span class="s1">MIGRATION_HEADER_TEMPLATE </span><span class="s2">% {</span>
+                <span class="s5">&quot;version&quot;</span><span class="s2">: </span><span class="s1">get_version</span><span class="s2">(),</span>
+                <span class="s5">&quot;timestamp&quot;</span><span class="s2">: </span><span class="s1">now</span><span class="s2">().</span><span class="s1">strftime</span><span class="s2">(</span><span class="s5">&quot;%Y-%m-%d %H:%M&quot;</span><span class="s2">),</span>
+            <span class="s2">}</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">items</span><span class="s2">[</span><span class="s5">&quot;migration_header&quot;</span><span class="s2">] = </span><span class="s5">&quot;&quot;</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">initial</span><span class="s2">:</span>
+            <span class="s1">items</span><span class="s2">[</span><span class="s5">&quot;initial_str&quot;</span><span class="s2">] = </span><span class="s5">&quot;</span><span class="s0">\n    </span><span class="s5">initial = True</span><span class="s0">\n</span><span class="s5">&quot;</span>
+
+        <span class="s0">return </span><span class="s1">MIGRATION_TEMPLATE </span><span class="s2">% </span><span class="s1">items</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">basedir</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">migrations_package_name</span><span class="s2">, </span><span class="s1">_ </span><span class="s2">= </span><span class="s1">MigrationLoader</span><span class="s2">.</span><span class="s1">migrations_module</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label</span>
+        <span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">migrations_package_name </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                <span class="s5">&quot;Django can't create migrations for app '%s' because &quot;</span>
+                <span class="s5">&quot;migrations have been disabled via the MIGRATION_MODULES &quot;</span>
+                <span class="s5">&quot;setting.&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label</span>
+            <span class="s2">)</span>
+
+        <span class="s3"># See if we can import the migrations module directly</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">migrations_module </span><span class="s2">= </span><span class="s1">import_module</span><span class="s2">(</span><span class="s1">migrations_package_name</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">ImportError</span><span class="s2">:</span>
+            <span class="s0">pass</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">module_dir</span><span class="s2">(</span><span class="s1">migrations_module</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">ValueError</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+
+        <span class="s3"># Alright, see if it's a direct submodule of the app</span>
+        <span class="s1">app_config </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_config</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">)</span>
+        <span class="s2">(</span>
+            <span class="s1">maybe_app_name</span><span class="s2">,</span>
+            <span class="s1">_</span><span class="s2">,</span>
+            <span class="s1">migrations_package_basename</span><span class="s2">,</span>
+        <span class="s2">) = </span><span class="s1">migrations_package_name</span><span class="s2">.</span><span class="s1">rpartition</span><span class="s2">(</span><span class="s5">&quot;.&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">name </span><span class="s2">== </span><span class="s1">maybe_app_name</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">path</span><span class="s2">, </span><span class="s1">migrations_package_basename</span><span class="s2">)</span>
+
+        <span class="s3"># In case of using MIGRATION_MODULES setting and the custom package</span>
+        <span class="s3"># doesn't exist, create one, starting from an existing package</span>
+        <span class="s1">existing_dirs</span><span class="s2">, </span><span class="s1">missing_dirs </span><span class="s2">= </span><span class="s1">migrations_package_name</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s5">&quot;.&quot;</span><span class="s2">), []</span>
+        <span class="s0">while </span><span class="s1">existing_dirs</span><span class="s2">:</span>
+            <span class="s1">missing_dirs</span><span class="s2">.</span><span class="s1">insert</span><span class="s2">(</span><span class="s4">0</span><span class="s2">, </span><span class="s1">existing_dirs</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(-</span><span class="s4">1</span><span class="s2">))</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">base_module </span><span class="s2">= </span><span class="s1">import_module</span><span class="s2">(</span><span class="s5">&quot;.&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">existing_dirs</span><span class="s2">))</span>
+            <span class="s0">except </span><span class="s2">(</span><span class="s1">ImportError</span><span class="s2">, </span><span class="s1">ValueError</span><span class="s2">):</span>
+                <span class="s0">continue</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">base_dir </span><span class="s2">= </span><span class="s1">module_dir</span><span class="s2">(</span><span class="s1">base_module</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">ValueError</span><span class="s2">:</span>
+                    <span class="s0">continue</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s0">break</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                <span class="s5">&quot;Could not locate an appropriate location to create &quot;</span>
+                <span class="s5">&quot;migrations package %s. Make sure the toplevel &quot;</span>
+                <span class="s5">&quot;package exists and can be imported.&quot; </span><span class="s2">% </span><span class="s1">migrations_package_name</span>
+            <span class="s2">)</span>
+
+        <span class="s1">final_dir </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">base_dir</span><span class="s2">, *</span><span class="s1">missing_dirs</span><span class="s2">)</span>
+        <span class="s1">os</span><span class="s2">.</span><span class="s1">makedirs</span><span class="s2">(</span><span class="s1">final_dir</span><span class="s2">, </span><span class="s1">exist_ok</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">missing_dir </span><span class="s0">in </span><span class="s1">missing_dirs</span><span class="s2">:</span>
+            <span class="s1">base_dir </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">base_dir</span><span class="s2">, </span><span class="s1">missing_dir</span><span class="s2">)</span>
+            <span class="s0">with </span><span class="s1">open</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">base_dir</span><span class="s2">, </span><span class="s5">&quot;__init__.py&quot;</span><span class="s2">), </span><span class="s5">&quot;w&quot;</span><span class="s2">):</span>
+                <span class="s0">pass</span>
+
+        <span class="s0">return </span><span class="s1">final_dir</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">filename</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s5">&quot;%s.py&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">name</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">path</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">basedir</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">filename</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">serialize</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">value</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">serializer_factory</span><span class="s2">(</span><span class="s1">value</span><span class="s2">).</span><span class="s1">serialize</span><span class="s2">()</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">register_serializer</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">type_</span><span class="s2">, </span><span class="s1">serializer</span><span class="s2">):</span>
+        <span class="s1">Serializer</span><span class="s2">.</span><span class="s1">register</span><span class="s2">(</span><span class="s1">type_</span><span class="s2">, </span><span class="s1">serializer</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">unregister_serializer</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">type_</span><span class="s2">):</span>
+        <span class="s1">Serializer</span><span class="s2">.</span><span class="s1">unregister</span><span class="s2">(</span><span class="s1">type_</span><span class="s2">)</span>
+
+
+<span class="s1">MIGRATION_HEADER_TEMPLATE </span><span class="s2">= </span><span class="s5">&quot;&quot;&quot;</span><span class="s0">\ 
+</span><span class="s5"># Generated by Django %(version)s on %(timestamp)s 
+ 
+&quot;&quot;&quot;</span>
+
+
+<span class="s1">MIGRATION_TEMPLATE </span><span class="s2">= </span><span class="s5">&quot;&quot;&quot;</span><span class="s0">\ 
+</span><span class="s5">%(migration_header)s%(imports)s 
+ 
+class Migration(migrations.Migration): 
+%(replaces_str)s%(initial_str)s 
+    dependencies = [ 
+%(dependencies)s</span><span class="s0">\ 
+    </span><span class="s5">] 
+ 
+    operations = [ 
+%(operations)s</span><span class="s0">\ 
+    </span><span class="s5">] 
+&quot;&quot;&quot;</span>
+</pre>
+</body>
+</html>

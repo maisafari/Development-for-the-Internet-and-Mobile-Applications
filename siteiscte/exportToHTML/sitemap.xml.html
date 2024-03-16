@@ -1,0 +1,36 @@
+<html>
+<head>
+<title>sitemap.xml</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #d5b778;}
+.s1 { color: #bcbec4;}
+.s2 { color: #6aab73;}
+.s3 { color: #bcbec4;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+sitemap.xml</font>
+</center></td></tr></table>
+<pre><span class="s0">&lt;?</span><span class="s1">xml version</span><span class="s2">=&quot;1.0&quot; </span><span class="s1">encoding</span><span class="s2">=&quot;UTF-8&quot;</span><span class="s0">?&gt;</span>
+<span class="s0">&lt;urlset </span><span class="s1">xmlns</span><span class="s2">=&quot;http://www.sitemaps.org/schemas/sitemap/0.9&quot; </span><span class="s1">xmlns:xhtml</span><span class="s2">=&quot;http://www.w3.org/1999/xhtml&quot;</span><span class="s0">&gt;</span>
+<span class="s3">{% spaceless %}</span>
+<span class="s3">{% for url in urlset %}</span>
+  <span class="s0">&lt;url&gt;</span>
+    <span class="s0">&lt;loc&gt;</span><span class="s3">{{ url.location }}</span><span class="s0">&lt;/loc&gt;</span>
+    <span class="s3">{% if url.lastmod %}</span><span class="s0">&lt;lastmod&gt;</span><span class="s3">{{ url.lastmod|date:&quot;Y-m-d&quot; }}</span><span class="s0">&lt;/lastmod&gt;</span><span class="s3">{% endif %}</span>
+    <span class="s3">{% if url.changefreq %}</span><span class="s0">&lt;changefreq&gt;</span><span class="s3">{{ url.changefreq }}</span><span class="s0">&lt;/changefreq&gt;</span><span class="s3">{% endif %}</span>
+    <span class="s3">{% if url.priority %}</span><span class="s0">&lt;priority&gt;</span><span class="s3">{{ url.priority }}</span><span class="s0">&lt;/priority&gt;</span><span class="s3">{% endif %}</span>
+    <span class="s3">{% for alternate in url.alternates %}</span>
+    <span class="s0">&lt;xhtml:link </span><span class="s1">rel</span><span class="s2">=&quot;alternate&quot; </span><span class="s1">hreflang</span><span class="s2">=&quot;{{ alternate.lang_code }}&quot; </span><span class="s1">href</span><span class="s2">=&quot;{{ alternate.location }}&quot;</span><span class="s0">/&gt;</span>
+    <span class="s3">{% endfor %}</span>
+  <span class="s0">&lt;/url&gt;</span>
+<span class="s3">{% endfor %}</span>
+<span class="s3">{% endspaceless %}</span>
+<span class="s0">&lt;/urlset&gt;</span>
+</pre>
+</body>
+</html>

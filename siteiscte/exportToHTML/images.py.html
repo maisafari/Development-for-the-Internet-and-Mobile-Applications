@@ -1,0 +1,112 @@
+<html>
+<head>
+<title>images.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #2aacb8;}
+.s5 { color: #6aab73;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+images.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Utility functions for handling images. 
+ 
+Requires Pillow as you might imagine. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">struct</span>
+<span class="s2">import </span><span class="s1">zlib</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">files </span><span class="s2">import </span><span class="s1">File</span>
+
+
+<span class="s2">class </span><span class="s1">ImageFile</span><span class="s3">(</span><span class="s1">File</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    A mixin for use alongside django.core.files.base.File, which provides 
+    additional features for dealing with images. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">width</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_get_image_dimensions</span><span class="s3">()[</span><span class="s4">0</span><span class="s3">]</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">height</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_get_image_dimensions</span><span class="s3">()[</span><span class="s4">1</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">_get_image_dimensions</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">if not </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s5">&quot;_dimensions_cache&quot;</span><span class="s3">):</span>
+            <span class="s1">close </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">closed</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">open</span><span class="s3">()</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_dimensions_cache </span><span class="s3">= </span><span class="s1">get_image_dimensions</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">close</span><span class="s3">=</span><span class="s1">close</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_dimensions_cache</span>
+
+
+<span class="s2">def </span><span class="s1">get_image_dimensions</span><span class="s3">(</span><span class="s1">file_or_path</span><span class="s3">, </span><span class="s1">close</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Return the (width, height) of an image, given an open file or a path.  Set 
+    'close' to True to close the file at the end if it is initially in an open 
+    state. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">from </span><span class="s1">PIL </span><span class="s2">import </span><span class="s1">ImageFile </span><span class="s2">as </span><span class="s1">PillowImageFile</span>
+
+    <span class="s1">p </span><span class="s3">= </span><span class="s1">PillowImageFile</span><span class="s3">.</span><span class="s1">Parser</span><span class="s3">()</span>
+    <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">file_or_path</span><span class="s3">, </span><span class="s5">&quot;read&quot;</span><span class="s3">):</span>
+        <span class="s1">file </span><span class="s3">= </span><span class="s1">file_or_path</span>
+        <span class="s1">file_pos </span><span class="s3">= </span><span class="s1">file</span><span class="s3">.</span><span class="s1">tell</span><span class="s3">()</span>
+        <span class="s1">file</span><span class="s3">.</span><span class="s1">seek</span><span class="s3">(</span><span class="s4">0</span><span class="s3">)</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">file </span><span class="s3">= </span><span class="s1">open</span><span class="s3">(</span><span class="s1">file_or_path</span><span class="s3">, </span><span class="s5">&quot;rb&quot;</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">OSError</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s2">None</span><span class="s3">)</span>
+        <span class="s1">close </span><span class="s3">= </span><span class="s2">True</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s6"># Most of the time Pillow only needs a small chunk to parse the image</span>
+        <span class="s6"># and get the dimensions, but with some TIFF files Pillow needs to</span>
+        <span class="s6"># parse the whole file.</span>
+        <span class="s1">chunk_size </span><span class="s3">= </span><span class="s4">1024</span>
+        <span class="s2">while </span><span class="s4">1</span><span class="s3">:</span>
+            <span class="s1">data </span><span class="s3">= </span><span class="s1">file</span><span class="s3">.</span><span class="s1">read</span><span class="s3">(</span><span class="s1">chunk_size</span><span class="s3">)</span>
+            <span class="s2">if not </span><span class="s1">data</span><span class="s3">:</span>
+                <span class="s2">break</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s1">p</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">(</span><span class="s1">data</span><span class="s3">)</span>
+            <span class="s2">except </span><span class="s1">zlib</span><span class="s3">.</span><span class="s1">error </span><span class="s2">as </span><span class="s1">e</span><span class="s3">:</span>
+                <span class="s6"># ignore zlib complaining on truncated stream, just feed more</span>
+                <span class="s6"># data to parser (ticket #19457).</span>
+                <span class="s2">if </span><span class="s1">e</span><span class="s3">.</span><span class="s1">args</span><span class="s3">[</span><span class="s4">0</span><span class="s3">].</span><span class="s1">startswith</span><span class="s3">(</span><span class="s5">&quot;Error -5&quot;</span><span class="s3">):</span>
+                    <span class="s2">pass</span>
+                <span class="s2">else</span><span class="s3">:</span>
+                    <span class="s2">raise</span>
+            <span class="s2">except </span><span class="s1">struct</span><span class="s3">.</span><span class="s1">error</span><span class="s3">:</span>
+                <span class="s6"># Ignore PIL failing on a too short buffer when reads return</span>
+                <span class="s6"># less bytes than expected. Skip and feed more data to the</span>
+                <span class="s6"># parser (ticket #24544).</span>
+                <span class="s2">pass</span>
+            <span class="s2">except </span><span class="s1">RuntimeError</span><span class="s3">:</span>
+                <span class="s6"># e.g. &quot;RuntimeError: could not create decoder object&quot; for</span>
+                <span class="s6"># WebP files. A different chunk_size may work.</span>
+                <span class="s2">pass</span>
+            <span class="s2">if </span><span class="s1">p</span><span class="s3">.</span><span class="s1">image</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">p</span><span class="s3">.</span><span class="s1">image</span><span class="s3">.</span><span class="s1">size</span>
+            <span class="s1">chunk_size </span><span class="s3">*= </span><span class="s4">2</span>
+        <span class="s2">return </span><span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s2">None</span><span class="s3">)</span>
+    <span class="s2">finally</span><span class="s3">:</span>
+        <span class="s2">if </span><span class="s1">close</span><span class="s3">:</span>
+            <span class="s1">file</span><span class="s3">.</span><span class="s1">close</span><span class="s3">()</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">file</span><span class="s3">.</span><span class="s1">seek</span><span class="s3">(</span><span class="s1">file_pos</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

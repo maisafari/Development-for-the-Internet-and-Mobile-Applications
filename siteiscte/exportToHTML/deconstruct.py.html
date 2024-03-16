@@ -1,0 +1,84 @@
+<html>
+<head>
+<title>deconstruct.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+deconstruct.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">importlib </span><span class="s0">import </span><span class="s1">import_module</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">version </span><span class="s0">import </span><span class="s1">get_docs_version</span>
+
+
+<span class="s0">def </span><span class="s1">deconstructible</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, </span><span class="s1">path</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Class decorator that allows the decorated class to be serialized 
+    by the migrations subsystem. 
+ 
+    The `path` kwarg specifies the import path. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">decorator</span><span class="s2">(</span><span class="s1">klass</span><span class="s2">):</span>
+        <span class="s0">def </span><span class="s1">__new__</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+            <span class="s4"># We capture the arguments to make returning them trivial</span>
+            <span class="s1">obj </span><span class="s2">= </span><span class="s1">super</span><span class="s2">(</span><span class="s1">klass</span><span class="s2">, </span><span class="s1">cls</span><span class="s2">).</span><span class="s1">__new__</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">)</span>
+            <span class="s1">obj</span><span class="s2">.</span><span class="s1">_constructor_args </span><span class="s2">= (</span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">obj</span>
+
+        <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">):</span>
+            <span class="s3">&quot;&quot;&quot; 
+            Return a 3-tuple of class import path, positional arguments, 
+            and keyword arguments. 
+            &quot;&quot;&quot;</span>
+            <span class="s4"># Fallback version</span>
+            <span class="s0">if </span><span class="s1">path </span><span class="s0">and </span><span class="s1">type</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">) </span><span class="s0">is </span><span class="s1">klass</span><span class="s2">:</span>
+                <span class="s1">module_name</span><span class="s2">, </span><span class="s1">_</span><span class="s2">, </span><span class="s1">name </span><span class="s2">= </span><span class="s1">path</span><span class="s2">.</span><span class="s1">rpartition</span><span class="s2">(</span><span class="s5">&quot;.&quot;</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">module_name </span><span class="s2">= </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">__module__</span>
+                <span class="s1">name </span><span class="s2">= </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span>
+            <span class="s4"># Make sure it's actually there and not an inner class</span>
+            <span class="s1">module </span><span class="s2">= </span><span class="s1">import_module</span><span class="s2">(</span><span class="s1">module_name</span><span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">module</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s5">&quot;Could not find object %s in %s.</span><span class="s0">\n</span><span class="s5">&quot;</span>
+                    <span class="s5">&quot;Please note that you cannot serialize things like inner &quot;</span>
+                    <span class="s5">&quot;classes. Please move the object into the main module &quot;</span>
+                    <span class="s5">&quot;body to use migrations.</span><span class="s0">\n</span><span class="s5">&quot;</span>
+                    <span class="s5">&quot;For more information, see &quot;</span>
+                    <span class="s5">&quot;https://docs.djangoproject.com/en/%s/topics/migrations/&quot;</span>
+                    <span class="s5">&quot;#serializing-values&quot; </span><span class="s2">% (</span><span class="s1">name</span><span class="s2">, </span><span class="s1">module_name</span><span class="s2">, </span><span class="s1">get_docs_version</span><span class="s2">())</span>
+                <span class="s2">)</span>
+            <span class="s0">return </span><span class="s2">(</span>
+                <span class="s2">(</span>
+                    <span class="s1">path</span>
+                    <span class="s0">if </span><span class="s1">path </span><span class="s0">and </span><span class="s1">type</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">) </span><span class="s0">is </span><span class="s1">klass</span>
+                    <span class="s0">else </span><span class="s5">f&quot;</span><span class="s0">{</span><span class="s1">obj</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__module__</span><span class="s0">}</span><span class="s5">.</span><span class="s0">{</span><span class="s1">name</span><span class="s0">}</span><span class="s5">&quot;</span>
+                <span class="s2">),</span>
+                <span class="s1">obj</span><span class="s2">.</span><span class="s1">_constructor_args</span><span class="s2">[</span><span class="s6">0</span><span class="s2">],</span>
+                <span class="s1">obj</span><span class="s2">.</span><span class="s1">_constructor_args</span><span class="s2">[</span><span class="s6">1</span><span class="s2">],</span>
+            <span class="s2">)</span>
+
+        <span class="s1">klass</span><span class="s2">.</span><span class="s1">__new__ </span><span class="s2">= </span><span class="s1">staticmethod</span><span class="s2">(</span><span class="s1">__new__</span><span class="s2">)</span>
+        <span class="s1">klass</span><span class="s2">.</span><span class="s1">deconstruct </span><span class="s2">= </span><span class="s1">deconstruct</span>
+
+        <span class="s0">return </span><span class="s1">klass</span>
+
+    <span class="s0">if not </span><span class="s1">args</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">decorator</span>
+    <span class="s0">return </span><span class="s1">decorator</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

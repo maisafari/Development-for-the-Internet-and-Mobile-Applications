@@ -1,0 +1,150 @@
+<html>
+<head>
+<title>datasource.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+datasource.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+ DataSource is a wrapper for the OGR Data Source object, which provides 
+ an interface for reading vector geometry data from many different file 
+ formats (including ESRI shapefiles). 
+ 
+ When instantiating a DataSource object, use the filename of a 
+ GDAL-supported data source.  For example, a SHP file or a 
+ TIGER/Line file from the government. 
+ 
+ The ds_driver keyword is used internally when a ctypes pointer 
+ is passed in directly. 
+ 
+ Example: 
+  ds = DataSource('/home/foo/bar.shp') 
+  for layer in ds: 
+      for feature in layer: 
+          # Getting the geometry for the feature. 
+          g = feature.geom 
+ 
+          # Getting the 'description' field for the feature. 
+          desc = feature['description'] 
+ 
+          # We can also increment through all of the fields 
+          #  attached to this feature. 
+          for field in feature: 
+              # Get the name of the field (e.g. 'description') 
+              nm = field.name 
+ 
+              # Get the type (integer) of the field, e.g. 0 =&gt; OFTInteger 
+              t = field.type 
+ 
+              # Returns the value the field; OFTIntegers return ints, 
+              #  OFTReal returns floats, all else returns string. 
+              val = field.value 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">byref</span>
+<span class="s2">from </span><span class="s1">pathlib </span><span class="s2">import </span><span class="s1">Path</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">base </span><span class="s2">import </span><span class="s1">GDALBase</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">driver </span><span class="s2">import </span><span class="s1">Driver</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">error </span><span class="s2">import </span><span class="s1">GDALException</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">layer </span><span class="s2">import </span><span class="s1">Layer</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">prototypes </span><span class="s2">import </span><span class="s1">ds </span><span class="s2">as </span><span class="s1">capi</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">encoding </span><span class="s2">import </span><span class="s1">force_bytes</span><span class="s3">, </span><span class="s1">force_str</span>
+
+
+<span class="s4"># For more information, see the OGR C API documentation:</span>
+<span class="s4">#  https://gdal.org/api/vector_c_api.html</span>
+<span class="s4">#</span>
+<span class="s4"># The OGR_DS_* routines are relevant here.</span>
+<span class="s2">class </span><span class="s1">DataSource</span><span class="s3">(</span><span class="s1">GDALBase</span><span class="s3">):</span>
+    <span class="s0">&quot;Wraps an OGR Data Source object.&quot;</span>
+    <span class="s1">destructor </span><span class="s3">= </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">destroy_ds</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">ds_input</span><span class="s3">, </span><span class="s1">ds_driver</span><span class="s3">=</span><span class="s2">False</span><span class="s3">, </span><span class="s1">write</span><span class="s3">=</span><span class="s2">False</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">=</span><span class="s5">&quot;utf-8&quot;</span><span class="s3">):</span>
+        <span class="s4"># The write flag.</span>
+        <span class="s2">if </span><span class="s1">write</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_write </span><span class="s3">= </span><span class="s6">1</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_write </span><span class="s3">= </span><span class="s6">0</span>
+        <span class="s4"># See also https://gdal.org/development/rfc/rfc23_ogr_unicode.html</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">encoding </span><span class="s3">= </span><span class="s1">encoding</span>
+
+        <span class="s1">Driver</span><span class="s3">.</span><span class="s1">ensure_registered</span><span class="s3">()</span>
+
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">ds_input</span><span class="s3">, (</span><span class="s1">str</span><span class="s3">, </span><span class="s1">Path</span><span class="s3">)):</span>
+            <span class="s4"># The data source driver is a void pointer.</span>
+            <span class="s1">ds_driver </span><span class="s3">= </span><span class="s1">Driver</span><span class="s3">.</span><span class="s1">ptr_type</span><span class="s3">()</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s4"># OGROpen will auto-detect the data source type.</span>
+                <span class="s1">ds </span><span class="s3">= </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">open_ds</span><span class="s3">(</span><span class="s1">force_bytes</span><span class="s3">(</span><span class="s1">ds_input</span><span class="s3">), </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_write</span><span class="s3">, </span><span class="s1">byref</span><span class="s3">(</span><span class="s1">ds_driver</span><span class="s3">))</span>
+            <span class="s2">except </span><span class="s1">GDALException</span><span class="s3">:</span>
+                <span class="s4"># Making the error message more clear rather than something</span>
+                <span class="s4"># like &quot;Invalid pointer returned from OGROpen&quot;.</span>
+                <span class="s2">raise </span><span class="s1">GDALException</span><span class="s3">(</span><span class="s5">'Could not open the datasource at &quot;%s&quot;' </span><span class="s3">% </span><span class="s1">ds_input</span><span class="s3">)</span>
+        <span class="s2">elif </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">ds_input</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr_type</span><span class="s3">) </span><span class="s2">and </span><span class="s1">isinstance</span><span class="s3">(</span>
+            <span class="s1">ds_driver</span><span class="s3">, </span><span class="s1">Driver</span><span class="s3">.</span><span class="s1">ptr_type</span>
+        <span class="s3">):</span>
+            <span class="s1">ds </span><span class="s3">= </span><span class="s1">ds_input</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">GDALException</span><span class="s3">(</span><span class="s5">&quot;Invalid data source input type: %s&quot; </span><span class="s3">% </span><span class="s1">type</span><span class="s3">(</span><span class="s1">ds_input</span><span class="s3">))</span>
+
+        <span class="s2">if </span><span class="s1">ds</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">ptr </span><span class="s3">= </span><span class="s1">ds</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">driver </span><span class="s3">= </span><span class="s1">Driver</span><span class="s3">(</span><span class="s1">ds_driver</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s4"># Raise an exception if the returned pointer is NULL</span>
+            <span class="s2">raise </span><span class="s1">GDALException</span><span class="s3">(</span><span class="s5">'Invalid data source file &quot;%s&quot;' </span><span class="s3">% </span><span class="s1">ds_input</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">__getitem__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">index</span><span class="s3">):</span>
+        <span class="s0">&quot;Allows use of the index [] operator to get a layer at the index.&quot;</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">index</span><span class="s3">, </span><span class="s1">str</span><span class="s3">):</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s1">layer </span><span class="s3">= </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">get_layer_by_name</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">force_bytes</span><span class="s3">(</span><span class="s1">index</span><span class="s3">))</span>
+            <span class="s2">except </span><span class="s1">GDALException</span><span class="s3">:</span>
+                <span class="s2">raise </span><span class="s1">IndexError</span><span class="s3">(</span><span class="s5">&quot;Invalid OGR layer name given: %s.&quot; </span><span class="s3">% </span><span class="s1">index</span><span class="s3">)</span>
+        <span class="s2">elif </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">index</span><span class="s3">, </span><span class="s1">int</span><span class="s3">):</span>
+            <span class="s2">if </span><span class="s6">0 </span><span class="s3">&lt;= </span><span class="s1">index </span><span class="s3">&lt; </span><span class="s1">self</span><span class="s3">.</span><span class="s1">layer_count</span><span class="s3">:</span>
+                <span class="s1">layer </span><span class="s3">= </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">get_layer</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_ptr</span><span class="s3">, </span><span class="s1">index</span><span class="s3">)</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s2">raise </span><span class="s1">IndexError</span><span class="s3">(</span>
+                    <span class="s5">&quot;Index out of range when accessing layers in a datasource: %s.&quot;</span>
+                    <span class="s3">% </span><span class="s1">index</span>
+                <span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">TypeError</span><span class="s3">(</span><span class="s5">&quot;Invalid index type: %s&quot; </span><span class="s3">% </span><span class="s1">type</span><span class="s3">(</span><span class="s1">index</span><span class="s3">))</span>
+        <span class="s2">return </span><span class="s1">Layer</span><span class="s3">(</span><span class="s1">layer</span><span class="s3">, </span><span class="s1">self</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">__len__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the number of layers within the data source.&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">layer_count</span>
+
+    <span class="s2">def </span><span class="s1">__str__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return OGR GetName and Driver for the Data Source.&quot;</span>
+        <span class="s2">return </span><span class="s5">&quot;%s (%s)&quot; </span><span class="s3">% (</span><span class="s1">self</span><span class="s3">.</span><span class="s1">name</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">driver</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">layer_count</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the number of layers in the data source.&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">get_layer_count</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_ptr</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">name</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the name of the data source.&quot;</span>
+        <span class="s1">name </span><span class="s3">= </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">get_ds_name</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_ptr</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">force_str</span><span class="s3">(</span><span class="s1">name</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">encoding</span><span class="s3">, </span><span class="s1">strings_only</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

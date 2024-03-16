@@ -1,0 +1,201 @@
+<html>
+<head>
+<title>raster.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+raster.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+This module houses the ctypes function prototypes for GDAL DataSource (raster) 
+related data structures. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">POINTER</span><span class="s3">, </span><span class="s1">c_bool</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">c_void_p</span>
+<span class="s2">from </span><span class="s1">functools </span><span class="s2">import </span><span class="s1">partial</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">libgdal </span><span class="s2">import </span><span class="s1">std_call</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">prototypes</span><span class="s3">.</span><span class="s1">generation </span><span class="s2">import </span><span class="s3">(</span>
+    <span class="s1">chararray_output</span><span class="s3">,</span>
+    <span class="s1">const_string_output</span><span class="s3">,</span>
+    <span class="s1">double_output</span><span class="s3">,</span>
+    <span class="s1">int_output</span><span class="s3">,</span>
+    <span class="s1">void_output</span><span class="s3">,</span>
+    <span class="s1">voidptr_output</span><span class="s3">,</span>
+<span class="s3">)</span>
+
+<span class="s4"># For more detail about c function names and definitions see</span>
+<span class="s4"># https://gdal.org/api/raster_c_api.html</span>
+<span class="s4"># https://gdal.org/doxygen/gdalwarper_8h.html</span>
+<span class="s4"># https://gdal.org/api/gdal_utils.html</span>
+
+<span class="s4"># Prepare partial functions that use cpl error codes</span>
+<span class="s1">void_output </span><span class="s3">= </span><span class="s1">partial</span><span class="s3">(</span><span class="s1">void_output</span><span class="s3">, </span><span class="s1">cpl</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s1">const_string_output </span><span class="s3">= </span><span class="s1">partial</span><span class="s3">(</span><span class="s1">const_string_output</span><span class="s3">, </span><span class="s1">cpl</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s1">double_output </span><span class="s3">= </span><span class="s1">partial</span><span class="s3">(</span><span class="s1">double_output</span><span class="s3">, </span><span class="s1">cpl</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+
+<span class="s4"># Raster Driver Routines</span>
+<span class="s1">register_all </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALAllRegister&quot;</span><span class="s3">), [], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s1">get_driver </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetDriver&quot;</span><span class="s3">), [</span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">get_driver_by_name </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetDriverByName&quot;</span><span class="s3">), [</span><span class="s1">c_char_p</span><span class="s3">], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span>
+<span class="s3">)</span>
+<span class="s1">get_driver_count </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetDriverCount&quot;</span><span class="s3">), [])</span>
+<span class="s1">get_driver_description </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetDescription&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+
+<span class="s4"># Raster Data Source Routines</span>
+<span class="s1">create_ds </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALCreate&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">c_void_p</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">open_ds </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALOpen&quot;</span><span class="s3">), [</span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">close_ds </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALClose&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s1">flush_ds </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALFlushCache&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">copy_ds </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALCreateCopy&quot;</span><span class="s3">),</span>
+    <span class="s3">[</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_char_p</span><span class="s3">), </span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_void_p</span><span class="s3">],</span>
+<span class="s3">)</span>
+<span class="s1">add_band_ds </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALAddBand&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">get_ds_description </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetDescription&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_ds_driver </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetDatasetDriver&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_ds_info </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALInfo&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_ds_xsize </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetRasterXSize&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_ds_ysize </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetRasterYSize&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_ds_raster_count </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetRasterCount&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_ds_raster_band </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetRasterBand&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">get_ds_projection_ref </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetProjectionRef&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">set_ds_projection_ref </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALSetProjection&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">])</span>
+<span class="s1">get_ds_geotransform </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetGeoTransform&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_double </span><span class="s3">* </span><span class="s6">6</span><span class="s3">)], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span>
+<span class="s3">)</span>
+<span class="s1">set_ds_geotransform </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALSetGeoTransform&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_double </span><span class="s3">* </span><span class="s6">6</span><span class="s3">)]</span>
+<span class="s3">)</span>
+
+<span class="s1">get_ds_metadata </span><span class="s3">= </span><span class="s1">chararray_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetMetadata&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span>
+<span class="s3">)</span>
+<span class="s1">set_ds_metadata </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALSetMetadata&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_char_p</span><span class="s3">), </span><span class="s1">c_char_p</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">get_ds_metadata_domain_list </span><span class="s3">= </span><span class="s1">chararray_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetMetadataDomainList&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span>
+<span class="s3">)</span>
+<span class="s1">get_ds_metadata_item </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetMetadataItem&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">set_ds_metadata_item </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALSetMetadataItem&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">free_dsl </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;CSLDestroy&quot;</span><span class="s3">), [</span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_char_p</span><span class="s3">)], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+
+<span class="s4"># Raster Band Routines</span>
+<span class="s1">band_io </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALRasterIO&quot;</span><span class="s3">),</span>
+    <span class="s3">[</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+    <span class="s3">],</span>
+<span class="s3">)</span>
+<span class="s1">get_band_xsize </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetRasterBandXSize&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_band_ysize </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetRasterBandYSize&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_band_index </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetBandNumber&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_band_description </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetDescription&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_band_ds </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetBandDataset&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_band_datatype </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetRasterDataType&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_band_color_interp </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetRasterColorInterpretation&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">get_band_nodata_value </span><span class="s3">= </span><span class="s1">double_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetRasterNoDataValue&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_int</span><span class="s3">)]</span>
+<span class="s3">)</span>
+<span class="s1">set_band_nodata_value </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALSetRasterNoDataValue&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">delete_band_nodata_value </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALDeleteRasterNoDataValue&quot;</span><span class="s3">), [</span><span class="s1">c_void_p</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">get_band_statistics </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALGetRasterStatistics&quot;</span><span class="s3">),</span>
+    <span class="s3">[</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+        <span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">),</span>
+        <span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">),</span>
+        <span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">),</span>
+        <span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">),</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+    <span class="s3">],</span>
+<span class="s3">)</span>
+<span class="s1">compute_band_statistics </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALComputeRasterStatistics&quot;</span><span class="s3">),</span>
+    <span class="s3">[</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+        <span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">),</span>
+        <span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">),</span>
+        <span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">),</span>
+        <span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">),</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+    <span class="s3">],</span>
+<span class="s3">)</span>
+
+<span class="s4"># Reprojection routine</span>
+<span class="s1">reproject_image </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALReprojectImage&quot;</span><span class="s3">),</span>
+    <span class="s3">[</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+        <span class="s1">c_char_p</span><span class="s3">,</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+        <span class="s1">c_char_p</span><span class="s3">,</span>
+        <span class="s1">c_int</span><span class="s3">,</span>
+        <span class="s1">c_double</span><span class="s3">,</span>
+        <span class="s1">c_double</span><span class="s3">,</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+    <span class="s3">],</span>
+<span class="s3">)</span>
+<span class="s1">auto_create_warped_vrt </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;GDALAutoCreateWarpedVRT&quot;</span><span class="s3">),</span>
+    <span class="s3">[</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">, </span><span class="s1">c_void_p</span><span class="s3">],</span>
+<span class="s3">)</span>
+
+<span class="s4"># Create VSI gdal raster files from in-memory buffers.</span>
+<span class="s4"># https://gdal.org/api/cpl.html#cpl-vsi-h</span>
+<span class="s1">create_vsi_file_from_mem_buffer </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;VSIFileFromMemBuffer&quot;</span><span class="s3">), [</span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">get_mem_buffer_from_vsi_file </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span>
+    <span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;VSIGetMemFileBuffer&quot;</span><span class="s3">), [</span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_int</span><span class="s3">), </span><span class="s1">c_bool</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">unlink_vsi_file </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">std_call</span><span class="s3">(</span><span class="s5">&quot;VSIUnlink&quot;</span><span class="s3">), [</span><span class="s1">c_char_p</span><span class="s3">])</span>
+</pre>
+</body>
+</html>

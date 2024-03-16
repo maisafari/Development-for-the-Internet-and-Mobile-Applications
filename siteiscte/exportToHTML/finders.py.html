@@ -1,0 +1,348 @@
+<html>
+<head>
+<title>finders.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+finders.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">functools</span>
+<span class="s0">import </span><span class="s1">os</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">staticfiles </span><span class="s0">import </span><span class="s1">utils</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">checks </span><span class="s0">import </span><span class="s1">Error</span><span class="s2">, </span><span class="s1">Warning</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">files</span><span class="s2">.</span><span class="s1">storage </span><span class="s0">import </span><span class="s1">FileSystemStorage</span><span class="s2">, </span><span class="s1">Storage</span><span class="s2">, </span><span class="s1">default_storage</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">_os </span><span class="s0">import </span><span class="s1">safe_join</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">LazyObject</span><span class="s2">, </span><span class="s1">empty</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">module_loading </span><span class="s0">import </span><span class="s1">import_string</span>
+
+<span class="s3"># To keep track on which directories the finder has searched the static files.</span>
+<span class="s1">searched_locations </span><span class="s2">= []</span>
+
+
+<span class="s0">class </span><span class="s1">BaseFinder</span><span class="s2">:</span>
+    <span class="s4">&quot;&quot;&quot; 
+    A base file finder to be used for custom staticfiles finder classes. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">check</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span><span class="s2">(</span>
+            <span class="s5">&quot;subclasses may provide a check() method to verify the finder is &quot;</span>
+            <span class="s5">&quot;configured correctly.&quot;</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">find</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">all</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Given a relative file path, find an absolute file path. 
+ 
+        If the ``all`` parameter is False (default) return only the first found 
+        file path; if True, return a list of all found files paths. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span><span class="s2">(</span>
+            <span class="s5">&quot;subclasses of BaseFinder must provide a find() method&quot;</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">ignore_patterns</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Given an optional list of paths to ignore, return a two item iterable 
+        consisting of the relative path and storage instance. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span><span class="s2">(</span>
+            <span class="s5">&quot;subclasses of BaseFinder must provide a list() method&quot;</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">FileSystemFinder</span><span class="s2">(</span><span class="s1">BaseFinder</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    A static files finder that uses the ``STATICFILES_DIRS`` setting 
+    to locate files. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_names</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s3"># List of locations with static files</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">locations </span><span class="s2">= []</span>
+        <span class="s3"># Maps dir paths to an appropriate storage instance</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">storages </span><span class="s2">= {}</span>
+        <span class="s0">for </span><span class="s1">root </span><span class="s0">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">STATICFILES_DIRS</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">root</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+                <span class="s1">prefix</span><span class="s2">, </span><span class="s1">root </span><span class="s2">= </span><span class="s1">root</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">prefix </span><span class="s2">= </span><span class="s5">&quot;&quot;</span>
+            <span class="s0">if </span><span class="s2">(</span><span class="s1">prefix</span><span class="s2">, </span><span class="s1">root</span><span class="s2">) </span><span class="s0">not in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">locations</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">locations</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">prefix</span><span class="s2">, </span><span class="s1">root</span><span class="s2">))</span>
+        <span class="s0">for </span><span class="s1">prefix</span><span class="s2">, </span><span class="s1">root </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">locations</span><span class="s2">:</span>
+            <span class="s1">filesystem_storage </span><span class="s2">= </span><span class="s1">FileSystemStorage</span><span class="s2">(</span><span class="s1">location</span><span class="s2">=</span><span class="s1">root</span><span class="s2">)</span>
+            <span class="s1">filesystem_storage</span><span class="s2">.</span><span class="s1">prefix </span><span class="s2">= </span><span class="s1">prefix</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">storages</span><span class="s2">[</span><span class="s1">root</span><span class="s2">] = </span><span class="s1">filesystem_storage</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">check</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">errors </span><span class="s2">= []</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">settings</span><span class="s2">.</span><span class="s1">STATICFILES_DIRS</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+            <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                <span class="s1">Error</span><span class="s2">(</span>
+                    <span class="s5">&quot;The STATICFILES_DIRS setting is not a tuple or list.&quot;</span><span class="s2">,</span>
+                    <span class="s1">hint</span><span class="s2">=</span><span class="s5">&quot;Perhaps you forgot a trailing comma?&quot;</span><span class="s2">,</span>
+                    <span class="s1">id</span><span class="s2">=</span><span class="s5">&quot;staticfiles.E001&quot;</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">errors</span>
+        <span class="s0">for </span><span class="s1">root </span><span class="s0">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">STATICFILES_DIRS</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">root</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+                <span class="s1">prefix</span><span class="s2">, </span><span class="s1">root </span><span class="s2">= </span><span class="s1">root</span>
+                <span class="s0">if </span><span class="s1">prefix</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s5">&quot;/&quot;</span><span class="s2">):</span>
+                    <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                        <span class="s1">Error</span><span class="s2">(</span>
+                            <span class="s5">&quot;The prefix %r in the STATICFILES_DIRS setting must &quot;</span>
+                            <span class="s5">&quot;not end with a slash.&quot; </span><span class="s2">% </span><span class="s1">prefix</span><span class="s2">,</span>
+                            <span class="s1">id</span><span class="s2">=</span><span class="s5">&quot;staticfiles.E003&quot;</span><span class="s2">,</span>
+                        <span class="s2">)</span>
+                    <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">STATIC_ROOT </span><span class="s0">and </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">abspath</span><span class="s2">(</span>
+                <span class="s1">settings</span><span class="s2">.</span><span class="s1">STATIC_ROOT</span>
+            <span class="s2">) == </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">abspath</span><span class="s2">(</span><span class="s1">root</span><span class="s2">):</span>
+                <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s1">Error</span><span class="s2">(</span>
+                        <span class="s5">&quot;The STATICFILES_DIRS setting should not contain the &quot;</span>
+                        <span class="s5">&quot;STATIC_ROOT setting.&quot;</span><span class="s2">,</span>
+                        <span class="s1">id</span><span class="s2">=</span><span class="s5">&quot;staticfiles.E002&quot;</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">isdir</span><span class="s2">(</span><span class="s1">root</span><span class="s2">):</span>
+                <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s1">Warning</span><span class="s2">(</span>
+                        <span class="s5">f&quot;The directory '</span><span class="s0">{</span><span class="s1">root</span><span class="s0">}</span><span class="s5">' in the STATICFILES_DIRS setting &quot;</span>
+                        <span class="s5">f&quot;does not exist.&quot;</span><span class="s2">,</span>
+                        <span class="s1">id</span><span class="s2">=</span><span class="s5">&quot;staticfiles.W004&quot;</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">errors</span>
+
+    <span class="s0">def </span><span class="s1">find</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">all</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Look for files in the extra locations as defined in STATICFILES_DIRS. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">matches </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">prefix</span><span class="s2">, </span><span class="s1">root </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">locations</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">root </span><span class="s0">not in </span><span class="s1">searched_locations</span><span class="s2">:</span>
+                <span class="s1">searched_locations</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">root</span><span class="s2">)</span>
+            <span class="s1">matched_path </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">find_location</span><span class="s2">(</span><span class="s1">root</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">prefix</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">matched_path</span><span class="s2">:</span>
+                <span class="s0">if not </span><span class="s1">all</span><span class="s2">:</span>
+                    <span class="s0">return </span><span class="s1">matched_path</span>
+                <span class="s1">matches</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">matched_path</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">matches</span>
+
+    <span class="s0">def </span><span class="s1">find_location</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">root</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">prefix</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Find a requested static file in a location and return the found 
+        absolute path (or ``None`` if no match). 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">prefix</span><span class="s2">:</span>
+            <span class="s1">prefix </span><span class="s2">= </span><span class="s5">&quot;%s%s&quot; </span><span class="s2">% (</span><span class="s1">prefix</span><span class="s2">, </span><span class="s1">os</span><span class="s2">.</span><span class="s1">sep</span><span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">path</span><span class="s2">.</span><span class="s1">startswith</span><span class="s2">(</span><span class="s1">prefix</span><span class="s2">):</span>
+                <span class="s0">return None</span>
+            <span class="s1">path </span><span class="s2">= </span><span class="s1">path</span><span class="s2">.</span><span class="s1">removeprefix</span><span class="s2">(</span><span class="s1">prefix</span><span class="s2">)</span>
+        <span class="s1">path </span><span class="s2">= </span><span class="s1">safe_join</span><span class="s2">(</span><span class="s1">root</span><span class="s2">, </span><span class="s1">path</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s1">path</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">path</span>
+
+    <span class="s0">def </span><span class="s1">list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">ignore_patterns</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        List all files in all locations. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">for </span><span class="s1">prefix</span><span class="s2">, </span><span class="s1">root </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">locations</span><span class="s2">:</span>
+            <span class="s3"># Skip nonexistent directories.</span>
+            <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">isdir</span><span class="s2">(</span><span class="s1">root</span><span class="s2">):</span>
+                <span class="s1">storage </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storages</span><span class="s2">[</span><span class="s1">root</span><span class="s2">]</span>
+                <span class="s0">for </span><span class="s1">path </span><span class="s0">in </span><span class="s1">utils</span><span class="s2">.</span><span class="s1">get_files</span><span class="s2">(</span><span class="s1">storage</span><span class="s2">, </span><span class="s1">ignore_patterns</span><span class="s2">):</span>
+                    <span class="s0">yield </span><span class="s1">path</span><span class="s2">, </span><span class="s1">storage</span>
+
+
+<span class="s0">class </span><span class="s1">AppDirectoriesFinder</span><span class="s2">(</span><span class="s1">BaseFinder</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    A static files finder that looks in the directory of each app as 
+    specified in the source_dir attribute. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">storage_class </span><span class="s2">= </span><span class="s1">FileSystemStorage</span>
+    <span class="s1">source_dir </span><span class="s2">= </span><span class="s5">&quot;static&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_names</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s3"># The list of apps that are handled</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">apps </span><span class="s2">= []</span>
+        <span class="s3"># Mapping of app names to storage instances</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">storages </span><span class="s2">= {}</span>
+        <span class="s1">app_configs </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_configs</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">app_names</span><span class="s2">:</span>
+            <span class="s1">app_names </span><span class="s2">= </span><span class="s1">set</span><span class="s2">(</span><span class="s1">app_names</span><span class="s2">)</span>
+            <span class="s1">app_configs </span><span class="s2">= [</span><span class="s1">ac </span><span class="s0">for </span><span class="s1">ac </span><span class="s0">in </span><span class="s1">app_configs </span><span class="s0">if </span><span class="s1">ac</span><span class="s2">.</span><span class="s1">name </span><span class="s0">in </span><span class="s1">app_names</span><span class="s2">]</span>
+        <span class="s0">for </span><span class="s1">app_config </span><span class="s0">in </span><span class="s1">app_configs</span><span class="s2">:</span>
+            <span class="s1">app_storage </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage_class</span><span class="s2">(</span>
+                <span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">path</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">source_dir</span><span class="s2">)</span>
+            <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">isdir</span><span class="s2">(</span><span class="s1">app_storage</span><span class="s2">.</span><span class="s1">location</span><span class="s2">):</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">storages</span><span class="s2">[</span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">name</span><span class="s2">] = </span><span class="s1">app_storage</span>
+                <span class="s0">if </span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">name </span><span class="s0">not in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">ignore_patterns</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        List all files in all app storages. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">for </span><span class="s1">storage </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storages</span><span class="s2">.</span><span class="s1">values</span><span class="s2">():</span>
+            <span class="s0">if </span><span class="s1">storage</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s5">&quot;&quot;</span><span class="s2">):  </span><span class="s3"># check if storage location exists</span>
+                <span class="s0">for </span><span class="s1">path </span><span class="s0">in </span><span class="s1">utils</span><span class="s2">.</span><span class="s1">get_files</span><span class="s2">(</span><span class="s1">storage</span><span class="s2">, </span><span class="s1">ignore_patterns</span><span class="s2">):</span>
+                    <span class="s0">yield </span><span class="s1">path</span><span class="s2">, </span><span class="s1">storage</span>
+
+    <span class="s0">def </span><span class="s1">find</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">all</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Look for files in the app directories. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">matches </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">app </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">:</span>
+            <span class="s1">app_location </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storages</span><span class="s2">[</span><span class="s1">app</span><span class="s2">].</span><span class="s1">location</span>
+            <span class="s0">if </span><span class="s1">app_location </span><span class="s0">not in </span><span class="s1">searched_locations</span><span class="s2">:</span>
+                <span class="s1">searched_locations</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">app_location</span><span class="s2">)</span>
+            <span class="s1">match </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">find_in_app</span><span class="s2">(</span><span class="s1">app</span><span class="s2">, </span><span class="s1">path</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">match</span><span class="s2">:</span>
+                <span class="s0">if not </span><span class="s1">all</span><span class="s2">:</span>
+                    <span class="s0">return </span><span class="s1">match</span>
+                <span class="s1">matches</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">match</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">matches</span>
+
+    <span class="s0">def </span><span class="s1">find_in_app</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app</span><span class="s2">, </span><span class="s1">path</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Find a requested static file in an app's static locations. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">storage </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storages</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">app</span><span class="s2">)</span>
+        <span class="s3"># Only try to find a file if the source dir actually exists.</span>
+        <span class="s0">if </span><span class="s1">storage </span><span class="s0">and </span><span class="s1">storage</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s1">path</span><span class="s2">):</span>
+            <span class="s1">matched_path </span><span class="s2">= </span><span class="s1">storage</span><span class="s2">.</span><span class="s1">path</span><span class="s2">(</span><span class="s1">path</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">matched_path</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">matched_path</span>
+
+
+<span class="s0">class </span><span class="s1">BaseStorageFinder</span><span class="s2">(</span><span class="s1">BaseFinder</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    A base static files finder to be used to extended 
+    with an own storage class. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">storage </span><span class="s2">= </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">storage</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">storage </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">storage </span><span class="s2">= </span><span class="s1">storage</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                <span class="s5">&quot;The staticfiles storage finder %r &quot;</span>
+                <span class="s5">&quot;doesn't have a storage class &quot;</span>
+                <span class="s5">&quot;assigned.&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span>
+            <span class="s2">)</span>
+        <span class="s3"># Make sure we have a storage instance here.</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">, (</span><span class="s1">Storage</span><span class="s2">, </span><span class="s1">LazyObject</span><span class="s2">)):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">storage </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">()</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">find</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">all</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Look for files in the default file storage, if it's local. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">path</span><span class="s2">(</span><span class="s5">&quot;&quot;</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">NotImplementedError</span><span class="s2">:</span>
+            <span class="s0">pass</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">location </span><span class="s0">not in </span><span class="s1">searched_locations</span><span class="s2">:</span>
+                <span class="s1">searched_locations</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">location</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s1">path</span><span class="s2">):</span>
+                <span class="s1">match </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">path</span><span class="s2">(</span><span class="s1">path</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">all</span><span class="s2">:</span>
+                    <span class="s1">match </span><span class="s2">= [</span><span class="s1">match</span><span class="s2">]</span>
+                <span class="s0">return </span><span class="s1">match</span>
+        <span class="s0">return </span><span class="s2">[]</span>
+
+    <span class="s0">def </span><span class="s1">list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">ignore_patterns</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        List all files of the storage. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">for </span><span class="s1">path </span><span class="s0">in </span><span class="s1">utils</span><span class="s2">.</span><span class="s1">get_files</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">, </span><span class="s1">ignore_patterns</span><span class="s2">):</span>
+            <span class="s0">yield </span><span class="s1">path</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span>
+
+
+<span class="s0">class </span><span class="s1">DefaultStorageFinder</span><span class="s2">(</span><span class="s1">BaseStorageFinder</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    A static files finder that uses the default storage backend. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">storage </span><span class="s2">= </span><span class="s1">default_storage</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s1">base_location </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">, </span><span class="s5">&quot;base_location&quot;</span><span class="s2">, </span><span class="s1">empty</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">base_location</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                <span class="s5">&quot;The storage backend of the &quot;</span>
+                <span class="s5">&quot;staticfiles finder %r doesn't have &quot;</span>
+                <span class="s5">&quot;a valid location.&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span>
+            <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">find</span><span class="s2">(</span><span class="s1">path</span><span class="s2">, </span><span class="s1">all</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Find a static file with the given path using all enabled finders. 
+ 
+    If ``all`` is ``False`` (default), return the first matching 
+    absolute path (or ``None`` if no match). Otherwise return a list. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">searched_locations</span><span class="s2">[:] = []</span>
+    <span class="s1">matches </span><span class="s2">= []</span>
+    <span class="s0">for </span><span class="s1">finder </span><span class="s0">in </span><span class="s1">get_finders</span><span class="s2">():</span>
+        <span class="s1">result </span><span class="s2">= </span><span class="s1">finder</span><span class="s2">.</span><span class="s1">find</span><span class="s2">(</span><span class="s1">path</span><span class="s2">, </span><span class="s1">all</span><span class="s2">=</span><span class="s1">all</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">all </span><span class="s0">and </span><span class="s1">result</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">result</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">result</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+            <span class="s1">result </span><span class="s2">= [</span><span class="s1">result</span><span class="s2">]</span>
+        <span class="s1">matches</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">result</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">matches</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">matches</span>
+    <span class="s3"># No match.</span>
+    <span class="s0">return </span><span class="s2">[] </span><span class="s0">if </span><span class="s1">all </span><span class="s0">else None</span>
+
+
+<span class="s0">def </span><span class="s1">get_finders</span><span class="s2">():</span>
+    <span class="s0">for </span><span class="s1">finder_path </span><span class="s0">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">STATICFILES_FINDERS</span><span class="s2">:</span>
+        <span class="s0">yield </span><span class="s1">get_finder</span><span class="s2">(</span><span class="s1">finder_path</span><span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">functools</span><span class="s2">.</span><span class="s1">cache</span>
+<span class="s0">def </span><span class="s1">get_finder</span><span class="s2">(</span><span class="s1">import_path</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Import the staticfiles finder class described by import_path, where 
+    import_path is the full Python path to the class. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">Finder </span><span class="s2">= </span><span class="s1">import_string</span><span class="s2">(</span><span class="s1">import_path</span><span class="s2">)</span>
+    <span class="s0">if not </span><span class="s1">issubclass</span><span class="s2">(</span><span class="s1">Finder</span><span class="s2">, </span><span class="s1">BaseFinder</span><span class="s2">):</span>
+        <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+            <span class="s5">'Finder &quot;%s&quot; is not a subclass of &quot;%s&quot;' </span><span class="s2">% (</span><span class="s1">Finder</span><span class="s2">, </span><span class="s1">BaseFinder</span><span class="s2">)</span>
+        <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">Finder</span><span class="s2">()</span>
+</pre>
+</body>
+</html>

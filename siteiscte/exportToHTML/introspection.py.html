@@ -1,0 +1,105 @@
+<html>
+<head>
+<title>introspection.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+introspection.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal </span><span class="s0">import </span><span class="s1">OGRGeomType</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">sqlite3</span><span class="s2">.</span><span class="s1">introspection </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">DatabaseIntrospection</span><span class="s2">,</span>
+    <span class="s1">FlexibleFieldLookupDict</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">GeoFlexibleFieldLookupDict</span><span class="s2">(</span><span class="s1">FlexibleFieldLookupDict</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Subclass that includes updates the `base_data_types_reverse` dict 
+    for geometry field types. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">base_data_types_reverse </span><span class="s2">= {</span>
+        <span class="s2">**</span><span class="s1">FlexibleFieldLookupDict</span><span class="s2">.</span><span class="s1">base_data_types_reverse</span><span class="s2">,</span>
+        <span class="s4">&quot;point&quot;</span><span class="s2">: </span><span class="s4">&quot;GeometryField&quot;</span><span class="s2">,</span>
+        <span class="s4">&quot;linestring&quot;</span><span class="s2">: </span><span class="s4">&quot;GeometryField&quot;</span><span class="s2">,</span>
+        <span class="s4">&quot;polygon&quot;</span><span class="s2">: </span><span class="s4">&quot;GeometryField&quot;</span><span class="s2">,</span>
+        <span class="s4">&quot;multipoint&quot;</span><span class="s2">: </span><span class="s4">&quot;GeometryField&quot;</span><span class="s2">,</span>
+        <span class="s4">&quot;multilinestring&quot;</span><span class="s2">: </span><span class="s4">&quot;GeometryField&quot;</span><span class="s2">,</span>
+        <span class="s4">&quot;multipolygon&quot;</span><span class="s2">: </span><span class="s4">&quot;GeometryField&quot;</span><span class="s2">,</span>
+        <span class="s4">&quot;geometrycollection&quot;</span><span class="s2">: </span><span class="s4">&quot;GeometryField&quot;</span><span class="s2">,</span>
+    <span class="s2">}</span>
+
+
+<span class="s0">class </span><span class="s1">SpatiaLiteIntrospection</span><span class="s2">(</span><span class="s1">DatabaseIntrospection</span><span class="s2">):</span>
+    <span class="s1">data_types_reverse </span><span class="s2">= </span><span class="s1">GeoFlexibleFieldLookupDict</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">get_geometry_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">table_name</span><span class="s2">, </span><span class="s1">description</span><span class="s2">):</span>
+        <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">cursor</span><span class="s2">() </span><span class="s0">as </span><span class="s1">cursor</span><span class="s2">:</span>
+            <span class="s5"># Querying the `geometry_columns` table to get additional metadata.</span>
+            <span class="s1">cursor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+                <span class="s4">&quot;SELECT coord_dimension, srid, geometry_type &quot;</span>
+                <span class="s4">&quot;FROM geometry_columns &quot;</span>
+                <span class="s4">&quot;WHERE f_table_name=%s AND f_geometry_column=%s&quot;</span><span class="s2">,</span>
+                <span class="s2">(</span><span class="s1">table_name</span><span class="s2">, </span><span class="s1">description</span><span class="s2">.</span><span class="s1">name</span><span class="s2">),</span>
+            <span class="s2">)</span>
+            <span class="s1">row </span><span class="s2">= </span><span class="s1">cursor</span><span class="s2">.</span><span class="s1">fetchone</span><span class="s2">()</span>
+            <span class="s0">if not </span><span class="s1">row</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">Exception</span><span class="s2">(</span>
+                    <span class="s4">'Could not find a geometry column for &quot;%s&quot;.&quot;%s&quot;'</span>
+                    <span class="s2">% (</span><span class="s1">table_name</span><span class="s2">, </span><span class="s1">description</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+                <span class="s2">)</span>
+
+            <span class="s5"># OGRGeomType does not require GDAL and makes it easy to convert</span>
+            <span class="s5"># from OGC geom type name to Django field.</span>
+            <span class="s1">ogr_type </span><span class="s2">= </span><span class="s1">row</span><span class="s2">[</span><span class="s6">2</span><span class="s2">]</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">ogr_type</span><span class="s2">, </span><span class="s1">int</span><span class="s2">) </span><span class="s0">and </span><span class="s1">ogr_type </span><span class="s2">&gt; </span><span class="s6">1000</span><span class="s2">:</span>
+                <span class="s5"># SpatiaLite uses SFSQL 1.2 offsets 1000 (Z), 2000 (M), and</span>
+                <span class="s5"># 3000 (ZM) to indicate the presence of higher dimensional</span>
+                <span class="s5"># coordinates (M not yet supported by Django).</span>
+                <span class="s1">ogr_type </span><span class="s2">= </span><span class="s1">ogr_type </span><span class="s2">% </span><span class="s6">1000 </span><span class="s2">+ </span><span class="s1">OGRGeomType</span><span class="s2">.</span><span class="s1">wkb25bit</span>
+            <span class="s1">field_type </span><span class="s2">= </span><span class="s1">OGRGeomType</span><span class="s2">(</span><span class="s1">ogr_type</span><span class="s2">).</span><span class="s1">django</span>
+
+            <span class="s5"># Getting any GeometryField keyword arguments that are not the default.</span>
+            <span class="s1">dim </span><span class="s2">= </span><span class="s1">row</span><span class="s2">[</span><span class="s6">0</span><span class="s2">]</span>
+            <span class="s1">srid </span><span class="s2">= </span><span class="s1">row</span><span class="s2">[</span><span class="s6">1</span><span class="s2">]</span>
+            <span class="s1">field_params </span><span class="s2">= {}</span>
+            <span class="s0">if </span><span class="s1">srid </span><span class="s2">!= </span><span class="s6">4326</span><span class="s2">:</span>
+                <span class="s1">field_params</span><span class="s2">[</span><span class="s4">&quot;srid&quot;</span><span class="s2">] = </span><span class="s1">srid</span>
+            <span class="s0">if </span><span class="s2">(</span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">dim</span><span class="s2">, </span><span class="s1">str</span><span class="s2">) </span><span class="s0">and </span><span class="s4">&quot;Z&quot; </span><span class="s0">in </span><span class="s1">dim</span><span class="s2">) </span><span class="s0">or </span><span class="s1">dim </span><span class="s2">== </span><span class="s6">3</span><span class="s2">:</span>
+                <span class="s1">field_params</span><span class="s2">[</span><span class="s4">&quot;dim&quot;</span><span class="s2">] = </span><span class="s6">3</span>
+        <span class="s0">return </span><span class="s1">field_type</span><span class="s2">, </span><span class="s1">field_params</span>
+
+    <span class="s0">def </span><span class="s1">get_constraints</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">cursor</span><span class="s2">, </span><span class="s1">table_name</span><span class="s2">):</span>
+        <span class="s1">constraints </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_constraints</span><span class="s2">(</span><span class="s1">cursor</span><span class="s2">, </span><span class="s1">table_name</span><span class="s2">)</span>
+        <span class="s1">cursor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+            <span class="s4">&quot;SELECT f_geometry_column &quot;</span>
+            <span class="s4">&quot;FROM geometry_columns &quot;</span>
+            <span class="s4">&quot;WHERE f_table_name=%s AND spatial_index_enabled=1&quot;</span><span class="s2">,</span>
+            <span class="s2">(</span><span class="s1">table_name</span><span class="s2">,),</span>
+        <span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">row </span><span class="s0">in </span><span class="s1">cursor</span><span class="s2">.</span><span class="s1">fetchall</span><span class="s2">():</span>
+            <span class="s1">constraints</span><span class="s2">[</span><span class="s4">&quot;%s__spatial__index&quot; </span><span class="s2">% </span><span class="s1">row</span><span class="s2">[</span><span class="s6">0</span><span class="s2">]] = {</span>
+                <span class="s4">&quot;columns&quot;</span><span class="s2">: [</span><span class="s1">row</span><span class="s2">[</span><span class="s6">0</span><span class="s2">]],</span>
+                <span class="s4">&quot;primary_key&quot;</span><span class="s2">: </span><span class="s0">False</span><span class="s2">,</span>
+                <span class="s4">&quot;unique&quot;</span><span class="s2">: </span><span class="s0">False</span><span class="s2">,</span>
+                <span class="s4">&quot;foreign_key&quot;</span><span class="s2">: </span><span class="s0">None</span><span class="s2">,</span>
+                <span class="s4">&quot;check&quot;</span><span class="s2">: </span><span class="s0">False</span><span class="s2">,</span>
+                <span class="s4">&quot;index&quot;</span><span class="s2">: </span><span class="s0">True</span><span class="s2">,</span>
+            <span class="s2">}</span>
+        <span class="s0">return </span><span class="s1">constraints</span>
+</pre>
+</body>
+</html>

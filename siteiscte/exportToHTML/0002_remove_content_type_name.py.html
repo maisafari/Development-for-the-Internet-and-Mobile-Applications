@@ -1,0 +1,63 @@
+<html>
+<head>
+<title>0002_remove_content_type_name.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+0002_remove_content_type_name.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">migrations</span><span class="s2">, </span><span class="s1">models</span>
+
+
+<span class="s0">def </span><span class="s1">add_legacy_name</span><span class="s2">(</span><span class="s1">apps</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">):</span>
+    <span class="s1">alias </span><span class="s2">= </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span>
+    <span class="s1">ContentType </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s3">&quot;contenttypes&quot;</span><span class="s2">, </span><span class="s3">&quot;ContentType&quot;</span><span class="s2">)</span>
+    <span class="s0">for </span><span class="s1">ct </span><span class="s0">in </span><span class="s1">ContentType</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">using</span><span class="s2">(</span><span class="s1">alias</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">ct</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">ct</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">ct</span><span class="s2">.</span><span class="s1">model</span><span class="s2">).</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">object_name</span>
+        <span class="s0">except </span><span class="s1">LookupError</span><span class="s2">:</span>
+            <span class="s1">ct</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">ct</span><span class="s2">.</span><span class="s1">model</span>
+        <span class="s1">ct</span><span class="s2">.</span><span class="s1">save</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">Migration</span><span class="s2">(</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">Migration</span><span class="s2">):</span>
+    <span class="s1">dependencies </span><span class="s2">= [</span>
+        <span class="s2">(</span><span class="s3">&quot;contenttypes&quot;</span><span class="s2">, </span><span class="s3">&quot;0001_initial&quot;</span><span class="s2">),</span>
+    <span class="s2">]</span>
+
+    <span class="s1">operations </span><span class="s2">= [</span>
+        <span class="s1">migrations</span><span class="s2">.</span><span class="s1">AlterModelOptions</span><span class="s2">(</span>
+            <span class="s1">name</span><span class="s2">=</span><span class="s3">&quot;contenttype&quot;</span><span class="s2">,</span>
+            <span class="s1">options</span><span class="s2">={</span>
+                <span class="s3">&quot;verbose_name&quot;</span><span class="s2">: </span><span class="s3">&quot;content type&quot;</span><span class="s2">,</span>
+                <span class="s3">&quot;verbose_name_plural&quot;</span><span class="s2">: </span><span class="s3">&quot;content types&quot;</span><span class="s2">,</span>
+            <span class="s2">},</span>
+        <span class="s2">),</span>
+        <span class="s1">migrations</span><span class="s2">.</span><span class="s1">AlterField</span><span class="s2">(</span>
+            <span class="s1">model_name</span><span class="s2">=</span><span class="s3">&quot;contenttype&quot;</span><span class="s2">,</span>
+            <span class="s1">name</span><span class="s2">=</span><span class="s3">&quot;name&quot;</span><span class="s2">,</span>
+            <span class="s1">field</span><span class="s2">=</span><span class="s1">models</span><span class="s2">.</span><span class="s1">CharField</span><span class="s2">(</span><span class="s1">max_length</span><span class="s2">=</span><span class="s4">100</span><span class="s2">, </span><span class="s1">null</span><span class="s2">=</span><span class="s0">True</span><span class="s2">),</span>
+        <span class="s2">),</span>
+        <span class="s1">migrations</span><span class="s2">.</span><span class="s1">RunPython</span><span class="s2">(</span>
+            <span class="s1">migrations</span><span class="s2">.</span><span class="s1">RunPython</span><span class="s2">.</span><span class="s1">noop</span><span class="s2">,</span>
+            <span class="s1">add_legacy_name</span><span class="s2">,</span>
+            <span class="s1">hints</span><span class="s2">={</span><span class="s3">&quot;model_name&quot;</span><span class="s2">: </span><span class="s3">&quot;contenttype&quot;</span><span class="s2">},</span>
+        <span class="s2">),</span>
+        <span class="s1">migrations</span><span class="s2">.</span><span class="s1">RemoveField</span><span class="s2">(</span>
+            <span class="s1">model_name</span><span class="s2">=</span><span class="s3">&quot;contenttype&quot;</span><span class="s2">,</span>
+            <span class="s1">name</span><span class="s2">=</span><span class="s3">&quot;name&quot;</span><span class="s2">,</span>
+        <span class="s2">),</span>
+    <span class="s2">]</span>
+</pre>
+</body>
+</html>

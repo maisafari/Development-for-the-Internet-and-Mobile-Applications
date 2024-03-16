@@ -1,0 +1,151 @@
+<html>
+<head>
+<title>locks.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+locks.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Portable file locking utilities. 
+ 
+Based partially on an example by Jonathan Feignberg in the Python 
+Cookbook [1] (licensed under the Python Software License) and a ctypes port by 
+Anatoly Techtonik for Roundup [2] (license [3]). 
+ 
+[1] https://code.activestate.com/recipes/65203/ 
+[2] https://sourceforge.net/p/roundup/code/ci/default/tree/roundup/backends/portalocker.py  # NOQA 
+[3] https://sourceforge.net/p/roundup/code/ci/default/tree/COPYING.txt 
+ 
+Example Usage:: 
+ 
+    &gt;&gt;&gt; from django.core.files import locks 
+    &gt;&gt;&gt; with open('./file', 'wb') as f: 
+    ...     locks.lock(f, locks.LOCK_EX) 
+    ...     f.write('Django') 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">os</span>
+
+<span class="s1">__all__ </span><span class="s3">= (</span><span class="s4">&quot;LOCK_EX&quot;</span><span class="s3">, </span><span class="s4">&quot;LOCK_SH&quot;</span><span class="s3">, </span><span class="s4">&quot;LOCK_NB&quot;</span><span class="s3">, </span><span class="s4">&quot;lock&quot;</span><span class="s3">, </span><span class="s4">&quot;unlock&quot;</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_fd</span><span class="s3">(</span><span class="s1">f</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Get a filedescriptor from something which could be a file or an fd.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">f</span><span class="s3">.</span><span class="s1">fileno</span><span class="s3">() </span><span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">f</span><span class="s3">, </span><span class="s4">&quot;fileno&quot;</span><span class="s3">) </span><span class="s2">else </span><span class="s1">f</span>
+
+
+<span class="s2">if </span><span class="s1">os</span><span class="s3">.</span><span class="s1">name </span><span class="s3">== </span><span class="s4">&quot;nt&quot;</span><span class="s3">:</span>
+    <span class="s2">import </span><span class="s1">msvcrt</span>
+    <span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s3">(</span>
+        <span class="s1">POINTER</span><span class="s3">,</span>
+        <span class="s1">Structure</span><span class="s3">,</span>
+        <span class="s1">Union</span><span class="s3">,</span>
+        <span class="s1">WinDLL</span><span class="s3">,</span>
+        <span class="s1">byref</span><span class="s3">,</span>
+        <span class="s1">c_int64</span><span class="s3">,</span>
+        <span class="s1">c_ulong</span><span class="s3">,</span>
+        <span class="s1">c_void_p</span><span class="s3">,</span>
+        <span class="s1">sizeof</span><span class="s3">,</span>
+    <span class="s3">)</span>
+    <span class="s2">from </span><span class="s1">ctypes</span><span class="s3">.</span><span class="s1">wintypes </span><span class="s2">import </span><span class="s1">BOOL</span><span class="s3">, </span><span class="s1">DWORD</span><span class="s3">, </span><span class="s1">HANDLE</span>
+
+    <span class="s1">LOCK_SH </span><span class="s3">= </span><span class="s5">0  </span><span class="s6"># the default</span>
+    <span class="s1">LOCK_NB </span><span class="s3">= </span><span class="s5">0x1  </span><span class="s6"># LOCKFILE_FAIL_IMMEDIATELY</span>
+    <span class="s1">LOCK_EX </span><span class="s3">= </span><span class="s5">0x2  </span><span class="s6"># LOCKFILE_EXCLUSIVE_LOCK</span>
+
+    <span class="s6"># --- Adapted from the pyserial project ---</span>
+    <span class="s6"># detect size of ULONG_PTR</span>
+    <span class="s2">if </span><span class="s1">sizeof</span><span class="s3">(</span><span class="s1">c_ulong</span><span class="s3">) != </span><span class="s1">sizeof</span><span class="s3">(</span><span class="s1">c_void_p</span><span class="s3">):</span>
+        <span class="s1">ULONG_PTR </span><span class="s3">= </span><span class="s1">c_int64</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">ULONG_PTR </span><span class="s3">= </span><span class="s1">c_ulong</span>
+    <span class="s1">PVOID </span><span class="s3">= </span><span class="s1">c_void_p</span>
+
+    <span class="s6"># --- Union inside Structure by stackoverflow:3480240 ---</span>
+    <span class="s2">class </span><span class="s1">_OFFSET</span><span class="s3">(</span><span class="s1">Structure</span><span class="s3">):</span>
+        <span class="s1">_fields_ </span><span class="s3">= [(</span><span class="s4">&quot;Offset&quot;</span><span class="s3">, </span><span class="s1">DWORD</span><span class="s3">), (</span><span class="s4">&quot;OffsetHigh&quot;</span><span class="s3">, </span><span class="s1">DWORD</span><span class="s3">)]</span>
+
+    <span class="s2">class </span><span class="s1">_OFFSET_UNION</span><span class="s3">(</span><span class="s1">Union</span><span class="s3">):</span>
+        <span class="s1">_anonymous_ </span><span class="s3">= [</span><span class="s4">&quot;_offset&quot;</span><span class="s3">]</span>
+        <span class="s1">_fields_ </span><span class="s3">= [(</span><span class="s4">&quot;_offset&quot;</span><span class="s3">, </span><span class="s1">_OFFSET</span><span class="s3">), (</span><span class="s4">&quot;Pointer&quot;</span><span class="s3">, </span><span class="s1">PVOID</span><span class="s3">)]</span>
+
+    <span class="s2">class </span><span class="s1">OVERLAPPED</span><span class="s3">(</span><span class="s1">Structure</span><span class="s3">):</span>
+        <span class="s1">_anonymous_ </span><span class="s3">= [</span><span class="s4">&quot;_offset_union&quot;</span><span class="s3">]</span>
+        <span class="s1">_fields_ </span><span class="s3">= [</span>
+            <span class="s3">(</span><span class="s4">&quot;Internal&quot;</span><span class="s3">, </span><span class="s1">ULONG_PTR</span><span class="s3">),</span>
+            <span class="s3">(</span><span class="s4">&quot;InternalHigh&quot;</span><span class="s3">, </span><span class="s1">ULONG_PTR</span><span class="s3">),</span>
+            <span class="s3">(</span><span class="s4">&quot;_offset_union&quot;</span><span class="s3">, </span><span class="s1">_OFFSET_UNION</span><span class="s3">),</span>
+            <span class="s3">(</span><span class="s4">&quot;hEvent&quot;</span><span class="s3">, </span><span class="s1">HANDLE</span><span class="s3">),</span>
+        <span class="s3">]</span>
+
+    <span class="s1">LPOVERLAPPED </span><span class="s3">= </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">OVERLAPPED</span><span class="s3">)</span>
+
+    <span class="s6"># --- Define function prototypes for extra safety ---</span>
+    <span class="s1">kernel32 </span><span class="s3">= </span><span class="s1">WinDLL</span><span class="s3">(</span><span class="s4">&quot;kernel32&quot;</span><span class="s3">)</span>
+    <span class="s1">LockFileEx </span><span class="s3">= </span><span class="s1">kernel32</span><span class="s3">.</span><span class="s1">LockFileEx</span>
+    <span class="s1">LockFileEx</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">BOOL</span>
+    <span class="s1">LockFileEx</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= [</span><span class="s1">HANDLE</span><span class="s3">, </span><span class="s1">DWORD</span><span class="s3">, </span><span class="s1">DWORD</span><span class="s3">, </span><span class="s1">DWORD</span><span class="s3">, </span><span class="s1">DWORD</span><span class="s3">, </span><span class="s1">LPOVERLAPPED</span><span class="s3">]</span>
+    <span class="s1">UnlockFileEx </span><span class="s3">= </span><span class="s1">kernel32</span><span class="s3">.</span><span class="s1">UnlockFileEx</span>
+    <span class="s1">UnlockFileEx</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">BOOL</span>
+    <span class="s1">UnlockFileEx</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= [</span><span class="s1">HANDLE</span><span class="s3">, </span><span class="s1">DWORD</span><span class="s3">, </span><span class="s1">DWORD</span><span class="s3">, </span><span class="s1">DWORD</span><span class="s3">, </span><span class="s1">LPOVERLAPPED</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">lock</span><span class="s3">(</span><span class="s1">f</span><span class="s3">, </span><span class="s1">flags</span><span class="s3">):</span>
+        <span class="s1">hfile </span><span class="s3">= </span><span class="s1">msvcrt</span><span class="s3">.</span><span class="s1">get_osfhandle</span><span class="s3">(</span><span class="s1">_fd</span><span class="s3">(</span><span class="s1">f</span><span class="s3">))</span>
+        <span class="s1">overlapped </span><span class="s3">= </span><span class="s1">OVERLAPPED</span><span class="s3">()</span>
+        <span class="s1">ret </span><span class="s3">= </span><span class="s1">LockFileEx</span><span class="s3">(</span><span class="s1">hfile</span><span class="s3">, </span><span class="s1">flags</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s5">0xFFFF0000</span><span class="s3">, </span><span class="s1">byref</span><span class="s3">(</span><span class="s1">overlapped</span><span class="s3">))</span>
+        <span class="s2">return </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">ret</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">unlock</span><span class="s3">(</span><span class="s1">f</span><span class="s3">):</span>
+        <span class="s1">hfile </span><span class="s3">= </span><span class="s1">msvcrt</span><span class="s3">.</span><span class="s1">get_osfhandle</span><span class="s3">(</span><span class="s1">_fd</span><span class="s3">(</span><span class="s1">f</span><span class="s3">))</span>
+        <span class="s1">overlapped </span><span class="s3">= </span><span class="s1">OVERLAPPED</span><span class="s3">()</span>
+        <span class="s1">ret </span><span class="s3">= </span><span class="s1">UnlockFileEx</span><span class="s3">(</span><span class="s1">hfile</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s5">0xFFFF0000</span><span class="s3">, </span><span class="s1">byref</span><span class="s3">(</span><span class="s1">overlapped</span><span class="s3">))</span>
+        <span class="s2">return </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">ret</span><span class="s3">)</span>
+
+<span class="s2">else</span><span class="s3">:</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">import </span><span class="s1">fcntl</span>
+
+        <span class="s1">LOCK_SH </span><span class="s3">= </span><span class="s1">fcntl</span><span class="s3">.</span><span class="s1">LOCK_SH  </span><span class="s6"># shared lock</span>
+        <span class="s1">LOCK_NB </span><span class="s3">= </span><span class="s1">fcntl</span><span class="s3">.</span><span class="s1">LOCK_NB  </span><span class="s6"># non-blocking</span>
+        <span class="s1">LOCK_EX </span><span class="s3">= </span><span class="s1">fcntl</span><span class="s3">.</span><span class="s1">LOCK_EX</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">ImportError</span><span class="s3">, </span><span class="s1">AttributeError</span><span class="s3">):</span>
+        <span class="s6"># File locking is not supported.</span>
+        <span class="s1">LOCK_EX </span><span class="s3">= </span><span class="s1">LOCK_SH </span><span class="s3">= </span><span class="s1">LOCK_NB </span><span class="s3">= </span><span class="s5">0</span>
+
+        <span class="s6"># Dummy functions that don't do anything.</span>
+        <span class="s2">def </span><span class="s1">lock</span><span class="s3">(</span><span class="s1">f</span><span class="s3">, </span><span class="s1">flags</span><span class="s3">):</span>
+            <span class="s6"># File is not locked</span>
+            <span class="s2">return False</span>
+
+        <span class="s2">def </span><span class="s1">unlock</span><span class="s3">(</span><span class="s1">f</span><span class="s3">):</span>
+            <span class="s6"># File is unlocked</span>
+            <span class="s2">return True</span>
+
+    <span class="s2">else</span><span class="s3">:</span>
+
+        <span class="s2">def </span><span class="s1">lock</span><span class="s3">(</span><span class="s1">f</span><span class="s3">, </span><span class="s1">flags</span><span class="s3">):</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s1">fcntl</span><span class="s3">.</span><span class="s1">flock</span><span class="s3">(</span><span class="s1">_fd</span><span class="s3">(</span><span class="s1">f</span><span class="s3">), </span><span class="s1">flags</span><span class="s3">)</span>
+                <span class="s2">return True</span>
+            <span class="s2">except </span><span class="s1">BlockingIOError</span><span class="s3">:</span>
+                <span class="s2">return False</span>
+
+        <span class="s2">def </span><span class="s1">unlock</span><span class="s3">(</span><span class="s1">f</span><span class="s3">):</span>
+            <span class="s1">fcntl</span><span class="s3">.</span><span class="s1">flock</span><span class="s3">(</span><span class="s1">_fd</span><span class="s3">(</span><span class="s1">f</span><span class="s3">), </span><span class="s1">fcntl</span><span class="s3">.</span><span class="s1">LOCK_UN</span><span class="s3">)</span>
+            <span class="s2">return True</span>
+</pre>
+</body>
+</html>

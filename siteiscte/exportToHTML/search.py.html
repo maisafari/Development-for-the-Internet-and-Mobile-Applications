@@ -1,0 +1,404 @@
+<html>
+<head>
+<title>search.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+search.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">CharField</span><span class="s2">,</span>
+    <span class="s1">Expression</span><span class="s2">,</span>
+    <span class="s1">Field</span><span class="s2">,</span>
+    <span class="s1">FloatField</span><span class="s2">,</span>
+    <span class="s1">Func</span><span class="s2">,</span>
+    <span class="s1">Lookup</span><span class="s2">,</span>
+    <span class="s1">TextField</span><span class="s2">,</span>
+    <span class="s1">Value</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">expressions </span><span class="s0">import </span><span class="s1">CombinedExpression</span><span class="s2">, </span><span class="s1">register_combinable_fields</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">functions </span><span class="s0">import </span><span class="s1">Cast</span><span class="s2">, </span><span class="s1">Coalesce</span>
+
+
+<span class="s0">class </span><span class="s1">SearchVectorExact</span><span class="s2">(</span><span class="s1">Lookup</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;exact&quot;</span>
+
+    <span class="s0">def </span><span class="s1">process_rhs</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">qn</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">rhs</span><span class="s2">, (</span><span class="s1">SearchQuery</span><span class="s2">, </span><span class="s1">CombinedSearchQuery</span><span class="s2">)):</span>
+            <span class="s1">config </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">, </span><span class="s3">&quot;config&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">rhs </span><span class="s2">= </span><span class="s1">SearchQuery</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">rhs</span><span class="s2">, </span><span class="s1">config</span><span class="s2">=</span><span class="s1">config</span><span class="s2">)</span>
+        <span class="s1">rhs</span><span class="s2">, </span><span class="s1">rhs_params </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">process_rhs</span><span class="s2">(</span><span class="s1">qn</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">rhs</span><span class="s2">, </span><span class="s1">rhs_params</span>
+
+    <span class="s0">def </span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">qn</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s1">lhs</span><span class="s2">, </span><span class="s1">lhs_params </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">process_lhs</span><span class="s2">(</span><span class="s1">qn</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">)</span>
+        <span class="s1">rhs</span><span class="s2">, </span><span class="s1">rhs_params </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">process_rhs</span><span class="s2">(</span><span class="s1">qn</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">)</span>
+        <span class="s1">params </span><span class="s2">= </span><span class="s1">lhs_params </span><span class="s2">+ </span><span class="s1">rhs_params</span>
+        <span class="s0">return </span><span class="s3">&quot;%s @@ %s&quot; </span><span class="s2">% (</span><span class="s1">lhs</span><span class="s2">, </span><span class="s1">rhs</span><span class="s2">), </span><span class="s1">params</span>
+
+
+<span class="s0">class </span><span class="s1">SearchVectorField</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">db_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;tsvector&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">SearchQueryField</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">db_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;tsquery&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">_Float4Field</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">db_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;float4&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">SearchConfig</span><span class="s2">(</span><span class="s1">Expression</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">config</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">()</span>
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">config</span><span class="s2">, </span><span class="s3">&quot;resolve_expression&quot;</span><span class="s2">):</span>
+            <span class="s1">config </span><span class="s2">= </span><span class="s1">Value</span><span class="s2">(</span><span class="s1">config</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">config </span><span class="s2">= </span><span class="s1">config</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">from_parameter</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">config</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">config </span><span class="s0">is None or </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">config</span><span class="s2">, </span><span class="s1">cls</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">config</span>
+        <span class="s0">return </span><span class="s1">cls</span><span class="s2">(</span><span class="s1">config</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_source_expressions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">config</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">set_source_expressions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">exprs</span><span class="s2">):</span>
+        <span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">config</span><span class="s2">,) = </span><span class="s1">exprs</span>
+
+    <span class="s0">def </span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">compiler</span><span class="s2">.</span><span class="s1">compile</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">config</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s3">&quot;%s::regconfig&quot; </span><span class="s2">% </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">params</span>
+
+
+<span class="s0">class </span><span class="s1">SearchVectorCombinable</span><span class="s2">:</span>
+    <span class="s1">ADD </span><span class="s2">= </span><span class="s3">&quot;||&quot;</span>
+
+    <span class="s0">def </span><span class="s1">_combine</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">other</span><span class="s2">, </span><span class="s1">connector</span><span class="s2">, </span><span class="s1">reversed</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">other</span><span class="s2">, </span><span class="s1">SearchVectorCombinable</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                <span class="s3">&quot;SearchVector can only be combined with other SearchVector &quot;</span>
+                <span class="s3">&quot;instances, got %s.&quot; </span><span class="s2">% </span><span class="s1">type</span><span class="s2">(</span><span class="s1">other</span><span class="s2">).</span><span class="s1">__name__</span>
+            <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">reversed</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">CombinedSearchVector</span><span class="s2">(</span><span class="s1">other</span><span class="s2">, </span><span class="s1">connector</span><span class="s2">, </span><span class="s1">self</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">config</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">CombinedSearchVector</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connector</span><span class="s2">, </span><span class="s1">other</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">config</span><span class="s2">)</span>
+
+
+<span class="s1">register_combinable_fields</span><span class="s2">(</span>
+    <span class="s1">SearchVectorField</span><span class="s2">, </span><span class="s1">SearchVectorCombinable</span><span class="s2">.</span><span class="s1">ADD</span><span class="s2">, </span><span class="s1">SearchVectorField</span><span class="s2">, </span><span class="s1">SearchVectorField</span>
+<span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">SearchVector</span><span class="s2">(</span><span class="s1">SearchVectorCombinable</span><span class="s2">, </span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;to_tsvector&quot;</span>
+    <span class="s1">arg_joiner </span><span class="s2">= </span><span class="s3">&quot; || ' ' || &quot;</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">SearchVectorField</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">expressions</span><span class="s2">, </span><span class="s1">config</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">weight</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">expressions</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">config </span><span class="s2">= </span><span class="s1">SearchConfig</span><span class="s2">.</span><span class="s1">from_parameter</span><span class="s2">(</span><span class="s1">config</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">weight </span><span class="s0">is not None and not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">weight</span><span class="s2">, </span><span class="s3">&quot;resolve_expression&quot;</span><span class="s2">):</span>
+            <span class="s1">weight </span><span class="s2">= </span><span class="s1">Value</span><span class="s2">(</span><span class="s1">weight</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">weight </span><span class="s2">= </span><span class="s1">weight</span>
+
+    <span class="s0">def </span><span class="s1">resolve_expression</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">query</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">allow_joins</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">reuse</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">summarize</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">for_save</span><span class="s2">=</span><span class="s0">False</span>
+    <span class="s2">):</span>
+        <span class="s1">resolved </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">resolve_expression</span><span class="s2">(</span>
+            <span class="s1">query</span><span class="s2">, </span><span class="s1">allow_joins</span><span class="s2">, </span><span class="s1">reuse</span><span class="s2">, </span><span class="s1">summarize</span><span class="s2">, </span><span class="s1">for_save</span>
+        <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">config</span><span class="s2">:</span>
+            <span class="s1">resolved</span><span class="s2">.</span><span class="s1">config </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">config</span><span class="s2">.</span><span class="s1">resolve_expression</span><span class="s2">(</span>
+                <span class="s1">query</span><span class="s2">, </span><span class="s1">allow_joins</span><span class="s2">, </span><span class="s1">reuse</span><span class="s2">, </span><span class="s1">summarize</span><span class="s2">, </span><span class="s1">for_save</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">resolved</span>
+
+    <span class="s0">def </span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">function</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">template</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">clone </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s1">clone</span><span class="s2">.</span><span class="s1">set_source_expressions</span><span class="s2">(</span>
+            <span class="s2">[</span>
+                <span class="s1">Coalesce</span><span class="s2">(</span>
+                    <span class="s2">(</span>
+                        <span class="s1">expression</span>
+                        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">expression</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">, (</span><span class="s1">CharField</span><span class="s2">, </span><span class="s1">TextField</span><span class="s2">))</span>
+                        <span class="s0">else </span><span class="s1">Cast</span><span class="s2">(</span><span class="s1">expression</span><span class="s2">, </span><span class="s1">TextField</span><span class="s2">())</span>
+                    <span class="s2">),</span>
+                    <span class="s1">Value</span><span class="s2">(</span><span class="s3">&quot;&quot;</span><span class="s2">),</span>
+                <span class="s2">)</span>
+                <span class="s0">for </span><span class="s1">expression </span><span class="s0">in </span><span class="s1">clone</span><span class="s2">.</span><span class="s1">get_source_expressions</span><span class="s2">()</span>
+            <span class="s2">]</span>
+        <span class="s2">)</span>
+        <span class="s1">config_sql </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">config_params </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">template </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">clone</span><span class="s2">.</span><span class="s1">config</span><span class="s2">:</span>
+                <span class="s1">config_sql</span><span class="s2">, </span><span class="s1">config_params </span><span class="s2">= </span><span class="s1">compiler</span><span class="s2">.</span><span class="s1">compile</span><span class="s2">(</span><span class="s1">clone</span><span class="s2">.</span><span class="s1">config</span><span class="s2">)</span>
+                <span class="s1">template </span><span class="s2">= </span><span class="s3">&quot;%(function)s(%(config)s, %(expressions)s)&quot;</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">template </span><span class="s2">= </span><span class="s1">clone</span><span class="s2">.</span><span class="s1">template</span>
+        <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">super</span><span class="s2">(</span><span class="s1">SearchVector</span><span class="s2">, </span><span class="s1">clone</span><span class="s2">).</span><span class="s1">as_sql</span><span class="s2">(</span>
+            <span class="s1">compiler</span><span class="s2">,</span>
+            <span class="s1">connection</span><span class="s2">,</span>
+            <span class="s1">function</span><span class="s2">=</span><span class="s1">function</span><span class="s2">,</span>
+            <span class="s1">template</span><span class="s2">=</span><span class="s1">template</span><span class="s2">,</span>
+            <span class="s1">config</span><span class="s2">=</span><span class="s1">config_sql</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">extra_params </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">clone</span><span class="s2">.</span><span class="s1">weight</span><span class="s2">:</span>
+            <span class="s1">weight_sql</span><span class="s2">, </span><span class="s1">extra_params </span><span class="s2">= </span><span class="s1">compiler</span><span class="s2">.</span><span class="s1">compile</span><span class="s2">(</span><span class="s1">clone</span><span class="s2">.</span><span class="s1">weight</span><span class="s2">)</span>
+            <span class="s1">sql </span><span class="s2">= </span><span class="s3">&quot;setweight({}, {})&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">sql</span><span class="s2">, </span><span class="s1">weight_sql</span><span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">config_params </span><span class="s2">+ </span><span class="s1">params </span><span class="s2">+ </span><span class="s1">extra_params</span>
+
+
+<span class="s0">class </span><span class="s1">CombinedSearchVector</span><span class="s2">(</span><span class="s1">SearchVectorCombinable</span><span class="s2">, </span><span class="s1">CombinedExpression</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">lhs</span><span class="s2">, </span><span class="s1">connector</span><span class="s2">, </span><span class="s1">rhs</span><span class="s2">, </span><span class="s1">config</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">config </span><span class="s2">= </span><span class="s1">config</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">lhs</span><span class="s2">, </span><span class="s1">connector</span><span class="s2">, </span><span class="s1">rhs</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">SearchQueryCombinable</span><span class="s2">:</span>
+    <span class="s1">BITAND </span><span class="s2">= </span><span class="s3">&quot;&amp;&amp;&quot;</span>
+    <span class="s1">BITOR </span><span class="s2">= </span><span class="s3">&quot;||&quot;</span>
+
+    <span class="s0">def </span><span class="s1">_combine</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">other</span><span class="s2">, </span><span class="s1">connector</span><span class="s2">, </span><span class="s1">reversed</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">other</span><span class="s2">, </span><span class="s1">SearchQueryCombinable</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                <span class="s3">&quot;SearchQuery can only be combined with other SearchQuery &quot;</span>
+                <span class="s3">&quot;instances, got %s.&quot; </span><span class="s2">% </span><span class="s1">type</span><span class="s2">(</span><span class="s1">other</span><span class="s2">).</span><span class="s1">__name__</span>
+            <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">reversed</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">CombinedSearchQuery</span><span class="s2">(</span><span class="s1">other</span><span class="s2">, </span><span class="s1">connector</span><span class="s2">, </span><span class="s1">self</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">config</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">CombinedSearchQuery</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connector</span><span class="s2">, </span><span class="s1">other</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">config</span><span class="s2">)</span>
+
+    <span class="s4"># On Combinable, these are not implemented to reduce confusion with Q. In</span>
+    <span class="s4"># this case we are actually (ab)using them to do logical combination so</span>
+    <span class="s4"># it's consistent with other usage in Django.</span>
+    <span class="s0">def </span><span class="s1">__or__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">other</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_combine</span><span class="s2">(</span><span class="s1">other</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">BITOR</span><span class="s2">, </span><span class="s0">False</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__ror__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">other</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_combine</span><span class="s2">(</span><span class="s1">other</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">BITOR</span><span class="s2">, </span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__and__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">other</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_combine</span><span class="s2">(</span><span class="s1">other</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">BITAND</span><span class="s2">, </span><span class="s0">False</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__rand__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">other</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_combine</span><span class="s2">(</span><span class="s1">other</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">BITAND</span><span class="s2">, </span><span class="s0">True</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">SearchQuery</span><span class="s2">(</span><span class="s1">SearchQueryCombinable</span><span class="s2">, </span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">SearchQueryField</span><span class="s2">()</span>
+    <span class="s1">SEARCH_TYPES </span><span class="s2">= {</span>
+        <span class="s3">&quot;plain&quot;</span><span class="s2">: </span><span class="s3">&quot;plainto_tsquery&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;phrase&quot;</span><span class="s2">: </span><span class="s3">&quot;phraseto_tsquery&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;raw&quot;</span><span class="s2">: </span><span class="s3">&quot;to_tsquery&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;websearch&quot;</span><span class="s2">: </span><span class="s3">&quot;websearch_to_tsquery&quot;</span><span class="s2">,</span>
+    <span class="s2">}</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">value</span><span class="s2">,</span>
+        <span class="s1">output_field</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s2">*,</span>
+        <span class="s1">config</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">invert</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">search_type</span><span class="s2">=</span><span class="s3">&quot;plain&quot;</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">function </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">SEARCH_TYPES</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">search_type</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">function </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;Unknown search_type argument '%s'.&quot; </span><span class="s2">% </span><span class="s1">search_type</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s3">&quot;resolve_expression&quot;</span><span class="s2">):</span>
+            <span class="s1">value </span><span class="s2">= </span><span class="s1">Value</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+        <span class="s1">expressions </span><span class="s2">= (</span><span class="s1">value</span><span class="s2">,)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">config </span><span class="s2">= </span><span class="s1">SearchConfig</span><span class="s2">.</span><span class="s1">from_parameter</span><span class="s2">(</span><span class="s1">config</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">config </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">expressions </span><span class="s2">= (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">config</span><span class="s2">,) + </span><span class="s1">expressions</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">invert </span><span class="s2">= </span><span class="s1">invert</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">expressions</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">=</span><span class="s1">output_field</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">function</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">template</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">function</span><span class="s2">, </span><span class="s1">template</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">invert</span><span class="s2">:</span>
+            <span class="s1">sql </span><span class="s2">= </span><span class="s3">&quot;!!(%s)&quot; </span><span class="s2">% </span><span class="s1">sql</span>
+        <span class="s0">return </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">params</span>
+
+    <span class="s0">def </span><span class="s1">__invert__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">clone </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s1">clone</span><span class="s2">.</span><span class="s1">invert </span><span class="s2">= </span><span class="s0">not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">invert</span>
+        <span class="s0">return </span><span class="s1">clone</span>
+
+    <span class="s0">def </span><span class="s1">__str__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">result </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">__str__</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s2">(</span><span class="s3">&quot;~%s&quot; </span><span class="s2">% </span><span class="s1">result</span><span class="s2">) </span><span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">invert </span><span class="s0">else </span><span class="s1">result</span>
+
+
+<span class="s0">class </span><span class="s1">CombinedSearchQuery</span><span class="s2">(</span><span class="s1">SearchQueryCombinable</span><span class="s2">, </span><span class="s1">CombinedExpression</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">lhs</span><span class="s2">, </span><span class="s1">connector</span><span class="s2">, </span><span class="s1">rhs</span><span class="s2">, </span><span class="s1">config</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">config </span><span class="s2">= </span><span class="s1">config</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">lhs</span><span class="s2">, </span><span class="s1">connector</span><span class="s2">, </span><span class="s1">rhs</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__str__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;(%s)&quot; </span><span class="s2">% </span><span class="s1">super</span><span class="s2">().</span><span class="s1">__str__</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">SearchRank</span><span class="s2">(</span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;ts_rank&quot;</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">FloatField</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">vector</span><span class="s2">,</span>
+        <span class="s1">query</span><span class="s2">,</span>
+        <span class="s1">weights</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">normalization</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">cover_density</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s0">from </span><span class="s2">.</span><span class="s1">fields</span><span class="s2">.</span><span class="s1">array </span><span class="s0">import </span><span class="s1">ArrayField</span>
+
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">vector</span><span class="s2">, </span><span class="s3">&quot;resolve_expression&quot;</span><span class="s2">):</span>
+            <span class="s1">vector </span><span class="s2">= </span><span class="s1">SearchVector</span><span class="s2">(</span><span class="s1">vector</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">query</span><span class="s2">, </span><span class="s3">&quot;resolve_expression&quot;</span><span class="s2">):</span>
+            <span class="s1">query </span><span class="s2">= </span><span class="s1">SearchQuery</span><span class="s2">(</span><span class="s1">query</span><span class="s2">)</span>
+        <span class="s1">expressions </span><span class="s2">= (</span><span class="s1">vector</span><span class="s2">, </span><span class="s1">query</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">weights </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">weights</span><span class="s2">, </span><span class="s3">&quot;resolve_expression&quot;</span><span class="s2">):</span>
+                <span class="s1">weights </span><span class="s2">= </span><span class="s1">Value</span><span class="s2">(</span><span class="s1">weights</span><span class="s2">)</span>
+            <span class="s1">weights </span><span class="s2">= </span><span class="s1">Cast</span><span class="s2">(</span><span class="s1">weights</span><span class="s2">, </span><span class="s1">ArrayField</span><span class="s2">(</span><span class="s1">_Float4Field</span><span class="s2">()))</span>
+            <span class="s1">expressions </span><span class="s2">= (</span><span class="s1">weights</span><span class="s2">,) + </span><span class="s1">expressions</span>
+        <span class="s0">if </span><span class="s1">normalization </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">normalization</span><span class="s2">, </span><span class="s3">&quot;resolve_expression&quot;</span><span class="s2">):</span>
+                <span class="s1">normalization </span><span class="s2">= </span><span class="s1">Value</span><span class="s2">(</span><span class="s1">normalization</span><span class="s2">)</span>
+            <span class="s1">expressions </span><span class="s2">+= (</span><span class="s1">normalization</span><span class="s2">,)</span>
+        <span class="s0">if </span><span class="s1">cover_density</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;ts_rank_cd&quot;</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">expressions</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">SearchHeadline</span><span class="s2">(</span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;ts_headline&quot;</span>
+    <span class="s1">template </span><span class="s2">= </span><span class="s3">&quot;%(function)s(%(expressions)s%(options)s)&quot;</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">TextField</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">expression</span><span class="s2">,</span>
+        <span class="s1">query</span><span class="s2">,</span>
+        <span class="s2">*,</span>
+        <span class="s1">config</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">start_sel</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">stop_sel</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">max_words</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">min_words</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">short_word</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">highlight_all</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">max_fragments</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">fragment_delimiter</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">query</span><span class="s2">, </span><span class="s3">&quot;resolve_expression&quot;</span><span class="s2">):</span>
+            <span class="s1">query </span><span class="s2">= </span><span class="s1">SearchQuery</span><span class="s2">(</span><span class="s1">query</span><span class="s2">)</span>
+        <span class="s1">options </span><span class="s2">= {</span>
+            <span class="s3">&quot;StartSel&quot;</span><span class="s2">: </span><span class="s1">start_sel</span><span class="s2">,</span>
+            <span class="s3">&quot;StopSel&quot;</span><span class="s2">: </span><span class="s1">stop_sel</span><span class="s2">,</span>
+            <span class="s3">&quot;MaxWords&quot;</span><span class="s2">: </span><span class="s1">max_words</span><span class="s2">,</span>
+            <span class="s3">&quot;MinWords&quot;</span><span class="s2">: </span><span class="s1">min_words</span><span class="s2">,</span>
+            <span class="s3">&quot;ShortWord&quot;</span><span class="s2">: </span><span class="s1">short_word</span><span class="s2">,</span>
+            <span class="s3">&quot;HighlightAll&quot;</span><span class="s2">: </span><span class="s1">highlight_all</span><span class="s2">,</span>
+            <span class="s3">&quot;MaxFragments&quot;</span><span class="s2">: </span><span class="s1">max_fragments</span><span class="s2">,</span>
+            <span class="s3">&quot;FragmentDelimiter&quot;</span><span class="s2">: </span><span class="s1">fragment_delimiter</span><span class="s2">,</span>
+        <span class="s2">}</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">options </span><span class="s2">= {</span>
+            <span class="s1">option</span><span class="s2">: </span><span class="s1">value </span><span class="s0">for </span><span class="s1">option</span><span class="s2">, </span><span class="s1">value </span><span class="s0">in </span><span class="s1">options</span><span class="s2">.</span><span class="s1">items</span><span class="s2">() </span><span class="s0">if </span><span class="s1">value </span><span class="s0">is not None</span>
+        <span class="s2">}</span>
+        <span class="s1">expressions </span><span class="s2">= (</span><span class="s1">expression</span><span class="s2">, </span><span class="s1">query</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">config </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">config </span><span class="s2">= </span><span class="s1">SearchConfig</span><span class="s2">.</span><span class="s1">from_parameter</span><span class="s2">(</span><span class="s1">config</span><span class="s2">)</span>
+            <span class="s1">expressions </span><span class="s2">= (</span><span class="s1">config</span><span class="s2">,) + </span><span class="s1">expressions</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">expressions</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">function</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">template</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">options_sql </span><span class="s2">= </span><span class="s3">&quot;&quot;</span>
+        <span class="s1">options_params </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">options</span><span class="s2">:</span>
+            <span class="s1">options_params</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                <span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span>
+                    <span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">compose_sql</span><span class="s2">(</span><span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">option</span><span class="s0">}</span><span class="s3">=%s&quot;</span><span class="s2">, [</span><span class="s1">value</span><span class="s2">])</span>
+                    <span class="s0">for </span><span class="s1">option</span><span class="s2">, </span><span class="s1">value </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">options</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+            <span class="s1">options_sql </span><span class="s2">= </span><span class="s3">&quot;, %s&quot;</span>
+        <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">as_sql</span><span class="s2">(</span>
+            <span class="s1">compiler</span><span class="s2">,</span>
+            <span class="s1">connection</span><span class="s2">,</span>
+            <span class="s1">function</span><span class="s2">=</span><span class="s1">function</span><span class="s2">,</span>
+            <span class="s1">template</span><span class="s2">=</span><span class="s1">template</span><span class="s2">,</span>
+            <span class="s1">options</span><span class="s2">=</span><span class="s1">options_sql</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">+ </span><span class="s1">options_params</span>
+
+
+<span class="s1">SearchVectorField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">SearchVectorExact</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">TrigramBase</span><span class="s2">(</span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">FloatField</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">expression</span><span class="s2">, </span><span class="s1">string</span><span class="s2">, **</span><span class="s1">extra</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">string</span><span class="s2">, </span><span class="s3">&quot;resolve_expression&quot;</span><span class="s2">):</span>
+            <span class="s1">string </span><span class="s2">= </span><span class="s1">Value</span><span class="s2">(</span><span class="s1">string</span><span class="s2">)</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">expression</span><span class="s2">, </span><span class="s1">string</span><span class="s2">, **</span><span class="s1">extra</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">TrigramWordBase</span><span class="s2">(</span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">FloatField</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">string</span><span class="s2">, </span><span class="s1">expression</span><span class="s2">, **</span><span class="s1">extra</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">string</span><span class="s2">, </span><span class="s3">&quot;resolve_expression&quot;</span><span class="s2">):</span>
+            <span class="s1">string </span><span class="s2">= </span><span class="s1">Value</span><span class="s2">(</span><span class="s1">string</span><span class="s2">)</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">string</span><span class="s2">, </span><span class="s1">expression</span><span class="s2">, **</span><span class="s1">extra</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">TrigramSimilarity</span><span class="s2">(</span><span class="s1">TrigramBase</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;SIMILARITY&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TrigramDistance</span><span class="s2">(</span><span class="s1">TrigramBase</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;&quot;</span>
+    <span class="s1">arg_joiner </span><span class="s2">= </span><span class="s3">&quot; &lt;-&gt; &quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TrigramWordDistance</span><span class="s2">(</span><span class="s1">TrigramWordBase</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;&quot;</span>
+    <span class="s1">arg_joiner </span><span class="s2">= </span><span class="s3">&quot; &lt;&lt;-&gt; &quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TrigramStrictWordDistance</span><span class="s2">(</span><span class="s1">TrigramWordBase</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;&quot;</span>
+    <span class="s1">arg_joiner </span><span class="s2">= </span><span class="s3">&quot; &lt;&lt;&lt;-&gt; &quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TrigramWordSimilarity</span><span class="s2">(</span><span class="s1">TrigramWordBase</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;WORD_SIMILARITY&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TrigramStrictWordSimilarity</span><span class="s2">(</span><span class="s1">TrigramWordBase</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;STRICT_WORD_SIMILARITY&quot;</span>
+</pre>
+</body>
+</html>

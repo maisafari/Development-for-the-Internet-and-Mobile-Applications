@@ -1,0 +1,86 @@
+<html>
+<head>
+<title>tabular.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #bcbec4;}
+.s1 { color: #d5b778;}
+.s2 { color: #bababa;}
+.s3 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+tabular.html</font>
+</center></td></tr></table>
+<pre><span class="s0">{% load i18n admin_urls static admin_modify %}</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;js-inline-admin-formset inline-group&quot; </span><span class="s2">id</span><span class="s3">=&quot;{{ inline_admin_formset.formset.prefix }}-group&quot;</span>
+     <span class="s2">data-inline-type</span><span class="s3">=&quot;tabular&quot;</span>
+     <span class="s2">data-inline-formset</span><span class="s3">=&quot;{{ inline_admin_formset.inline_formset_data }}&quot;</span><span class="s1">&gt;</span>
+  <span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;tabular inline-related {% if forloop.last %}last-related{% endif %}&quot;</span><span class="s1">&gt;</span>
+<span class="s0">{{ inline_admin_formset.formset.management_form }}</span>
+<span class="s1">&lt;fieldset </span><span class="s2">class</span><span class="s3">=&quot;module {{ inline_admin_formset.classes }}&quot;</span><span class="s1">&gt;</span>
+   <span class="s0">{% if inline_admin_formset.formset.max_num == 1 %}</span>
+     <span class="s1">&lt;h2&gt;</span><span class="s0">{{ inline_admin_formset.opts.verbose_name|capfirst }}</span><span class="s1">&lt;/h2&gt;</span>
+   <span class="s0">{% else %}</span>
+     <span class="s1">&lt;h2&gt;</span><span class="s0">{{ inline_admin_formset.opts.verbose_name_plural|capfirst }}</span><span class="s1">&lt;/h2&gt;</span>
+   <span class="s0">{% endif %}</span>
+   <span class="s0">{{ inline_admin_formset.formset.non_form_errors }}</span>
+   <span class="s1">&lt;table&gt;</span>
+     <span class="s1">&lt;thead&gt;&lt;tr&gt;</span>
+       <span class="s1">&lt;th </span><span class="s2">class</span><span class="s3">=&quot;original&quot;</span><span class="s1">&gt;&lt;/th&gt;</span>
+     <span class="s0">{% for field in inline_admin_formset.fields %}</span>
+       <span class="s1">&lt;th </span><span class="s2">class</span><span class="s3">=&quot;column-{{ field.name }}{% if field.required %} required{% endif %}{% if field.widget.is_hidden %} hidden{% endif %}&quot;</span><span class="s1">&gt;</span><span class="s0">{{ field.label|capfirst }}</span>
+       <span class="s0">{% if field.help_text %}</span><span class="s1">&lt;img </span><span class="s2">src</span><span class="s3">=&quot;{% static &quot;</span><span class="s2">admin</span><span class="s0">/img/icon-unknown.svg&quot; %}&quot; class=&quot;help help-tooltip&quot; width=&quot;10&quot; height=&quot;10&quot; alt=&quot;({{ field.help_text|striptags }})&quot; title=&quot;{{ field.help_text|striptags }}&quot;&gt;{% endif %}</span>
+       <span class="s1">&lt;/th&gt;</span>
+     <span class="s0">{% endfor %}</span>
+     <span class="s0">{% if inline_admin_formset.formset.can_delete and inline_admin_formset.has_delete_permission %}</span><span class="s1">&lt;th&gt;</span><span class="s0">{% translate &quot;Delete?&quot; %}</span><span class="s1">&lt;/th&gt;</span><span class="s0">{% endif %}</span>
+     <span class="s1">&lt;/tr&gt;&lt;/thead&gt;</span>
+
+     <span class="s1">&lt;tbody&gt;</span>
+     <span class="s0">{% for inline_admin_form in inline_admin_formset %}</span>
+        <span class="s0">{% if inline_admin_form.form.non_field_errors %}</span>
+        <span class="s1">&lt;tr </span><span class="s2">class</span><span class="s3">=&quot;row-form-errors&quot;</span><span class="s1">&gt;&lt;td </span><span class="s2">colspan</span><span class="s3">=&quot;{{ inline_admin_form|cell_count }}&quot;</span><span class="s1">&gt;</span><span class="s0">{{ inline_admin_form.form.non_field_errors }}</span><span class="s1">&lt;/td&gt;&lt;/tr&gt;</span>
+        <span class="s0">{% endif %}</span>
+        <span class="s1">&lt;tr </span><span class="s2">class</span><span class="s3">=&quot;form-row {% if inline_admin_form.original or inline_admin_form.show_url %}has_original{% endif %}{% if forloop.last and inline_admin_formset.has_add_permission %} empty-form{% endif %}&quot;</span>
+             <span class="s2">id</span><span class="s3">=&quot;{{ inline_admin_formset.formset.prefix }}-{% if forloop.last and inline_admin_formset.has_add_permission %}empty{% else %}{{ forloop.counter0 }}{% endif %}&quot;</span><span class="s1">&gt;</span>
+        <span class="s1">&lt;td </span><span class="s2">class</span><span class="s3">=&quot;original&quot;</span><span class="s1">&gt;</span>
+          <span class="s0">{% if inline_admin_form.original or inline_admin_form.show_url %}</span><span class="s1">&lt;p&gt;</span>
+          <span class="s0">{% if inline_admin_form.original %}</span>
+          <span class="s0">{{ inline_admin_form.original }}</span>
+          <span class="s0">{% if inline_admin_form.model_admin.show_change_link and inline_admin_form.model_admin.has_registered_model %}</span><span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url inline_admin_form.model_admin.opts|admin_urlname:'change' inline_admin_form.original.pk|admin_urlquote %}&quot; </span><span class="s2">class</span><span class="s3">=&quot;{{ inline_admin_formset.has_change_permission|yesno:'inlinechangelink,inlineviewlink' }}&quot;</span><span class="s1">&gt;</span><span class="s0">{% if inline_admin_formset.has_change_permission %}{% translate &quot;Change&quot; %}{% else %}{% translate &quot;View&quot; %}{% endif %}</span><span class="s1">&lt;/a&gt;</span><span class="s0">{% endif %}</span>
+          <span class="s0">{% endif %}</span>
+          <span class="s0">{% if inline_admin_form.show_url %}</span><span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{{ inline_admin_form.absolute_url }}&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate &quot;View on site&quot; %}</span><span class="s1">&lt;/a&gt;</span><span class="s0">{% endif %}</span>
+            <span class="s1">&lt;/p&gt;</span><span class="s0">{% endif %}</span>
+          <span class="s0">{% if inline_admin_form.needs_explicit_pk_field %}{{ inline_admin_form.pk_field.field }}{% endif %}</span>
+          <span class="s0">{% if inline_admin_form.fk_field %}{{ inline_admin_form.fk_field.field }}{% endif %}</span>
+        <span class="s1">&lt;/td&gt;</span>
+        <span class="s0">{% for fieldset in inline_admin_form %}</span>
+          <span class="s0">{% for line in fieldset %}</span>
+            <span class="s0">{% for field in line %}</span>
+              <span class="s1">&lt;td </span><span class="s2">class</span><span class="s3">=&quot;{% if field.field.name %}field-{{ field.field.name }}{% endif %}{% if field.field.is_hidden %} hidden{% endif %}&quot;</span><span class="s1">&gt;</span>
+              <span class="s0">{% if field.is_readonly %}</span>
+                  <span class="s1">&lt;p&gt;</span><span class="s0">{{ field.contents }}</span><span class="s1">&lt;/p&gt;</span>
+              <span class="s0">{% else %}</span>
+                  <span class="s0">{{ field.field.errors.as_ul }}</span>
+                  <span class="s0">{{ field.field }}</span>
+              <span class="s0">{% endif %}</span>
+              <span class="s1">&lt;/td&gt;</span>
+            <span class="s0">{% endfor %}</span>
+          <span class="s0">{% endfor %}</span>
+        <span class="s0">{% endfor %}</span>
+        <span class="s0">{% if inline_admin_formset.formset.can_delete and inline_admin_formset.has_delete_permission %}</span>
+          <span class="s1">&lt;td </span><span class="s2">class</span><span class="s3">=&quot;delete&quot;</span><span class="s1">&gt;</span><span class="s0">{% if inline_admin_form.original %}{{ inline_admin_form.deletion_field.field }}{% endif %}</span><span class="s1">&lt;/td&gt;</span>
+        <span class="s0">{% endif %}</span>
+        <span class="s1">&lt;/tr&gt;</span>
+     <span class="s0">{% endfor %}</span>
+     <span class="s1">&lt;/tbody&gt;</span>
+   <span class="s1">&lt;/table&gt;</span>
+<span class="s1">&lt;/fieldset&gt;</span>
+  <span class="s1">&lt;/div&gt;</span>
+<span class="s1">&lt;/div&gt;</span>
+</pre>
+</body>
+</html>

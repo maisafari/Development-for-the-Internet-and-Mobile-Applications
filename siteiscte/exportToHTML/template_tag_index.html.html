@@ -1,0 +1,75 @@
+<html>
+<head>
+<title>template_tag_index.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #bcbec4;}
+.s1 { color: #d5b778;}
+.s2 { color: #bababa;}
+.s3 { color: #6aab73;}
+.s4 { color: #56a8f5;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+template_tag_index.html</font>
+</center></td></tr></table>
+<pre><span class="s0">{% extends &quot;admin/base_site.html&quot; %}</span>
+<span class="s0">{% load i18n %}</span>
+
+<span class="s0">{% block coltype %}colSM{% endblock %}</span>
+<span class="s0">{% block breadcrumbs %}</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;breadcrumbs&quot;</span><span class="s1">&gt;</span>
+<span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url 'admin:index' %}&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'Home' %}</span><span class="s1">&lt;/a&gt;</span>
+<span class="s4">&amp;rsaquo; </span><span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url 'django-admindocs-docroot' %}&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'Documentation' %}</span><span class="s1">&lt;/a&gt;</span>
+<span class="s4">&amp;rsaquo; </span><span class="s0">{% translate 'Tags' %}</span>
+<span class="s1">&lt;/div&gt;</span>
+<span class="s0">{% endblock %}</span>
+<span class="s0">{% block title %}{% translate 'Template tags' %}{% endblock %}</span>
+
+<span class="s0">{% block content %}</span>
+
+<span class="s1">&lt;h1&gt;</span><span class="s0">{% translate 'Template tag documentation' %}</span><span class="s1">&lt;/h1&gt;</span>
+
+<span class="s1">&lt;div </span><span class="s2">id</span><span class="s3">=&quot;content-main&quot;</span><span class="s1">&gt;</span>
+<span class="s0">{% regroup tags|dictsort:&quot;library&quot; by library as tag_libraries %}</span>
+<span class="s0">{% for library in tag_libraries %}</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;module&quot;</span><span class="s1">&gt;</span>
+    <span class="s1">&lt;h2&gt;</span><span class="s0">{% firstof library.grouper _(&quot;Built-in tags&quot;) %}</span><span class="s1">&lt;/h2&gt;</span>
+    <span class="s0">{% if library.grouper %}</span><span class="s1">&lt;p </span><span class="s2">class</span><span class="s3">=&quot;small quiet&quot;</span><span class="s1">&gt;</span><span class="s0">{% blocktranslate with code=&quot;{&quot;|add:&quot;% load &quot;|add:library.grouper|add:&quot; %&quot;|add:&quot;}&quot; %}To use these tags, put </span><span class="s1">&lt;code&gt;</span><span class="s0">{{ code }}</span><span class="s1">&lt;/code&gt; </span><span class="s0">in your template before using the tag.{% endblocktranslate %}</span><span class="s1">&lt;/p&gt;&lt;hr&gt;</span><span class="s0">{% endif %}</span>
+    <span class="s0">{% for tag in library.list|dictsort:&quot;name&quot; %}</span>
+    <span class="s1">&lt;h3 </span><span class="s2">id</span><span class="s3">=&quot;{{ library.grouper|default:&quot;</span><span class="s2">built_in</span><span class="s0">&quot; }}-{{ tag.name }}&quot;&gt;{{ tag.name }}</span><span class="s1">&lt;/h3&gt;</span>
+    <span class="s1">&lt;h4&gt;</span><span class="s0">{{ tag.title|striptags }}</span><span class="s1">&lt;/h4&gt;</span>
+    <span class="s0">{{ tag.body }}</span>
+    <span class="s0">{% if not forloop.last %}</span><span class="s1">&lt;hr&gt;</span><span class="s0">{% endif %}</span>
+    <span class="s0">{% endfor %}</span>
+<span class="s1">&lt;/div&gt;</span>
+<span class="s0">{% endfor %}</span>
+<span class="s1">&lt;/div&gt;</span>
+
+<span class="s0">{% endblock %}</span>
+
+<span class="s0">{% block sidebar %}</span>
+
+<span class="s1">&lt;div </span><span class="s2">id</span><span class="s3">=&quot;content-related&quot;</span><span class="s1">&gt;</span>
+
+<span class="s0">{% regroup tags|dictsort:&quot;library&quot; by library as tag_libraries %}</span>
+<span class="s0">{% for library in tag_libraries %}</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;module&quot;</span><span class="s1">&gt;</span>
+    <span class="s1">&lt;h2&gt;</span><span class="s0">{% firstof library.grouper _(&quot;Built-in tags&quot;) %}</span><span class="s1">&lt;/h2&gt;</span>
+    <span class="s1">&lt;ul&gt;</span>
+    <span class="s0">{% for tag in library.list|dictsort:&quot;name&quot; %}</span>
+        <span class="s1">&lt;li&gt;&lt;a </span><span class="s2">href</span><span class="s3">=&quot;#{{ library.grouper|default:&quot;</span><span class="s2">built_in</span><span class="s0">&quot; }}-{{ tag.name }}&quot;&gt;{{ tag.name }}</span><span class="s1">&lt;/a&gt;&lt;/li&gt;</span>
+    <span class="s0">{% endfor %}</span>
+    <span class="s1">&lt;/ul&gt;</span>
+<span class="s1">&lt;/div&gt;</span>
+<span class="s0">{% endfor %}</span>
+
+<span class="s1">&lt;/div&gt;</span>
+
+<span class="s0">{% endblock %}</span>
+</pre>
+</body>
+</html>

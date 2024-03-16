@@ -1,0 +1,156 @@
+<html>
+<head>
+<title>forms.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+forms.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">contenttypes</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">ContentType</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">models</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">forms </span><span class="s0">import </span><span class="s1">ModelForm</span><span class="s2">, </span><span class="s1">modelformset_factory</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">forms</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">BaseModelFormSet</span>
+
+
+<span class="s0">class </span><span class="s1">BaseGenericInlineFormSet</span><span class="s2">(</span><span class="s1">BaseModelFormSet</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    A formset for generic inline objects to a parent. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">data</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">files</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">instance</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">save_as_new</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">prefix</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">queryset</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s2">**</span><span class="s1">kwargs</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s1">opts </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">instance </span><span class="s2">= </span><span class="s1">instance</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">rel_name </span><span class="s2">= (</span>
+            <span class="s1">opts</span><span class="s2">.</span><span class="s1">app_label</span>
+            <span class="s2">+ </span><span class="s4">&quot;-&quot;</span>
+            <span class="s2">+ </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">model_name</span>
+            <span class="s2">+ </span><span class="s4">&quot;-&quot;</span>
+            <span class="s2">+ </span><span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">.</span><span class="s1">name</span>
+            <span class="s2">+ </span><span class="s4">&quot;-&quot;</span>
+            <span class="s2">+ </span><span class="s1">self</span><span class="s2">.</span><span class="s1">ct_fk_field</span><span class="s2">.</span><span class="s1">name</span>
+        <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">save_as_new </span><span class="s2">= </span><span class="s1">save_as_new</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance </span><span class="s0">is None or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">.</span><span class="s1">pk </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">qs </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">.</span><span class="s1">none</span><span class="s2">()</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">queryset </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s1">queryset </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_default_manager</span>
+            <span class="s1">qs </span><span class="s2">= </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(</span>
+                <span class="s2">**{</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">.</span><span class="s1">name</span><span class="s2">: </span><span class="s1">ContentType</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">get_for_model</span><span class="s2">(</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">, </span><span class="s1">for_concrete_model</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">for_concrete_model</span>
+                    <span class="s2">),</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">ct_fk_field</span><span class="s2">.</span><span class="s1">name</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">,</span>
+                <span class="s2">}</span>
+            <span class="s2">)</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">queryset</span><span class="s2">=</span><span class="s1">qs</span><span class="s2">, </span><span class="s1">data</span><span class="s2">=</span><span class="s1">data</span><span class="s2">, </span><span class="s1">files</span><span class="s2">=</span><span class="s1">files</span><span class="s2">, </span><span class="s1">prefix</span><span class="s2">=</span><span class="s1">prefix</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">initial_form_count</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">save_as_new</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s5">0</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">initial_form_count</span><span class="s2">()</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">get_default_prefix</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">):</span>
+        <span class="s1">opts </span><span class="s2">= </span><span class="s1">cls</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span>
+        <span class="s0">return </span><span class="s2">(</span>
+            <span class="s1">opts</span><span class="s2">.</span><span class="s1">app_label</span>
+            <span class="s2">+ </span><span class="s4">&quot;-&quot;</span>
+            <span class="s2">+ </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">model_name</span>
+            <span class="s2">+ </span><span class="s4">&quot;-&quot;</span>
+            <span class="s2">+ </span><span class="s1">cls</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">.</span><span class="s1">name</span>
+            <span class="s2">+ </span><span class="s4">&quot;-&quot;</span>
+            <span class="s2">+ </span><span class="s1">cls</span><span class="s2">.</span><span class="s1">ct_fk_field</span><span class="s2">.</span><span class="s1">name</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">save_new</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">form</span><span class="s2">, </span><span class="s1">commit</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+        <span class="s1">setattr</span><span class="s2">(</span>
+            <span class="s1">form</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">.</span><span class="s1">get_attname</span><span class="s2">(),</span>
+            <span class="s1">ContentType</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">get_for_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">).</span><span class="s1">pk</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">setattr</span><span class="s2">(</span><span class="s1">form</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">ct_fk_field</span><span class="s2">.</span><span class="s1">get_attname</span><span class="s2">(), </span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">form</span><span class="s2">.</span><span class="s1">save</span><span class="s2">(</span><span class="s1">commit</span><span class="s2">=</span><span class="s1">commit</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">generic_inlineformset_factory</span><span class="s2">(</span>
+    <span class="s1">model</span><span class="s2">,</span>
+    <span class="s1">form</span><span class="s2">=</span><span class="s1">ModelForm</span><span class="s2">,</span>
+    <span class="s1">formset</span><span class="s2">=</span><span class="s1">BaseGenericInlineFormSet</span><span class="s2">,</span>
+    <span class="s1">ct_field</span><span class="s2">=</span><span class="s4">&quot;content_type&quot;</span><span class="s2">,</span>
+    <span class="s1">fk_field</span><span class="s2">=</span><span class="s4">&quot;object_id&quot;</span><span class="s2">,</span>
+    <span class="s1">fields</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s1">exclude</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s1">extra</span><span class="s2">=</span><span class="s5">3</span><span class="s2">,</span>
+    <span class="s1">can_order</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+    <span class="s1">can_delete</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+    <span class="s1">max_num</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s1">formfield_callback</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s1">validate_max</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+    <span class="s1">for_concrete_model</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+    <span class="s1">min_num</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s1">validate_min</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+    <span class="s1">absolute_max</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s1">can_delete_extra</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+<span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Return a ``GenericInlineFormSet`` for the given kwargs. 
+ 
+    You must provide ``ct_field`` and ``fk_field`` if they are different from 
+    the defaults ``content_type`` and ``object_id`` respectively. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">opts </span><span class="s2">= </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span>
+    <span class="s6"># if there is no field called `ct_field` let the exception propagate</span>
+    <span class="s1">ct_field </span><span class="s2">= </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">ct_field</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s2">(</span>
+        <span class="s0">not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">ct_field</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">ForeignKey</span><span class="s2">)</span>
+        <span class="s0">or </span><span class="s1">ct_field</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model </span><span class="s2">!= </span><span class="s1">ContentType</span>
+    <span class="s2">):</span>
+        <span class="s0">raise </span><span class="s1">Exception</span><span class="s2">(</span><span class="s4">&quot;fk_name '%s' is not a ForeignKey to ContentType&quot; </span><span class="s2">% </span><span class="s1">ct_field</span><span class="s2">)</span>
+    <span class="s1">fk_field </span><span class="s2">= </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">fk_field</span><span class="s2">)  </span><span class="s6"># let the exception propagate</span>
+    <span class="s1">exclude </span><span class="s2">= [*(</span><span class="s1">exclude </span><span class="s0">or </span><span class="s2">[]), </span><span class="s1">ct_field</span><span class="s2">.</span><span class="s1">name</span><span class="s2">, </span><span class="s1">fk_field</span><span class="s2">.</span><span class="s1">name</span><span class="s2">]</span>
+    <span class="s1">FormSet </span><span class="s2">= </span><span class="s1">modelformset_factory</span><span class="s2">(</span>
+        <span class="s1">model</span><span class="s2">,</span>
+        <span class="s1">form</span><span class="s2">=</span><span class="s1">form</span><span class="s2">,</span>
+        <span class="s1">formfield_callback</span><span class="s2">=</span><span class="s1">formfield_callback</span><span class="s2">,</span>
+        <span class="s1">formset</span><span class="s2">=</span><span class="s1">formset</span><span class="s2">,</span>
+        <span class="s1">extra</span><span class="s2">=</span><span class="s1">extra</span><span class="s2">,</span>
+        <span class="s1">can_delete</span><span class="s2">=</span><span class="s1">can_delete</span><span class="s2">,</span>
+        <span class="s1">can_order</span><span class="s2">=</span><span class="s1">can_order</span><span class="s2">,</span>
+        <span class="s1">fields</span><span class="s2">=</span><span class="s1">fields</span><span class="s2">,</span>
+        <span class="s1">exclude</span><span class="s2">=</span><span class="s1">exclude</span><span class="s2">,</span>
+        <span class="s1">max_num</span><span class="s2">=</span><span class="s1">max_num</span><span class="s2">,</span>
+        <span class="s1">validate_max</span><span class="s2">=</span><span class="s1">validate_max</span><span class="s2">,</span>
+        <span class="s1">min_num</span><span class="s2">=</span><span class="s1">min_num</span><span class="s2">,</span>
+        <span class="s1">validate_min</span><span class="s2">=</span><span class="s1">validate_min</span><span class="s2">,</span>
+        <span class="s1">absolute_max</span><span class="s2">=</span><span class="s1">absolute_max</span><span class="s2">,</span>
+        <span class="s1">can_delete_extra</span><span class="s2">=</span><span class="s1">can_delete_extra</span><span class="s2">,</span>
+    <span class="s2">)</span>
+    <span class="s1">FormSet</span><span class="s2">.</span><span class="s1">ct_field </span><span class="s2">= </span><span class="s1">ct_field</span>
+    <span class="s1">FormSet</span><span class="s2">.</span><span class="s1">ct_fk_field </span><span class="s2">= </span><span class="s1">fk_field</span>
+    <span class="s1">FormSet</span><span class="s2">.</span><span class="s1">for_concrete_model </span><span class="s2">= </span><span class="s1">for_concrete_model</span>
+    <span class="s0">return </span><span class="s1">FormSet</span>
+</pre>
+</body>
+</html>

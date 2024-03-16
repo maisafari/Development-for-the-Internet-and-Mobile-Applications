@@ -1,0 +1,35 @@
+<html>
+<head>
+<title>prepopulate_init.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #6aab73;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #cf8e6d;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+prepopulate_init.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+<span class="s1">{</span>
+    <span class="s3">const </span><span class="s2">$ </span><span class="s1">= </span><span class="s2">django</span><span class="s1">.</span><span class="s2">jQuery</span><span class="s1">;</span>
+    <span class="s3">const </span><span class="s2">fields </span><span class="s1">= </span><span class="s2">$</span><span class="s1">(</span><span class="s0">'#django-admin-prepopulated-fields-constants'</span><span class="s1">).</span><span class="s2">data</span><span class="s1">(</span><span class="s0">'prepopulatedFields'</span><span class="s1">);</span>
+    <span class="s2">$</span><span class="s1">.</span><span class="s2">each</span><span class="s1">(</span><span class="s2">fields</span><span class="s1">, </span><span class="s3">function</span><span class="s1">(</span><span class="s2">index</span><span class="s1">, </span><span class="s2">field</span><span class="s1">) {</span>
+        <span class="s2">$</span><span class="s1">(</span>
+            <span class="s0">'.empty-form .form-row .field-' </span><span class="s1">+ </span><span class="s2">field</span><span class="s1">.</span><span class="s2">name </span><span class="s1">+</span>
+            <span class="s0">', .empty-form.form-row .field-' </span><span class="s1">+ </span><span class="s2">field</span><span class="s1">.</span><span class="s2">name </span><span class="s1">+</span>
+            <span class="s0">', .empty-form .form-row.field-' </span><span class="s1">+ </span><span class="s2">field</span><span class="s1">.</span><span class="s2">name</span>
+        <span class="s1">).</span><span class="s2">addClass</span><span class="s1">(</span><span class="s0">'prepopulated_field'</span><span class="s1">);</span>
+        <span class="s2">$</span><span class="s1">(</span><span class="s2">field</span><span class="s1">.</span><span class="s2">id</span><span class="s1">).</span><span class="s2">data</span><span class="s1">(</span><span class="s0">'dependency_list'</span><span class="s1">, </span><span class="s2">field</span><span class="s1">.</span><span class="s2">dependency_list</span><span class="s1">).</span><span class="s2">prepopulate</span><span class="s1">(</span>
+            <span class="s2">field</span><span class="s1">.</span><span class="s2">dependency_ids</span><span class="s1">, </span><span class="s2">field</span><span class="s1">.</span><span class="s2">maxLength</span><span class="s1">, </span><span class="s2">field</span><span class="s1">.</span><span class="s2">allowUnicode</span>
+        <span class="s1">);</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

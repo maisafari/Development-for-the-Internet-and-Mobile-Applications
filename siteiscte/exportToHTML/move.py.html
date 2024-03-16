@@ -1,0 +1,126 @@
+<html>
+<head>
+<title>move.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+.s7 { color: #a5c261;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+move.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Move a file in the safest way possible:: 
+ 
+    &gt;&gt;&gt; from django.core.files.move import file_move_safe 
+    &gt;&gt;&gt; file_move_safe(&quot;/tmp/old_file&quot;, &quot;/tmp/new_file&quot;) 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">from </span><span class="s1">shutil </span><span class="s2">import </span><span class="s1">copymode</span><span class="s3">, </span><span class="s1">copystat</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">files </span><span class="s2">import </span><span class="s1">locks</span>
+
+<span class="s1">__all__ </span><span class="s3">= [</span><span class="s4">&quot;file_move_safe&quot;</span><span class="s3">]</span>
+
+
+<span class="s2">def </span><span class="s1">_samefile</span><span class="s3">(</span><span class="s1">src</span><span class="s3">, </span><span class="s1">dst</span><span class="s3">):</span>
+    <span class="s5"># Macintosh, Unix.</span>
+    <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">, </span><span class="s4">&quot;samefile&quot;</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">samefile</span><span class="s3">(</span><span class="s1">src</span><span class="s3">, </span><span class="s1">dst</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">OSError</span><span class="s3">:</span>
+            <span class="s2">return False</span>
+
+    <span class="s5"># All other platforms: check for same pathname.</span>
+    <span class="s2">return </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">normcase</span><span class="s3">(</span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">abspath</span><span class="s3">(</span><span class="s1">src</span><span class="s3">)) == </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">normcase</span><span class="s3">(</span>
+        <span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">abspath</span><span class="s3">(</span><span class="s1">dst</span><span class="s3">)</span>
+    <span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">file_move_safe</span><span class="s3">(</span>
+    <span class="s1">old_file_name</span><span class="s3">, </span><span class="s1">new_file_name</span><span class="s3">, </span><span class="s1">chunk_size</span><span class="s3">=</span><span class="s6">1024 </span><span class="s3">* </span><span class="s6">64</span><span class="s3">, </span><span class="s1">allow_overwrite</span><span class="s3">=</span><span class="s2">False</span>
+<span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Move a file from one location to another in the safest way possible. 
+ 
+    First, try ``os.rename``, which is simple but will break across filesystems. 
+    If that fails, stream manually from one file to another in pure Python. 
+ 
+    If the destination file exists and ``allow_overwrite`` is ``False``, raise 
+    ``FileExistsError``. 
+    &quot;&quot;&quot;</span>
+    <span class="s5"># There's no reason to move if we don't have to.</span>
+    <span class="s2">if </span><span class="s1">_samefile</span><span class="s3">(</span><span class="s1">old_file_name</span><span class="s3">, </span><span class="s1">new_file_name</span><span class="s3">):</span>
+        <span class="s2">return</span>
+
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">if not </span><span class="s1">allow_overwrite </span><span class="s2">and </span><span class="s1">os</span><span class="s3">.</span><span class="s1">access</span><span class="s3">(</span><span class="s1">new_file_name</span><span class="s3">, </span><span class="s1">os</span><span class="s3">.</span><span class="s1">F_OK</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">FileExistsError</span><span class="s3">(</span>
+                <span class="s4">&quot;Destination file %s exists and allow_overwrite is False.&quot;</span>
+                <span class="s3">% </span><span class="s1">new_file_name</span>
+            <span class="s3">)</span>
+
+        <span class="s1">os</span><span class="s3">.</span><span class="s1">rename</span><span class="s3">(</span><span class="s1">old_file_name</span><span class="s3">, </span><span class="s1">new_file_name</span><span class="s3">)</span>
+        <span class="s2">return</span>
+    <span class="s2">except </span><span class="s1">OSError</span><span class="s3">:</span>
+        <span class="s5"># OSError happens with os.rename() if moving to another filesystem or</span>
+        <span class="s5"># when moving opened files on certain operating systems.</span>
+        <span class="s2">pass</span>
+
+    <span class="s5"># first open the old file, so that it won't go away</span>
+    <span class="s2">with </span><span class="s1">open</span><span class="s3">(</span><span class="s1">old_file_name</span><span class="s3">, </span><span class="s4">&quot;rb&quot;</span><span class="s3">) </span><span class="s2">as </span><span class="s1">old_file</span><span class="s3">:</span>
+        <span class="s5"># now open the new file, not forgetting allow_overwrite</span>
+        <span class="s1">fd </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">open</span><span class="s3">(</span>
+            <span class="s1">new_file_name</span><span class="s3">,</span>
+            <span class="s3">(</span>
+                <span class="s1">os</span><span class="s3">.</span><span class="s1">O_WRONLY</span>
+                <span class="s3">| </span><span class="s1">os</span><span class="s3">.</span><span class="s1">O_CREAT</span>
+                <span class="s3">| </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">os</span><span class="s3">, </span><span class="s4">&quot;O_BINARY&quot;</span><span class="s3">, </span><span class="s6">0</span><span class="s3">)</span>
+                <span class="s3">| (</span><span class="s1">os</span><span class="s3">.</span><span class="s1">O_EXCL </span><span class="s2">if not </span><span class="s1">allow_overwrite </span><span class="s2">else </span><span class="s6">0</span><span class="s3">)</span>
+            <span class="s3">),</span>
+        <span class="s3">)</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">locks</span><span class="s3">.</span><span class="s1">lock</span><span class="s3">(</span><span class="s1">fd</span><span class="s3">, </span><span class="s1">locks</span><span class="s3">.</span><span class="s1">LOCK_EX</span><span class="s3">)</span>
+            <span class="s1">current_chunk </span><span class="s3">= </span><span class="s2">None</span>
+            <span class="s2">while </span><span class="s1">current_chunk </span><span class="s3">!= </span><span class="s7">b&quot;&quot;</span><span class="s3">:</span>
+                <span class="s1">current_chunk </span><span class="s3">= </span><span class="s1">old_file</span><span class="s3">.</span><span class="s1">read</span><span class="s3">(</span><span class="s1">chunk_size</span><span class="s3">)</span>
+                <span class="s1">os</span><span class="s3">.</span><span class="s1">write</span><span class="s3">(</span><span class="s1">fd</span><span class="s3">, </span><span class="s1">current_chunk</span><span class="s3">)</span>
+        <span class="s2">finally</span><span class="s3">:</span>
+            <span class="s1">locks</span><span class="s3">.</span><span class="s1">unlock</span><span class="s3">(</span><span class="s1">fd</span><span class="s3">)</span>
+            <span class="s1">os</span><span class="s3">.</span><span class="s1">close</span><span class="s3">(</span><span class="s1">fd</span><span class="s3">)</span>
+
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">copystat</span><span class="s3">(</span><span class="s1">old_file_name</span><span class="s3">, </span><span class="s1">new_file_name</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">PermissionError</span><span class="s3">:</span>
+        <span class="s5"># Certain filesystems (e.g. CIFS) fail to copy the file's metadata if</span>
+        <span class="s5"># the type of the destination filesystem isn't the same as the source</span>
+        <span class="s5"># filesystem. This also happens with some SELinux-enabled systems.</span>
+        <span class="s5"># Ignore that, but try to set basic permissions.</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">copymode</span><span class="s3">(</span><span class="s1">old_file_name</span><span class="s3">, </span><span class="s1">new_file_name</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">PermissionError</span><span class="s3">:</span>
+            <span class="s2">pass</span>
+
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">os</span><span class="s3">.</span><span class="s1">remove</span><span class="s3">(</span><span class="s1">old_file_name</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">PermissionError </span><span class="s2">as </span><span class="s1">e</span><span class="s3">:</span>
+        <span class="s5"># Certain operating systems (Cygwin and Windows)</span>
+        <span class="s5"># fail when deleting opened files, ignore it.  (For the</span>
+        <span class="s5"># systems where this happens, temporary files will be auto-deleted</span>
+        <span class="s5"># on close anyway.)</span>
+        <span class="s2">if </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">e</span><span class="s3">, </span><span class="s4">&quot;winerror&quot;</span><span class="s3">, </span><span class="s6">0</span><span class="s3">) != </span><span class="s6">32</span><span class="s3">:</span>
+            <span class="s2">raise</span>
+</pre>
+</body>
+</html>

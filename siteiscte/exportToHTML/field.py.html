@@ -1,0 +1,276 @@
+<html>
+<head>
+<title>field.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+field.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">byref</span><span class="s2">, </span><span class="s1">c_int</span>
+<span class="s0">from </span><span class="s1">datetime </span><span class="s0">import </span><span class="s1">date</span><span class="s2">, </span><span class="s1">datetime</span><span class="s2">, </span><span class="s1">time</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">GDALBase</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">error </span><span class="s0">import </span><span class="s1">GDALException</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">prototypes </span><span class="s0">import </span><span class="s1">ds </span><span class="s0">as </span><span class="s1">capi</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">encoding </span><span class="s0">import </span><span class="s1">force_str</span>
+
+
+<span class="s3"># For more information, see the OGR C API source code:</span>
+<span class="s3">#  https://gdal.org/api/vector_c_api.html</span>
+<span class="s3">#</span>
+<span class="s3"># The OGR_Fld_* routines are relevant here.</span>
+<span class="s0">class </span><span class="s1">Field</span><span class="s2">(</span><span class="s1">GDALBase</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Wrap an OGR Field. Needs to be instantiated from a Feature object. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">feat</span><span class="s2">, </span><span class="s1">index</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Initialize on the feature object and the integer index of 
+        the field within the feature. 
+        &quot;&quot;&quot;</span>
+        <span class="s3"># Setting the feature pointer and index.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_feat </span><span class="s2">= </span><span class="s1">feat</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_index </span><span class="s2">= </span><span class="s1">index</span>
+
+        <span class="s3"># Getting the pointer for this field.</span>
+        <span class="s1">fld_ptr </span><span class="s2">= </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_feat_field_defn</span><span class="s2">(</span><span class="s1">feat</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">index</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">fld_ptr</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">GDALException</span><span class="s2">(</span><span class="s5">&quot;Cannot create OGR Field, invalid pointer given.&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">ptr </span><span class="s2">= </span><span class="s1">fld_ptr</span>
+
+        <span class="s3"># Setting the class depending upon the OGR Field Type (OFT)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">__class__ </span><span class="s2">= </span><span class="s1">OGRFieldTypes</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">type</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">__str__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the string representation of the Field.&quot;</span>
+        <span class="s0">return </span><span class="s1">str</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">value</span><span class="s2">).</span><span class="s1">strip</span><span class="s2">()</span>
+
+    <span class="s3"># #### Field Methods ####</span>
+    <span class="s0">def </span><span class="s1">as_double</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Retrieve the Field's value as a double (float).&quot;</span>
+        <span class="s0">return </span><span class="s2">(</span>
+            <span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_as_double</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_feat</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_index</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_set</span>
+            <span class="s0">else None</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_int</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">is_64</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s4">&quot;Retrieve the Field's value as an integer.&quot;</span>
+        <span class="s0">if </span><span class="s1">is_64</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s2">(</span>
+                <span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_as_integer64</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_feat</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_index</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_set</span>
+                <span class="s0">else None</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s2">(</span>
+                <span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_as_integer</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_feat</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_index</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_set</span>
+                <span class="s0">else None</span>
+            <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_string</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Retrieve the Field's value as a string.&quot;</span>
+        <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_set</span><span class="s2">:</span>
+            <span class="s0">return None</span>
+        <span class="s1">string </span><span class="s2">= </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_as_string</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_feat</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_index</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">force_str</span><span class="s2">(</span><span class="s1">string</span><span class="s2">, </span><span class="s1">encoding</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_feat</span><span class="s2">.</span><span class="s1">encoding</span><span class="s2">, </span><span class="s1">strings_only</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_datetime</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Retrieve the Field's value as a tuple of date &amp; time components.&quot;</span>
+        <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_set</span><span class="s2">:</span>
+            <span class="s0">return None</span>
+        <span class="s1">yy</span><span class="s2">, </span><span class="s1">mm</span><span class="s2">, </span><span class="s1">dd</span><span class="s2">, </span><span class="s1">hh</span><span class="s2">, </span><span class="s1">mn</span><span class="s2">, </span><span class="s1">ss</span><span class="s2">, </span><span class="s1">tz </span><span class="s2">= [</span><span class="s1">c_int</span><span class="s2">() </span><span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range</span><span class="s2">(</span><span class="s6">7</span><span class="s2">)]</span>
+        <span class="s1">status </span><span class="s2">= </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_as_datetime</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_feat</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_index</span><span class="s2">,</span>
+            <span class="s1">byref</span><span class="s2">(</span><span class="s1">yy</span><span class="s2">),</span>
+            <span class="s1">byref</span><span class="s2">(</span><span class="s1">mm</span><span class="s2">),</span>
+            <span class="s1">byref</span><span class="s2">(</span><span class="s1">dd</span><span class="s2">),</span>
+            <span class="s1">byref</span><span class="s2">(</span><span class="s1">hh</span><span class="s2">),</span>
+            <span class="s1">byref</span><span class="s2">(</span><span class="s1">mn</span><span class="s2">),</span>
+            <span class="s1">byref</span><span class="s2">(</span><span class="s1">ss</span><span class="s2">),</span>
+            <span class="s1">byref</span><span class="s2">(</span><span class="s1">tz</span><span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">status</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s2">(</span><span class="s1">yy</span><span class="s2">, </span><span class="s1">mm</span><span class="s2">, </span><span class="s1">dd</span><span class="s2">, </span><span class="s1">hh</span><span class="s2">, </span><span class="s1">mn</span><span class="s2">, </span><span class="s1">ss</span><span class="s2">, </span><span class="s1">tz</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">GDALException</span><span class="s2">(</span>
+                <span class="s5">&quot;Unable to retrieve date &amp; time information from the field.&quot;</span>
+            <span class="s2">)</span>
+
+    <span class="s3"># #### Field Properties ####</span>
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">is_set</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return True if the value of this field isn't null, False otherwise.&quot;</span>
+        <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">is_field_set</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_feat</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_index</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the name of this Field.&quot;</span>
+        <span class="s1">name </span><span class="s2">= </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">force_str</span><span class="s2">(</span><span class="s1">name</span><span class="s2">, </span><span class="s1">encoding</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_feat</span><span class="s2">.</span><span class="s1">encoding</span><span class="s2">, </span><span class="s1">strings_only</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">precision</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the precision of this Field.&quot;</span>
+        <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_precision</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the OGR type of this Field.&quot;</span>
+        <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">type_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the OGR field type name for this Field.&quot;</span>
+        <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_type_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">type</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the value of this Field.&quot;</span>
+        <span class="s3"># Default is to get the field as a string.</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">as_string</span><span class="s2">()</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">width</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return the width of this Field.&quot;</span>
+        <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_field_width</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">)</span>
+
+
+<span class="s3"># ### The Field sub-classes for each OGR Field type. ###</span>
+<span class="s0">class </span><span class="s1">OFTInteger</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s1">_bit64 </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return an integer contained in this field.&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">as_int</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_bit64</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        GDAL uses OFTReals to represent OFTIntegers in created 
+        shapefiles -- forcing the type here since the underlying field 
+        type may actually be OFTReal. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s6">0</span>
+
+
+<span class="s0">class </span><span class="s1">OFTReal</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return a float contained in this field.&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">as_double</span><span class="s2">()</span>
+
+
+<span class="s3"># String &amp; Binary fields, just subclasses</span>
+<span class="s0">class </span><span class="s1">OFTString</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">OFTWideString</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">OFTBinary</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s3"># OFTDate, OFTTime, OFTDateTime fields.</span>
+<span class="s0">class </span><span class="s1">OFTDate</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return a Python `date` object for the OFTDate field.&quot;</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">yy</span><span class="s2">, </span><span class="s1">mm</span><span class="s2">, </span><span class="s1">dd</span><span class="s2">, </span><span class="s1">hh</span><span class="s2">, </span><span class="s1">mn</span><span class="s2">, </span><span class="s1">ss</span><span class="s2">, </span><span class="s1">tz </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">as_datetime</span><span class="s2">()</span>
+            <span class="s0">return </span><span class="s1">date</span><span class="s2">(</span><span class="s1">yy</span><span class="s2">.</span><span class="s1">value</span><span class="s2">, </span><span class="s1">mm</span><span class="s2">.</span><span class="s1">value</span><span class="s2">, </span><span class="s1">dd</span><span class="s2">.</span><span class="s1">value</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s2">(</span><span class="s1">TypeError</span><span class="s2">, </span><span class="s1">ValueError</span><span class="s2">, </span><span class="s1">GDALException</span><span class="s2">):</span>
+            <span class="s0">return None</span>
+
+
+<span class="s0">class </span><span class="s1">OFTDateTime</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return a Python `datetime` object for this OFTDateTime field.&quot;</span>
+        <span class="s3"># TODO: Adapt timezone information.</span>
+        <span class="s3">#  See https://lists.osgeo.org/pipermail/gdal-dev/2006-February/007990.html</span>
+        <span class="s3">#  The `tz` variable has values of: 0=unknown, 1=localtime (ambiguous),</span>
+        <span class="s3">#  100=GMT, 104=GMT+1, 80=GMT-5, etc.</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">yy</span><span class="s2">, </span><span class="s1">mm</span><span class="s2">, </span><span class="s1">dd</span><span class="s2">, </span><span class="s1">hh</span><span class="s2">, </span><span class="s1">mn</span><span class="s2">, </span><span class="s1">ss</span><span class="s2">, </span><span class="s1">tz </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">as_datetime</span><span class="s2">()</span>
+            <span class="s0">return </span><span class="s1">datetime</span><span class="s2">(</span><span class="s1">yy</span><span class="s2">.</span><span class="s1">value</span><span class="s2">, </span><span class="s1">mm</span><span class="s2">.</span><span class="s1">value</span><span class="s2">, </span><span class="s1">dd</span><span class="s2">.</span><span class="s1">value</span><span class="s2">, </span><span class="s1">hh</span><span class="s2">.</span><span class="s1">value</span><span class="s2">, </span><span class="s1">mn</span><span class="s2">.</span><span class="s1">value</span><span class="s2">, </span><span class="s1">ss</span><span class="s2">.</span><span class="s1">value</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s2">(</span><span class="s1">TypeError</span><span class="s2">, </span><span class="s1">ValueError</span><span class="s2">, </span><span class="s1">GDALException</span><span class="s2">):</span>
+            <span class="s0">return None</span>
+
+
+<span class="s0">class </span><span class="s1">OFTTime</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;Return a Python `time` object for this OFTTime field.&quot;</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">yy</span><span class="s2">, </span><span class="s1">mm</span><span class="s2">, </span><span class="s1">dd</span><span class="s2">, </span><span class="s1">hh</span><span class="s2">, </span><span class="s1">mn</span><span class="s2">, </span><span class="s1">ss</span><span class="s2">, </span><span class="s1">tz </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">as_datetime</span><span class="s2">()</span>
+            <span class="s0">return </span><span class="s1">time</span><span class="s2">(</span><span class="s1">hh</span><span class="s2">.</span><span class="s1">value</span><span class="s2">, </span><span class="s1">mn</span><span class="s2">.</span><span class="s1">value</span><span class="s2">, </span><span class="s1">ss</span><span class="s2">.</span><span class="s1">value</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s2">(</span><span class="s1">ValueError</span><span class="s2">, </span><span class="s1">GDALException</span><span class="s2">):</span>
+            <span class="s0">return None</span>
+
+
+<span class="s0">class </span><span class="s1">OFTInteger64</span><span class="s2">(</span><span class="s1">OFTInteger</span><span class="s2">):</span>
+    <span class="s1">_bit64 </span><span class="s2">= </span><span class="s0">True</span>
+
+
+<span class="s3"># List fields are also just subclasses</span>
+<span class="s0">class </span><span class="s1">OFTIntegerList</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">OFTRealList</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">OFTStringList</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">OFTWideStringList</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">OFTInteger64List</span><span class="s2">(</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s3"># Class mapping dictionary for OFT Types and reverse mapping.</span>
+<span class="s1">OGRFieldTypes </span><span class="s2">= {</span>
+    <span class="s6">0</span><span class="s2">: </span><span class="s1">OFTInteger</span><span class="s2">,</span>
+    <span class="s6">1</span><span class="s2">: </span><span class="s1">OFTIntegerList</span><span class="s2">,</span>
+    <span class="s6">2</span><span class="s2">: </span><span class="s1">OFTReal</span><span class="s2">,</span>
+    <span class="s6">3</span><span class="s2">: </span><span class="s1">OFTRealList</span><span class="s2">,</span>
+    <span class="s6">4</span><span class="s2">: </span><span class="s1">OFTString</span><span class="s2">,</span>
+    <span class="s6">5</span><span class="s2">: </span><span class="s1">OFTStringList</span><span class="s2">,</span>
+    <span class="s6">6</span><span class="s2">: </span><span class="s1">OFTWideString</span><span class="s2">,</span>
+    <span class="s6">7</span><span class="s2">: </span><span class="s1">OFTWideStringList</span><span class="s2">,</span>
+    <span class="s6">8</span><span class="s2">: </span><span class="s1">OFTBinary</span><span class="s2">,</span>
+    <span class="s6">9</span><span class="s2">: </span><span class="s1">OFTDate</span><span class="s2">,</span>
+    <span class="s6">10</span><span class="s2">: </span><span class="s1">OFTTime</span><span class="s2">,</span>
+    <span class="s6">11</span><span class="s2">: </span><span class="s1">OFTDateTime</span><span class="s2">,</span>
+    <span class="s6">12</span><span class="s2">: </span><span class="s1">OFTInteger64</span><span class="s2">,</span>
+    <span class="s6">13</span><span class="s2">: </span><span class="s1">OFTInteger64List</span><span class="s2">,</span>
+<span class="s2">}</span>
+<span class="s1">ROGRFieldTypes </span><span class="s2">= {</span><span class="s1">cls</span><span class="s2">: </span><span class="s1">num </span><span class="s0">for </span><span class="s1">num</span><span class="s2">, </span><span class="s1">cls </span><span class="s0">in </span><span class="s1">OGRFieldTypes</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()}</span>
+</pre>
+</body>
+</html>

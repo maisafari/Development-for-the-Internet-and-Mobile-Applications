@@ -1,0 +1,180 @@
+<html>
+<head>
+<title>server.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #2aacb8;}
+.s5 { color: #7a7e85;}
+.s6 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+server.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">asyncio</span>
+<span class="s0">import </span><span class="s1">logging</span>
+<span class="s0">import </span><span class="s1">time</span>
+<span class="s0">import </span><span class="s1">traceback</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">compatibility </span><span class="s0">import </span><span class="s1">guarantee_single_callable</span>
+
+<span class="s1">logger </span><span class="s2">= </span><span class="s1">logging</span><span class="s2">.</span><span class="s1">getLogger</span><span class="s2">(</span><span class="s1">__name__</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">StatelessServer</span><span class="s2">:</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Base server class that handles basic concepts like application instance 
+    creation/pooling, exception handling, and similar, for stateless protocols 
+    (i.e. ones without actual incoming connections to the process) 
+ 
+    Your code should override the handle() method, doing whatever it needs to, 
+    and calling get_or_create_application_instance with a unique `scope_id` 
+    and `scope` for the scope it wants to get. 
+ 
+    If an application instance is found with the same `scope_id`, you are 
+    given its input queue, otherwise one is made for you with the scope provided 
+    and you are given that fresh new input queue. Either way, you should do 
+    something like: 
+ 
+    input_queue = self.get_or_create_application_instance( 
+        &quot;user-123456&quot;, 
+        {&quot;type&quot;: &quot;testprotocol&quot;, &quot;user_id&quot;: &quot;123456&quot;, &quot;username&quot;: &quot;andrew&quot;}, 
+    ) 
+    input_queue.put_nowait(message) 
+ 
+    If you try and create an application instance and there are already 
+    `max_application` instances, the oldest/least recently used one will be 
+    reclaimed and shut down to make space. 
+ 
+    Application coroutines that error will be found periodically (every 100ms 
+    by default) and have their exceptions printed to the console. Override 
+    application_exception() if you want to do more when this happens. 
+ 
+    If you override run(), make sure you handle things like launching the 
+    application checker. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">application_checker_interval </span><span class="s2">= </span><span class="s4">0.1</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">application</span><span class="s2">, </span><span class="s1">max_applications</span><span class="s2">=</span><span class="s4">1000</span><span class="s2">):</span>
+        <span class="s5"># Parameters</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">application </span><span class="s2">= </span><span class="s1">application</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">max_applications </span><span class="s2">= </span><span class="s1">max_applications</span>
+        <span class="s5"># Initialisation</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">application_instances </span><span class="s2">= {}</span>
+
+    <span class="s5">### Mainloop and handling</span>
+
+    <span class="s0">def </span><span class="s1">run</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Runs the asyncio event loop with our handler loop. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">event_loop </span><span class="s2">= </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">get_event_loop</span><span class="s2">()</span>
+        <span class="s1">asyncio</span><span class="s2">.</span><span class="s1">ensure_future</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">application_checker</span><span class="s2">())</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">event_loop</span><span class="s2">.</span><span class="s1">run_until_complete</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">handle</span><span class="s2">())</span>
+        <span class="s0">except </span><span class="s1">KeyboardInterrupt</span><span class="s2">:</span>
+            <span class="s1">logger</span><span class="s2">.</span><span class="s1">info</span><span class="s2">(</span><span class="s6">&quot;Exiting due to Ctrl-C/interrupt&quot;</span><span class="s2">)</span>
+
+    <span class="s0">async def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span><span class="s2">(</span><span class="s6">&quot;You must implement handle()&quot;</span><span class="s2">)</span>
+
+    <span class="s0">async def </span><span class="s1">application_send</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">scope</span><span class="s2">, </span><span class="s1">message</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Receives outbound sends from applications and handles them. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span><span class="s2">(</span><span class="s6">&quot;You must implement application_send()&quot;</span><span class="s2">)</span>
+
+    <span class="s5">### Application instance management</span>
+
+    <span class="s0">def </span><span class="s1">get_or_create_application_instance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">scope_id</span><span class="s2">, </span><span class="s1">scope</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Creates an application instance and returns its queue. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">scope_id </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">application_instances</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">application_instances</span><span class="s2">[</span><span class="s1">scope_id</span><span class="s2">][</span><span class="s6">&quot;last_used&quot;</span><span class="s2">] = </span><span class="s1">time</span><span class="s2">.</span><span class="s1">time</span><span class="s2">()</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">application_instances</span><span class="s2">[</span><span class="s1">scope_id</span><span class="s2">][</span><span class="s6">&quot;input_queue&quot;</span><span class="s2">]</span>
+        <span class="s5"># See if we need to delete an old one</span>
+        <span class="s0">while </span><span class="s1">len</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">application_instances</span><span class="s2">) &gt; </span><span class="s1">self</span><span class="s2">.</span><span class="s1">max_applications</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">delete_oldest_application_instance</span><span class="s2">()</span>
+        <span class="s5"># Make an instance of the application</span>
+        <span class="s1">input_queue </span><span class="s2">= </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">Queue</span><span class="s2">()</span>
+        <span class="s1">application_instance </span><span class="s2">= </span><span class="s1">guarantee_single_callable</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">application</span><span class="s2">)</span>
+        <span class="s5"># Run it, and stash the future for later checking</span>
+        <span class="s1">future </span><span class="s2">= </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">ensure_future</span><span class="s2">(</span>
+            <span class="s1">application_instance</span><span class="s2">(</span>
+                <span class="s1">scope</span><span class="s2">=</span><span class="s1">scope</span><span class="s2">,</span>
+                <span class="s1">receive</span><span class="s2">=</span><span class="s1">input_queue</span><span class="s2">.</span><span class="s1">get</span><span class="s2">,</span>
+                <span class="s1">send</span><span class="s2">=</span><span class="s0">lambda </span><span class="s1">message</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">application_send</span><span class="s2">(</span><span class="s1">scope</span><span class="s2">, </span><span class="s1">message</span><span class="s2">),</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">application_instances</span><span class="s2">[</span><span class="s1">scope_id</span><span class="s2">] = {</span>
+            <span class="s6">&quot;input_queue&quot;</span><span class="s2">: </span><span class="s1">input_queue</span><span class="s2">,</span>
+            <span class="s6">&quot;future&quot;</span><span class="s2">: </span><span class="s1">future</span><span class="s2">,</span>
+            <span class="s6">&quot;scope&quot;</span><span class="s2">: </span><span class="s1">scope</span><span class="s2">,</span>
+            <span class="s6">&quot;last_used&quot;</span><span class="s2">: </span><span class="s1">time</span><span class="s2">.</span><span class="s1">time</span><span class="s2">(),</span>
+        <span class="s2">}</span>
+        <span class="s0">return </span><span class="s1">input_queue</span>
+
+    <span class="s0">def </span><span class="s1">delete_oldest_application_instance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Finds and deletes the oldest application instance 
+        &quot;&quot;&quot;</span>
+        <span class="s1">oldest_time </span><span class="s2">= </span><span class="s1">min</span><span class="s2">(</span>
+            <span class="s1">details</span><span class="s2">[</span><span class="s6">&quot;last_used&quot;</span><span class="s2">] </span><span class="s0">for </span><span class="s1">details </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">application_instances</span><span class="s2">.</span><span class="s1">values</span><span class="s2">()</span>
+        <span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">scope_id</span><span class="s2">, </span><span class="s1">details </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">application_instances</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s0">if </span><span class="s1">details</span><span class="s2">[</span><span class="s6">&quot;last_used&quot;</span><span class="s2">] == </span><span class="s1">oldest_time</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">delete_application_instance</span><span class="s2">(</span><span class="s1">scope_id</span><span class="s2">)</span>
+                <span class="s5"># Return to make sure we only delete one in case two have</span>
+                <span class="s5"># the same oldest time</span>
+                <span class="s0">return</span>
+
+    <span class="s0">def </span><span class="s1">delete_application_instance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">scope_id</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Removes an application instance (makes sure its task is stopped, 
+        then removes it from the current set) 
+        &quot;&quot;&quot;</span>
+        <span class="s1">details </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">application_instances</span><span class="s2">[</span><span class="s1">scope_id</span><span class="s2">]</span>
+        <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">application_instances</span><span class="s2">[</span><span class="s1">scope_id</span><span class="s2">]</span>
+        <span class="s0">if not </span><span class="s1">details</span><span class="s2">[</span><span class="s6">&quot;future&quot;</span><span class="s2">].</span><span class="s1">done</span><span class="s2">():</span>
+            <span class="s1">details</span><span class="s2">[</span><span class="s6">&quot;future&quot;</span><span class="s2">].</span><span class="s1">cancel</span><span class="s2">()</span>
+
+    <span class="s0">async def </span><span class="s1">application_checker</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Goes through the set of current application instance Futures and cleans up 
+        any that are done/prints exceptions for any that errored. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">while True</span><span class="s2">:</span>
+            <span class="s0">await </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">sleep</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">application_checker_interval</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">scope_id</span><span class="s2">, </span><span class="s1">details </span><span class="s0">in </span><span class="s1">list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">application_instances</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()):</span>
+                <span class="s0">if </span><span class="s1">details</span><span class="s2">[</span><span class="s6">&quot;future&quot;</span><span class="s2">].</span><span class="s1">done</span><span class="s2">():</span>
+                    <span class="s1">exception </span><span class="s2">= </span><span class="s1">details</span><span class="s2">[</span><span class="s6">&quot;future&quot;</span><span class="s2">].</span><span class="s1">exception</span><span class="s2">()</span>
+                    <span class="s0">if </span><span class="s1">exception</span><span class="s2">:</span>
+                        <span class="s0">await </span><span class="s1">self</span><span class="s2">.</span><span class="s1">application_exception</span><span class="s2">(</span><span class="s1">exception</span><span class="s2">, </span><span class="s1">details</span><span class="s2">)</span>
+                    <span class="s0">try</span><span class="s2">:</span>
+                        <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">application_instances</span><span class="s2">[</span><span class="s1">scope_id</span><span class="s2">]</span>
+                    <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+                        <span class="s5"># Exception handling might have already got here before us. That's fine.</span>
+                        <span class="s0">pass</span>
+
+    <span class="s0">async def </span><span class="s1">application_exception</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">exception</span><span class="s2">, </span><span class="s1">application_details</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Called whenever an application coroutine has an exception. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">logging</span><span class="s2">.</span><span class="s1">error</span><span class="s2">(</span>
+            <span class="s6">&quot;Exception inside application: %s</span><span class="s0">\n</span><span class="s6">%s%s&quot;</span><span class="s2">,</span>
+            <span class="s1">exception</span><span class="s2">,</span>
+            <span class="s6">&quot;&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">traceback</span><span class="s2">.</span><span class="s1">format_tb</span><span class="s2">(</span><span class="s1">exception</span><span class="s2">.</span><span class="s1">__traceback__</span><span class="s2">)),</span>
+            <span class="s6">f&quot;  </span><span class="s0">{</span><span class="s1">exception</span><span class="s0">}</span><span class="s6">&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+</pre>
+</body>
+</html>

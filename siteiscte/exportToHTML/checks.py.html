@@ -1,0 +1,67 @@
+<html>
+<head>
+<title>checks.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #2aacb8;}
+.s4 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+checks.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">itertools </span><span class="s0">import </span><span class="s1">chain</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">checks </span><span class="s0">import </span><span class="s1">Error</span>
+
+
+<span class="s0">def </span><span class="s1">check_generic_foreign_keys</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s0">from </span><span class="s2">.</span><span class="s1">fields </span><span class="s0">import </span><span class="s1">GenericForeignKey</span>
+
+    <span class="s0">if </span><span class="s1">app_configs </span><span class="s0">is None</span><span class="s2">:</span>
+        <span class="s1">models </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_models</span><span class="s2">()</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">models </span><span class="s2">= </span><span class="s1">chain</span><span class="s2">.</span><span class="s1">from_iterable</span><span class="s2">(</span>
+            <span class="s1">app_config</span><span class="s2">.</span><span class="s1">get_models</span><span class="s2">() </span><span class="s0">for </span><span class="s1">app_config </span><span class="s0">in </span><span class="s1">app_configs</span>
+        <span class="s2">)</span>
+    <span class="s1">errors </span><span class="s2">= []</span>
+    <span class="s1">fields </span><span class="s2">= (</span>
+        <span class="s1">obj</span>
+        <span class="s0">for </span><span class="s1">model </span><span class="s0">in </span><span class="s1">models</span>
+        <span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">vars</span><span class="s2">(</span><span class="s1">model</span><span class="s2">).</span><span class="s1">values</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">GenericForeignKey</span><span class="s2">)</span>
+    <span class="s2">)</span>
+    <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">fields</span><span class="s2">:</span>
+        <span class="s1">errors</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">check</span><span class="s2">())</span>
+    <span class="s0">return </span><span class="s1">errors</span>
+
+
+<span class="s0">def </span><span class="s1">check_model_name_lengths</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">app_configs </span><span class="s0">is None</span><span class="s2">:</span>
+        <span class="s1">models </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_models</span><span class="s2">()</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">models </span><span class="s2">= </span><span class="s1">chain</span><span class="s2">.</span><span class="s1">from_iterable</span><span class="s2">(</span>
+            <span class="s1">app_config</span><span class="s2">.</span><span class="s1">get_models</span><span class="s2">() </span><span class="s0">for </span><span class="s1">app_config </span><span class="s0">in </span><span class="s1">app_configs</span>
+        <span class="s2">)</span>
+    <span class="s1">errors </span><span class="s2">= []</span>
+    <span class="s0">for </span><span class="s1">model </span><span class="s0">in </span><span class="s1">models</span><span class="s2">:</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">) &gt; </span><span class="s3">100</span><span class="s2">:</span>
+            <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                <span class="s1">Error</span><span class="s2">(</span>
+                    <span class="s4">&quot;Model names must be at most 100 characters (got %d).&quot;</span>
+                    <span class="s2">% (</span><span class="s1">len</span><span class="s2">(</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">),),</span>
+                    <span class="s1">obj</span><span class="s2">=</span><span class="s1">model</span><span class="s2">,</span>
+                    <span class="s1">id</span><span class="s2">=</span><span class="s4">&quot;contenttypes.E005&quot;</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">errors</span>
+</pre>
+</body>
+</html>

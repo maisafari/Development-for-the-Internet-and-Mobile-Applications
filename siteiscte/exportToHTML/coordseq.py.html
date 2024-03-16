@@ -1,0 +1,118 @@
+<html>
+<head>
+<title>coordseq.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #2aacb8;}
+.s6 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+coordseq.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">POINTER</span><span class="s2">, </span><span class="s1">c_byte</span><span class="s2">, </span><span class="s1">c_double</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s1">c_uint</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos</span><span class="s2">.</span><span class="s1">libgeos </span><span class="s0">import </span><span class="s1">CS_PTR</span><span class="s2">, </span><span class="s1">GEOM_PTR</span><span class="s2">, </span><span class="s1">GEOSFuncFactory</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos</span><span class="s2">.</span><span class="s1">prototypes</span><span class="s2">.</span><span class="s1">errcheck </span><span class="s0">import </span><span class="s1">GEOSException</span><span class="s2">, </span><span class="s1">last_arg_byref</span>
+
+
+<span class="s3"># ## Error-checking routines specific to coordinate sequences. ##</span>
+<span class="s0">def </span><span class="s1">check_cs_op</span><span class="s2">(</span><span class="s1">result</span><span class="s2">, </span><span class="s1">func</span><span class="s2">, </span><span class="s1">cargs</span><span class="s2">):</span>
+    <span class="s4">&quot;Check the status code of a coordinate sequence operation.&quot;</span>
+    <span class="s0">if </span><span class="s1">result </span><span class="s2">== </span><span class="s5">0</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">GEOSException</span><span class="s2">(</span><span class="s6">&quot;Could not set value on coordinate sequence&quot;</span><span class="s2">)</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">result</span>
+
+
+<span class="s0">def </span><span class="s1">check_cs_get</span><span class="s2">(</span><span class="s1">result</span><span class="s2">, </span><span class="s1">func</span><span class="s2">, </span><span class="s1">cargs</span><span class="s2">):</span>
+    <span class="s4">&quot;Check the coordinate sequence retrieval.&quot;</span>
+    <span class="s1">check_cs_op</span><span class="s2">(</span><span class="s1">result</span><span class="s2">, </span><span class="s1">func</span><span class="s2">, </span><span class="s1">cargs</span><span class="s2">)</span>
+    <span class="s3"># Object in by reference, return its value.</span>
+    <span class="s0">return </span><span class="s1">last_arg_byref</span><span class="s2">(</span><span class="s1">cargs</span><span class="s2">)</span>
+
+
+<span class="s3"># ## Coordinate sequence prototype factory classes. ##</span>
+<span class="s0">class </span><span class="s1">CsInt</span><span class="s2">(</span><span class="s1">GEOSFuncFactory</span><span class="s2">):</span>
+    <span class="s4">&quot;For coordinate sequence routines that return an integer.&quot;</span>
+    <span class="s1">argtypes </span><span class="s2">= [</span><span class="s1">CS_PTR</span><span class="s2">, </span><span class="s1">POINTER</span><span class="s2">(</span><span class="s1">c_uint</span><span class="s2">)]</span>
+    <span class="s1">restype </span><span class="s2">= </span><span class="s1">c_int</span>
+    <span class="s1">errcheck </span><span class="s2">= </span><span class="s1">staticmethod</span><span class="s2">(</span><span class="s1">check_cs_get</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">CsOperation</span><span class="s2">(</span><span class="s1">GEOSFuncFactory</span><span class="s2">):</span>
+    <span class="s4">&quot;For coordinate sequence operations.&quot;</span>
+    <span class="s1">restype </span><span class="s2">= </span><span class="s1">c_int</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, </span><span class="s1">ordinate</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">get</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">get</span><span class="s2">:</span>
+            <span class="s3"># Get routines have double parameter passed-in by reference.</span>
+            <span class="s1">errcheck </span><span class="s2">= </span><span class="s1">check_cs_get</span>
+            <span class="s1">dbl_param </span><span class="s2">= </span><span class="s1">POINTER</span><span class="s2">(</span><span class="s1">c_double</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">errcheck </span><span class="s2">= </span><span class="s1">check_cs_op</span>
+            <span class="s1">dbl_param </span><span class="s2">= </span><span class="s1">c_double</span>
+
+        <span class="s0">if </span><span class="s1">ordinate</span><span class="s2">:</span>
+            <span class="s3"># Get/Set ordinate routines have an extra uint parameter.</span>
+            <span class="s1">argtypes </span><span class="s2">= [</span><span class="s1">CS_PTR</span><span class="s2">, </span><span class="s1">c_uint</span><span class="s2">, </span><span class="s1">c_uint</span><span class="s2">, </span><span class="s1">dbl_param</span><span class="s2">]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">argtypes </span><span class="s2">= [</span><span class="s1">CS_PTR</span><span class="s2">, </span><span class="s1">c_uint</span><span class="s2">, </span><span class="s1">dbl_param</span><span class="s2">]</span>
+
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span>
+            <span class="s2">*</span><span class="s1">args</span><span class="s2">, **{**</span><span class="s1">kwargs</span><span class="s2">, </span><span class="s6">&quot;errcheck&quot;</span><span class="s2">: </span><span class="s1">errcheck</span><span class="s2">, </span><span class="s6">&quot;argtypes&quot;</span><span class="s2">: </span><span class="s1">argtypes</span><span class="s2">}</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">CsOutput</span><span class="s2">(</span><span class="s1">GEOSFuncFactory</span><span class="s2">):</span>
+    <span class="s1">restype </span><span class="s2">= </span><span class="s1">CS_PTR</span>
+
+    <span class="s2">@</span><span class="s1">staticmethod</span>
+    <span class="s0">def </span><span class="s1">errcheck</span><span class="s2">(</span><span class="s1">result</span><span class="s2">, </span><span class="s1">func</span><span class="s2">, </span><span class="s1">cargs</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">result</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">GEOSException</span><span class="s2">(</span>
+                <span class="s6">&quot;Error encountered checking Coordinate Sequence returned from GEOS &quot;</span>
+                <span class="s6">'C function &quot;%s&quot;.' </span><span class="s2">% </span><span class="s1">func</span><span class="s2">.</span><span class="s1">__name__</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">result</span>
+
+
+<span class="s3"># ## Coordinate Sequence ctypes prototypes ##</span>
+
+<span class="s3"># Coordinate Sequence constructors &amp; cloning.</span>
+<span class="s1">cs_clone </span><span class="s2">= </span><span class="s1">CsOutput</span><span class="s2">(</span><span class="s6">&quot;GEOSCoordSeq_clone&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">CS_PTR</span><span class="s2">])</span>
+<span class="s1">create_cs </span><span class="s2">= </span><span class="s1">CsOutput</span><span class="s2">(</span><span class="s6">&quot;GEOSCoordSeq_create&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">c_uint</span><span class="s2">, </span><span class="s1">c_uint</span><span class="s2">])</span>
+<span class="s1">get_cs </span><span class="s2">= </span><span class="s1">CsOutput</span><span class="s2">(</span><span class="s6">&quot;GEOSGeom_getCoordSeq&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">GEOM_PTR</span><span class="s2">])</span>
+
+<span class="s3"># Getting, setting ordinate</span>
+<span class="s1">cs_getordinate </span><span class="s2">= </span><span class="s1">CsOperation</span><span class="s2">(</span><span class="s6">&quot;GEOSCoordSeq_getOrdinate&quot;</span><span class="s2">, </span><span class="s1">ordinate</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">get</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+<span class="s1">cs_setordinate </span><span class="s2">= </span><span class="s1">CsOperation</span><span class="s2">(</span><span class="s6">&quot;GEOSCoordSeq_setOrdinate&quot;</span><span class="s2">, </span><span class="s1">ordinate</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+<span class="s3"># For getting, x, y, z</span>
+<span class="s1">cs_getx </span><span class="s2">= </span><span class="s1">CsOperation</span><span class="s2">(</span><span class="s6">&quot;GEOSCoordSeq_getX&quot;</span><span class="s2">, </span><span class="s1">get</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+<span class="s1">cs_gety </span><span class="s2">= </span><span class="s1">CsOperation</span><span class="s2">(</span><span class="s6">&quot;GEOSCoordSeq_getY&quot;</span><span class="s2">, </span><span class="s1">get</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+<span class="s1">cs_getz </span><span class="s2">= </span><span class="s1">CsOperation</span><span class="s2">(</span><span class="s6">&quot;GEOSCoordSeq_getZ&quot;</span><span class="s2">, </span><span class="s1">get</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+<span class="s3"># For setting, x, y, z</span>
+<span class="s1">cs_setx </span><span class="s2">= </span><span class="s1">CsOperation</span><span class="s2">(</span><span class="s6">&quot;GEOSCoordSeq_setX&quot;</span><span class="s2">)</span>
+<span class="s1">cs_sety </span><span class="s2">= </span><span class="s1">CsOperation</span><span class="s2">(</span><span class="s6">&quot;GEOSCoordSeq_setY&quot;</span><span class="s2">)</span>
+<span class="s1">cs_setz </span><span class="s2">= </span><span class="s1">CsOperation</span><span class="s2">(</span><span class="s6">&quot;GEOSCoordSeq_setZ&quot;</span><span class="s2">)</span>
+
+<span class="s3"># These routines return size &amp; dimensions.</span>
+<span class="s1">cs_getsize </span><span class="s2">= </span><span class="s1">CsInt</span><span class="s2">(</span><span class="s6">&quot;GEOSCoordSeq_getSize&quot;</span><span class="s2">)</span>
+<span class="s1">cs_getdims </span><span class="s2">= </span><span class="s1">CsInt</span><span class="s2">(</span><span class="s6">&quot;GEOSCoordSeq_getDimensions&quot;</span><span class="s2">)</span>
+
+<span class="s1">cs_is_ccw </span><span class="s2">= </span><span class="s1">GEOSFuncFactory</span><span class="s2">(</span>
+    <span class="s6">&quot;GEOSCoordSeq_isCCW&quot;</span><span class="s2">, </span><span class="s1">restype</span><span class="s2">=</span><span class="s1">c_int</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">CS_PTR</span><span class="s2">, </span><span class="s1">POINTER</span><span class="s2">(</span><span class="s1">c_byte</span><span class="s2">)]</span>
+<span class="s2">)</span>
+</pre>
+</body>
+</html>

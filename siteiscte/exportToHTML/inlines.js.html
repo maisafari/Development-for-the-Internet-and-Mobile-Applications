@@ -1,0 +1,384 @@
+<html>
+<head>
+<title>inlines.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #5f826b; font-style: italic;}
+.s3 { color: #67a37c; font-style: italic;}
+.s4 { color: #6aab73;}
+.s5 { color: #bcbec4;}
+.s6 { color: #cf8e6d;}
+.s7 { color: #2aacb8;}
+.s8 { color: #42c3d4;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+inlines.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/*global DateTimeShortcuts, SelectFilter*/</span>
+<span class="s2">/**</span>
+ <span class="s2">* Django admin inlines</span>
+ <span class="s2">*</span>
+ <span class="s2">* Based on jQuery Formset 1.1</span>
+ <span class="s2">* </span><span class="s3">@author </span><span class="s2">Stanislaus Madueke (stan DOT madueke AT gmail DOT com)</span>
+ <span class="s2">* </span><span class="s3">@requires </span><span class="s2">jQuery 1.2.6 or later</span>
+ <span class="s2">*</span>
+ <span class="s2">* Copyright (c) 2009, Stanislaus Madueke</span>
+ <span class="s2">* All rights reserved.</span>
+ <span class="s2">*</span>
+ <span class="s2">* Spiced up with Code from Zain Memon's GSoC project 2009</span>
+ <span class="s2">* and modified for Django by Jannis Leidel, Travis Swicegood and Julien Phalip.</span>
+ <span class="s2">*</span>
+ <span class="s2">* Licensed under the New BSD License</span>
+ <span class="s2">* See: https://opensource.org/licenses/bsd-license.php</span>
+ <span class="s2">*/</span>
+<span class="s4">'use strict'</span><span class="s5">;</span>
+<span class="s5">{</span>
+    <span class="s6">const </span><span class="s1">$ </span><span class="s5">= </span><span class="s1">django</span><span class="s5">.</span><span class="s1">jQuery</span><span class="s5">;</span>
+    <span class="s1">$</span><span class="s5">.</span><span class="s1">fn</span><span class="s5">.</span><span class="s1">formset </span><span class="s5">= </span><span class="s6">function</span><span class="s5">(</span><span class="s1">opts</span><span class="s5">) {</span>
+        <span class="s6">const </span><span class="s1">options </span><span class="s5">= </span><span class="s1">$</span><span class="s5">.</span><span class="s1">extend</span><span class="s5">({}, </span><span class="s1">$</span><span class="s5">.</span><span class="s1">fn</span><span class="s5">.</span><span class="s1">formset</span><span class="s5">.</span><span class="s1">defaults</span><span class="s5">, </span><span class="s1">opts</span><span class="s5">);</span>
+        <span class="s6">const </span><span class="s1">$this </span><span class="s5">= </span><span class="s1">$</span><span class="s5">(</span><span class="s6">this</span><span class="s5">);</span>
+        <span class="s6">const </span><span class="s1">$parent </span><span class="s5">= </span><span class="s1">$this</span><span class="s5">.</span><span class="s1">parent</span><span class="s5">();</span>
+        <span class="s6">const </span><span class="s1">updateElementIndex </span><span class="s5">= </span><span class="s6">function</span><span class="s5">(</span><span class="s1">el</span><span class="s5">, </span><span class="s1">prefix</span><span class="s5">, </span><span class="s1">ndx</span><span class="s5">) {</span>
+            <span class="s6">const </span><span class="s1">id_regex </span><span class="s5">= </span><span class="s6">new </span><span class="s1">RegExp</span><span class="s5">(</span><span class="s4">&quot;(&quot; </span><span class="s5">+ </span><span class="s1">prefix </span><span class="s5">+ </span><span class="s4">&quot;-(</span><span class="s6">\\</span><span class="s4">d+|__prefix__))&quot;</span><span class="s5">);</span>
+            <span class="s6">const </span><span class="s1">replacement </span><span class="s5">= </span><span class="s1">prefix </span><span class="s5">+ </span><span class="s4">&quot;-&quot; </span><span class="s5">+ </span><span class="s1">ndx</span><span class="s5">;</span>
+            <span class="s6">if </span><span class="s5">(</span><span class="s1">$</span><span class="s5">(</span><span class="s1">el</span><span class="s5">).</span><span class="s1">prop</span><span class="s5">(</span><span class="s4">&quot;for&quot;</span><span class="s5">)) {</span>
+                <span class="s1">$</span><span class="s5">(</span><span class="s1">el</span><span class="s5">).</span><span class="s1">prop</span><span class="s5">(</span><span class="s4">&quot;for&quot;</span><span class="s5">, </span><span class="s1">$</span><span class="s5">(</span><span class="s1">el</span><span class="s5">).</span><span class="s1">prop</span><span class="s5">(</span><span class="s4">&quot;for&quot;</span><span class="s5">).</span><span class="s1">replace</span><span class="s5">(</span><span class="s1">id_regex</span><span class="s5">, </span><span class="s1">replacement</span><span class="s5">));</span>
+            <span class="s5">}</span>
+            <span class="s6">if </span><span class="s5">(</span><span class="s1">el</span><span class="s5">.</span><span class="s1">id</span><span class="s5">) {</span>
+                <span class="s1">el</span><span class="s5">.</span><span class="s1">id </span><span class="s5">= </span><span class="s1">el</span><span class="s5">.</span><span class="s1">id</span><span class="s5">.</span><span class="s1">replace</span><span class="s5">(</span><span class="s1">id_regex</span><span class="s5">, </span><span class="s1">replacement</span><span class="s5">);</span>
+            <span class="s5">}</span>
+            <span class="s6">if </span><span class="s5">(</span><span class="s1">el</span><span class="s5">.</span><span class="s1">name</span><span class="s5">) {</span>
+                <span class="s1">el</span><span class="s5">.</span><span class="s1">name </span><span class="s5">= </span><span class="s1">el</span><span class="s5">.</span><span class="s1">name</span><span class="s5">.</span><span class="s1">replace</span><span class="s5">(</span><span class="s1">id_regex</span><span class="s5">, </span><span class="s1">replacement</span><span class="s5">);</span>
+            <span class="s5">}</span>
+        <span class="s5">};</span>
+        <span class="s6">const </span><span class="s1">totalForms </span><span class="s5">= </span><span class="s1">$</span><span class="s5">(</span><span class="s4">&quot;#id_&quot; </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix </span><span class="s5">+ </span><span class="s4">&quot;-TOTAL_FORMS&quot;</span><span class="s5">).</span><span class="s1">prop</span><span class="s5">(</span><span class="s4">&quot;autocomplete&quot;</span><span class="s5">, </span><span class="s4">&quot;off&quot;</span><span class="s5">);</span>
+        <span class="s6">let </span><span class="s1">nextIndex </span><span class="s5">= </span><span class="s1">parseInt</span><span class="s5">(</span><span class="s1">totalForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">(), </span><span class="s7">10</span><span class="s5">);</span>
+        <span class="s6">const </span><span class="s1">maxForms </span><span class="s5">= </span><span class="s1">$</span><span class="s5">(</span><span class="s4">&quot;#id_&quot; </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix </span><span class="s5">+ </span><span class="s4">&quot;-MAX_NUM_FORMS&quot;</span><span class="s5">).</span><span class="s1">prop</span><span class="s5">(</span><span class="s4">&quot;autocomplete&quot;</span><span class="s5">, </span><span class="s4">&quot;off&quot;</span><span class="s5">);</span>
+        <span class="s6">const </span><span class="s1">minForms </span><span class="s5">= </span><span class="s1">$</span><span class="s5">(</span><span class="s4">&quot;#id_&quot; </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix </span><span class="s5">+ </span><span class="s4">&quot;-MIN_NUM_FORMS&quot;</span><span class="s5">).</span><span class="s1">prop</span><span class="s5">(</span><span class="s4">&quot;autocomplete&quot;</span><span class="s5">, </span><span class="s4">&quot;off&quot;</span><span class="s5">);</span>
+        <span class="s6">let </span><span class="s1">addButton</span><span class="s5">;</span>
+
+        <span class="s2">/**</span>
+         <span class="s2">* The &quot;Add another MyModel&quot; button below the inline forms.</span>
+         <span class="s2">*/</span>
+        <span class="s6">const </span><span class="s1">addInlineAddButton </span><span class="s5">= </span><span class="s6">function</span><span class="s5">() {</span>
+            <span class="s6">if </span><span class="s5">(</span><span class="s1">addButton </span><span class="s5">=== </span><span class="s6">null</span><span class="s5">) {</span>
+                <span class="s6">if </span><span class="s5">(</span><span class="s1">$this</span><span class="s5">.</span><span class="s1">prop</span><span class="s5">(</span><span class="s4">&quot;tagName&quot;</span><span class="s5">) === </span><span class="s4">&quot;TR&quot;</span><span class="s5">) {</span>
+                    <span class="s0">// If forms are laid out as table rows, insert the</span>
+                    <span class="s0">// &quot;add&quot; button in a new table row:</span>
+                    <span class="s6">const </span><span class="s1">numCols </span><span class="s5">= </span><span class="s1">$this</span><span class="s5">.</span><span class="s1">eq</span><span class="s5">(-</span><span class="s7">1</span><span class="s5">).</span><span class="s1">children</span><span class="s5">().</span><span class="s1">length</span><span class="s5">;</span>
+                    <span class="s1">$parent</span><span class="s5">.</span><span class="s1">append</span><span class="s5">(</span><span class="s4">'&lt;tr class=&quot;' </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">addCssClass </span><span class="s5">+ </span><span class="s4">'&quot;&gt;&lt;td colspan=&quot;' </span><span class="s5">+ </span><span class="s1">numCols </span><span class="s5">+ </span><span class="s4">'&quot;&gt;&lt;a href=&quot;#&quot;&gt;' </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">addText </span><span class="s5">+ </span><span class="s4">&quot;&lt;/a&gt;&lt;/tr&gt;&quot;</span><span class="s5">);</span>
+                    <span class="s1">addButton </span><span class="s5">= </span><span class="s1">$parent</span><span class="s5">.</span><span class="s1">find</span><span class="s5">(</span><span class="s4">&quot;tr:last a&quot;</span><span class="s5">);</span>
+                <span class="s5">} </span><span class="s6">else </span><span class="s5">{</span>
+                    <span class="s0">// Otherwise, insert it immediately after the last form:</span>
+                    <span class="s1">$this</span><span class="s5">.</span><span class="s1">filter</span><span class="s5">(</span><span class="s4">&quot;:last&quot;</span><span class="s5">).</span><span class="s1">after</span><span class="s5">(</span><span class="s4">'&lt;div class=&quot;' </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">addCssClass </span><span class="s5">+ </span><span class="s4">'&quot;&gt;&lt;a href=&quot;#&quot;&gt;' </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">addText </span><span class="s5">+ </span><span class="s4">&quot;&lt;/a&gt;&lt;/div&gt;&quot;</span><span class="s5">);</span>
+                    <span class="s1">addButton </span><span class="s5">= </span><span class="s1">$this</span><span class="s5">.</span><span class="s1">filter</span><span class="s5">(</span><span class="s4">&quot;:last&quot;</span><span class="s5">).</span><span class="s1">next</span><span class="s5">().</span><span class="s1">find</span><span class="s5">(</span><span class="s4">&quot;a&quot;</span><span class="s5">);</span>
+                <span class="s5">}</span>
+            <span class="s5">}</span>
+            <span class="s1">addButton</span><span class="s5">.</span><span class="s1">on</span><span class="s5">(</span><span class="s4">'click'</span><span class="s5">, </span><span class="s1">addInlineClickHandler</span><span class="s5">);</span>
+        <span class="s5">};</span>
+
+        <span class="s6">const </span><span class="s1">addInlineClickHandler </span><span class="s5">= </span><span class="s6">function</span><span class="s5">(</span><span class="s1">e</span><span class="s5">) {</span>
+            <span class="s1">e</span><span class="s5">.</span><span class="s1">preventDefault</span><span class="s5">();</span>
+            <span class="s6">const </span><span class="s1">template </span><span class="s5">= </span><span class="s1">$</span><span class="s5">(</span><span class="s4">&quot;#&quot; </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix </span><span class="s5">+ </span><span class="s4">&quot;-empty&quot;</span><span class="s5">);</span>
+            <span class="s6">const </span><span class="s1">row </span><span class="s5">= </span><span class="s1">template</span><span class="s5">.</span><span class="s1">clone</span><span class="s5">(</span><span class="s6">true</span><span class="s5">);</span>
+            <span class="s1">row</span><span class="s5">.</span><span class="s1">removeClass</span><span class="s5">(</span><span class="s1">options</span><span class="s5">.</span><span class="s1">emptyCssClass</span><span class="s5">)</span>
+                <span class="s5">.</span><span class="s1">addClass</span><span class="s5">(</span><span class="s1">options</span><span class="s5">.</span><span class="s1">formCssClass</span><span class="s5">)</span>
+                <span class="s5">.</span><span class="s1">attr</span><span class="s5">(</span><span class="s4">&quot;id&quot;</span><span class="s5">, </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix </span><span class="s5">+ </span><span class="s4">&quot;-&quot; </span><span class="s5">+ </span><span class="s1">nextIndex</span><span class="s5">);</span>
+            <span class="s1">addInlineDeleteButton</span><span class="s5">(</span><span class="s1">row</span><span class="s5">);</span>
+            <span class="s1">row</span><span class="s5">.</span><span class="s1">find</span><span class="s5">(</span><span class="s4">&quot;*&quot;</span><span class="s5">).</span><span class="s1">each</span><span class="s5">(</span><span class="s6">function</span><span class="s5">() {</span>
+                <span class="s1">updateElementIndex</span><span class="s5">(</span><span class="s6">this</span><span class="s5">, </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix</span><span class="s5">, </span><span class="s1">totalForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">());</span>
+            <span class="s5">});</span>
+            <span class="s0">// Insert the new form when it has been fully edited.</span>
+            <span class="s1">row</span><span class="s5">.</span><span class="s1">insertBefore</span><span class="s5">(</span><span class="s1">$</span><span class="s5">(</span><span class="s1">template</span><span class="s5">));</span>
+            <span class="s0">// Update number of total forms.</span>
+            <span class="s1">$</span><span class="s5">(</span><span class="s1">totalForms</span><span class="s5">).</span><span class="s1">val</span><span class="s5">(</span><span class="s1">parseInt</span><span class="s5">(</span><span class="s1">totalForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">(), </span><span class="s7">10</span><span class="s5">) + </span><span class="s7">1</span><span class="s5">);</span>
+            <span class="s1">nextIndex </span><span class="s5">+= </span><span class="s7">1</span><span class="s5">;</span>
+            <span class="s0">// Hide the add button if there's a limit and it's been reached.</span>
+            <span class="s6">if </span><span class="s5">((</span><span class="s1">maxForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">() !== </span><span class="s4">''</span><span class="s5">) &amp;&amp; (</span><span class="s1">maxForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">() - </span><span class="s1">totalForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">()) &lt;= </span><span class="s7">0</span><span class="s5">) {</span>
+                <span class="s1">addButton</span><span class="s5">.</span><span class="s1">parent</span><span class="s5">().</span><span class="s1">hide</span><span class="s5">();</span>
+            <span class="s5">}</span>
+            <span class="s0">// Show the remove buttons if there are more than min_num.</span>
+            <span class="s1">toggleDeleteButtonVisibility</span><span class="s5">(</span><span class="s1">row</span><span class="s5">.</span><span class="s1">closest</span><span class="s5">(</span><span class="s4">'.inline-group'</span><span class="s5">));</span>
+
+            <span class="s0">// Pass the new form to the post-add callback, if provided.</span>
+            <span class="s6">if </span><span class="s5">(</span><span class="s1">options</span><span class="s5">.</span><span class="s1">added</span><span class="s5">) {</span>
+                <span class="s1">options</span><span class="s5">.</span><span class="s1">added</span><span class="s5">(</span><span class="s1">row</span><span class="s5">);</span>
+            <span class="s5">}</span>
+            <span class="s1">row</span><span class="s5">.</span><span class="s1">get</span><span class="s5">(</span><span class="s7">0</span><span class="s5">).</span><span class="s1">dispatchEvent</span><span class="s5">(</span><span class="s6">new </span><span class="s1">CustomEvent</span><span class="s5">(</span><span class="s4">&quot;formset:added&quot;</span><span class="s5">, {</span>
+                <span class="s1">bubbles</span><span class="s5">: </span><span class="s6">true</span><span class="s5">,</span>
+                <span class="s1">detail</span><span class="s5">: {</span>
+                    <span class="s1">formsetName</span><span class="s5">: </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix</span>
+                <span class="s5">}</span>
+            <span class="s5">}));</span>
+        <span class="s5">};</span>
+
+        <span class="s2">/**</span>
+         <span class="s2">* The &quot;X&quot; button that is part of every unsaved inline.</span>
+         <span class="s2">* (When saved, it is replaced with a &quot;Delete&quot; checkbox.)</span>
+         <span class="s2">*/</span>
+        <span class="s6">const </span><span class="s1">addInlineDeleteButton </span><span class="s5">= </span><span class="s6">function</span><span class="s5">(</span><span class="s1">row</span><span class="s5">) {</span>
+            <span class="s6">if </span><span class="s5">(</span><span class="s1">row</span><span class="s5">.</span><span class="s1">is</span><span class="s5">(</span><span class="s4">&quot;tr&quot;</span><span class="s5">)) {</span>
+                <span class="s0">// If the forms are laid out in table rows, insert</span>
+                <span class="s0">// the remove button into the last table cell:</span>
+                <span class="s1">row</span><span class="s5">.</span><span class="s1">children</span><span class="s5">(</span><span class="s4">&quot;:last&quot;</span><span class="s5">).</span><span class="s1">append</span><span class="s5">(</span><span class="s4">'&lt;div&gt;&lt;a class=&quot;' </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">deleteCssClass </span><span class="s5">+ </span><span class="s4">'&quot; href=&quot;#&quot;&gt;' </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">deleteText </span><span class="s5">+ </span><span class="s4">&quot;&lt;/a&gt;&lt;/div&gt;&quot;</span><span class="s5">);</span>
+            <span class="s5">} </span><span class="s6">else if </span><span class="s5">(</span><span class="s1">row</span><span class="s5">.</span><span class="s1">is</span><span class="s5">(</span><span class="s4">&quot;ul&quot;</span><span class="s5">) || </span><span class="s1">row</span><span class="s5">.</span><span class="s1">is</span><span class="s5">(</span><span class="s4">&quot;ol&quot;</span><span class="s5">)) {</span>
+                <span class="s0">// If they're laid out as an ordered/unordered list,</span>
+                <span class="s0">// insert an &lt;li&gt; after the last list item:</span>
+                <span class="s1">row</span><span class="s5">.</span><span class="s1">append</span><span class="s5">(</span><span class="s4">'&lt;li&gt;&lt;a class=&quot;' </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">deleteCssClass </span><span class="s5">+ </span><span class="s4">'&quot; href=&quot;#&quot;&gt;' </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">deleteText </span><span class="s5">+ </span><span class="s4">&quot;&lt;/a&gt;&lt;/li&gt;&quot;</span><span class="s5">);</span>
+            <span class="s5">} </span><span class="s6">else </span><span class="s5">{</span>
+                <span class="s0">// Otherwise, just insert the remove button as the</span>
+                <span class="s0">// last child element of the form's container:</span>
+                <span class="s1">row</span><span class="s5">.</span><span class="s1">children</span><span class="s5">(</span><span class="s4">&quot;:first&quot;</span><span class="s5">).</span><span class="s1">append</span><span class="s5">(</span><span class="s4">'&lt;span&gt;&lt;a class=&quot;' </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">deleteCssClass </span><span class="s5">+ </span><span class="s4">'&quot; href=&quot;#&quot;&gt;' </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">deleteText </span><span class="s5">+ </span><span class="s4">&quot;&lt;/a&gt;&lt;/span&gt;&quot;</span><span class="s5">);</span>
+            <span class="s5">}</span>
+            <span class="s0">// Add delete handler for each row.</span>
+            <span class="s1">row</span><span class="s5">.</span><span class="s1">find</span><span class="s5">(</span><span class="s4">&quot;a.&quot; </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">deleteCssClass</span><span class="s5">).</span><span class="s1">on</span><span class="s5">(</span><span class="s4">'click'</span><span class="s5">, </span><span class="s1">inlineDeleteHandler</span><span class="s5">.</span><span class="s1">bind</span><span class="s5">(</span><span class="s6">this</span><span class="s5">));</span>
+        <span class="s5">};</span>
+
+        <span class="s6">const </span><span class="s1">inlineDeleteHandler </span><span class="s5">= </span><span class="s6">function</span><span class="s5">(</span><span class="s1">e1</span><span class="s5">) {</span>
+            <span class="s1">e1</span><span class="s5">.</span><span class="s1">preventDefault</span><span class="s5">();</span>
+            <span class="s6">const </span><span class="s1">deleteButton </span><span class="s5">= </span><span class="s1">$</span><span class="s5">(</span><span class="s1">e1</span><span class="s5">.</span><span class="s1">target</span><span class="s5">);</span>
+            <span class="s6">const </span><span class="s1">row </span><span class="s5">= </span><span class="s1">deleteButton</span><span class="s5">.</span><span class="s1">closest</span><span class="s5">(</span><span class="s4">'.' </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">formCssClass</span><span class="s5">);</span>
+            <span class="s6">const </span><span class="s1">inlineGroup </span><span class="s5">= </span><span class="s1">row</span><span class="s5">.</span><span class="s1">closest</span><span class="s5">(</span><span class="s4">'.inline-group'</span><span class="s5">);</span>
+            <span class="s0">// Remove the parent form containing this button,</span>
+            <span class="s0">// and also remove the relevant row with non-field errors:</span>
+            <span class="s6">const </span><span class="s1">prevRow </span><span class="s5">= </span><span class="s1">row</span><span class="s5">.</span><span class="s1">prev</span><span class="s5">();</span>
+            <span class="s6">if </span><span class="s5">(</span><span class="s1">prevRow</span><span class="s5">.</span><span class="s1">length </span><span class="s5">&amp;&amp; </span><span class="s1">prevRow</span><span class="s5">.</span><span class="s1">hasClass</span><span class="s5">(</span><span class="s4">'row-form-errors'</span><span class="s5">)) {</span>
+                <span class="s1">prevRow</span><span class="s5">.</span><span class="s1">remove</span><span class="s5">();</span>
+            <span class="s5">}</span>
+            <span class="s1">row</span><span class="s5">.</span><span class="s1">remove</span><span class="s5">();</span>
+            <span class="s1">nextIndex </span><span class="s5">-= </span><span class="s7">1</span><span class="s5">;</span>
+            <span class="s0">// Pass the deleted form to the post-delete callback, if provided.</span>
+            <span class="s6">if </span><span class="s5">(</span><span class="s1">options</span><span class="s5">.</span><span class="s1">removed</span><span class="s5">) {</span>
+                <span class="s1">options</span><span class="s5">.</span><span class="s1">removed</span><span class="s5">(</span><span class="s1">row</span><span class="s5">);</span>
+            <span class="s5">}</span>
+            <span class="s1">document</span><span class="s5">.</span><span class="s1">dispatchEvent</span><span class="s5">(</span><span class="s6">new </span><span class="s1">CustomEvent</span><span class="s5">(</span><span class="s4">&quot;formset:removed&quot;</span><span class="s5">, {</span>
+                <span class="s1">detail</span><span class="s5">: {</span>
+                    <span class="s1">formsetName</span><span class="s5">: </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix</span>
+                <span class="s5">}</span>
+            <span class="s5">}));</span>
+            <span class="s0">// Update the TOTAL_FORMS form count.</span>
+            <span class="s6">const </span><span class="s1">forms </span><span class="s5">= </span><span class="s1">$</span><span class="s5">(</span><span class="s4">&quot;.&quot; </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">formCssClass</span><span class="s5">);</span>
+            <span class="s1">$</span><span class="s5">(</span><span class="s4">&quot;#id_&quot; </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix </span><span class="s5">+ </span><span class="s4">&quot;-TOTAL_FORMS&quot;</span><span class="s5">).</span><span class="s1">val</span><span class="s5">(</span><span class="s1">forms</span><span class="s5">.</span><span class="s1">length</span><span class="s5">);</span>
+            <span class="s0">// Show add button again once below maximum number.</span>
+            <span class="s6">if </span><span class="s5">((</span><span class="s1">maxForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">() === </span><span class="s4">''</span><span class="s5">) || (</span><span class="s1">maxForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">() - </span><span class="s1">forms</span><span class="s5">.</span><span class="s1">length</span><span class="s5">) &gt; </span><span class="s7">0</span><span class="s5">) {</span>
+                <span class="s1">addButton</span><span class="s5">.</span><span class="s1">parent</span><span class="s5">().</span><span class="s1">show</span><span class="s5">();</span>
+            <span class="s5">}</span>
+            <span class="s0">// Hide the remove buttons if at min_num.</span>
+            <span class="s1">toggleDeleteButtonVisibility</span><span class="s5">(</span><span class="s1">inlineGroup</span><span class="s5">);</span>
+            <span class="s0">// Also, update names and ids for all remaining form controls so</span>
+            <span class="s0">// they remain in sequence:</span>
+            <span class="s6">let </span><span class="s1">i</span><span class="s5">, </span><span class="s1">formCount</span><span class="s5">;</span>
+            <span class="s6">const </span><span class="s1">updateElementCallback </span><span class="s5">= </span><span class="s6">function</span><span class="s5">() {</span>
+                <span class="s1">updateElementIndex</span><span class="s5">(</span><span class="s6">this</span><span class="s5">, </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix</span><span class="s5">, </span><span class="s1">i</span><span class="s5">);</span>
+            <span class="s5">};</span>
+            <span class="s6">for </span><span class="s5">(</span><span class="s1">i </span><span class="s5">= </span><span class="s7">0</span><span class="s5">, </span><span class="s1">formCount </span><span class="s5">= </span><span class="s1">forms</span><span class="s5">.</span><span class="s1">length</span><span class="s5">; </span><span class="s1">i </span><span class="s5">&lt; </span><span class="s1">formCount</span><span class="s5">; </span><span class="s1">i</span><span class="s5">++) {</span>
+                <span class="s1">updateElementIndex</span><span class="s5">(</span><span class="s1">$</span><span class="s5">(</span><span class="s1">forms</span><span class="s5">).</span><span class="s1">get</span><span class="s5">(</span><span class="s1">i</span><span class="s5">), </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix</span><span class="s5">, </span><span class="s1">i</span><span class="s5">);</span>
+                <span class="s1">$</span><span class="s5">(</span><span class="s1">forms</span><span class="s5">.</span><span class="s1">get</span><span class="s5">(</span><span class="s1">i</span><span class="s5">)).</span><span class="s1">find</span><span class="s5">(</span><span class="s4">&quot;*&quot;</span><span class="s5">).</span><span class="s1">each</span><span class="s5">(</span><span class="s1">updateElementCallback</span><span class="s5">);</span>
+            <span class="s5">}</span>
+        <span class="s5">};</span>
+
+        <span class="s6">const </span><span class="s1">toggleDeleteButtonVisibility </span><span class="s5">= </span><span class="s6">function</span><span class="s5">(</span><span class="s1">inlineGroup</span><span class="s5">) {</span>
+            <span class="s6">if </span><span class="s5">((</span><span class="s1">minForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">() !== </span><span class="s4">''</span><span class="s5">) &amp;&amp; (</span><span class="s1">minForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">() - </span><span class="s1">totalForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">()) &gt;= </span><span class="s7">0</span><span class="s5">) {</span>
+                <span class="s1">inlineGroup</span><span class="s5">.</span><span class="s1">find</span><span class="s5">(</span><span class="s4">'.inline-deletelink'</span><span class="s5">).</span><span class="s1">hide</span><span class="s5">();</span>
+            <span class="s5">} </span><span class="s6">else </span><span class="s5">{</span>
+                <span class="s1">inlineGroup</span><span class="s5">.</span><span class="s1">find</span><span class="s5">(</span><span class="s4">'.inline-deletelink'</span><span class="s5">).</span><span class="s1">show</span><span class="s5">();</span>
+            <span class="s5">}</span>
+        <span class="s5">};</span>
+
+        <span class="s1">$this</span><span class="s5">.</span><span class="s1">each</span><span class="s5">(</span><span class="s6">function</span><span class="s5">(</span><span class="s1">i</span><span class="s5">) {</span>
+            <span class="s1">$</span><span class="s5">(</span><span class="s6">this</span><span class="s5">).</span><span class="s1">not</span><span class="s5">(</span><span class="s4">&quot;.&quot; </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">emptyCssClass</span><span class="s5">).</span><span class="s1">addClass</span><span class="s5">(</span><span class="s1">options</span><span class="s5">.</span><span class="s1">formCssClass</span><span class="s5">);</span>
+        <span class="s5">});</span>
+
+        <span class="s0">// Create the delete buttons for all unsaved inlines:</span>
+        <span class="s1">$this</span><span class="s5">.</span><span class="s1">filter</span><span class="s5">(</span><span class="s4">'.' </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">formCssClass </span><span class="s5">+ </span><span class="s4">':not(.has_original):not(.' </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">emptyCssClass </span><span class="s5">+ </span><span class="s4">')'</span><span class="s5">).</span><span class="s1">each</span><span class="s5">(</span><span class="s6">function</span><span class="s5">() {</span>
+            <span class="s1">addInlineDeleteButton</span><span class="s5">(</span><span class="s1">$</span><span class="s5">(</span><span class="s6">this</span><span class="s5">));</span>
+        <span class="s5">});</span>
+        <span class="s1">toggleDeleteButtonVisibility</span><span class="s5">(</span><span class="s1">$this</span><span class="s5">);</span>
+
+        <span class="s0">// Create the add button, initially hidden.</span>
+        <span class="s1">addButton </span><span class="s5">= </span><span class="s1">options</span><span class="s5">.</span><span class="s1">addButton</span><span class="s5">;</span>
+        <span class="s1">addInlineAddButton</span><span class="s5">();</span>
+
+        <span class="s0">// Show the add button if allowed to add more items.</span>
+        <span class="s0">// Note that max_num = None translates to a blank string.</span>
+        <span class="s6">const </span><span class="s1">showAddButton </span><span class="s5">= </span><span class="s1">maxForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">() === </span><span class="s4">'' </span><span class="s5">|| (</span><span class="s1">maxForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">() - </span><span class="s1">totalForms</span><span class="s5">.</span><span class="s1">val</span><span class="s5">()) &gt; </span><span class="s7">0</span><span class="s5">;</span>
+        <span class="s6">if </span><span class="s5">(</span><span class="s1">$this</span><span class="s5">.</span><span class="s1">length </span><span class="s5">&amp;&amp; </span><span class="s1">showAddButton</span><span class="s5">) {</span>
+            <span class="s1">addButton</span><span class="s5">.</span><span class="s1">parent</span><span class="s5">().</span><span class="s1">show</span><span class="s5">();</span>
+        <span class="s5">} </span><span class="s6">else </span><span class="s5">{</span>
+            <span class="s1">addButton</span><span class="s5">.</span><span class="s1">parent</span><span class="s5">().</span><span class="s1">hide</span><span class="s5">();</span>
+        <span class="s5">}</span>
+
+        <span class="s6">return this</span><span class="s5">;</span>
+    <span class="s5">};</span>
+
+    <span class="s0">/* Setup plugin defaults */</span>
+    <span class="s1">$</span><span class="s5">.</span><span class="s1">fn</span><span class="s5">.</span><span class="s1">formset</span><span class="s5">.</span><span class="s1">defaults </span><span class="s5">= {</span>
+        <span class="s1">prefix</span><span class="s5">: </span><span class="s4">&quot;form&quot;</span><span class="s5">, </span><span class="s0">// The form prefix for your django formset</span>
+        <span class="s1">addText</span><span class="s5">: </span><span class="s4">&quot;add another&quot;</span><span class="s5">, </span><span class="s0">// Text for the add link</span>
+        <span class="s1">deleteText</span><span class="s5">: </span><span class="s4">&quot;remove&quot;</span><span class="s5">, </span><span class="s0">// Text for the delete link</span>
+        <span class="s1">addCssClass</span><span class="s5">: </span><span class="s4">&quot;add-row&quot;</span><span class="s5">, </span><span class="s0">// CSS class applied to the add link</span>
+        <span class="s1">deleteCssClass</span><span class="s5">: </span><span class="s4">&quot;delete-row&quot;</span><span class="s5">, </span><span class="s0">// CSS class applied to the delete link</span>
+        <span class="s1">emptyCssClass</span><span class="s5">: </span><span class="s4">&quot;empty-row&quot;</span><span class="s5">, </span><span class="s0">// CSS class applied to the empty row</span>
+        <span class="s1">formCssClass</span><span class="s5">: </span><span class="s4">&quot;dynamic-form&quot;</span><span class="s5">, </span><span class="s0">// CSS class applied to each form in a formset</span>
+        <span class="s1">added</span><span class="s5">: </span><span class="s6">null</span><span class="s5">, </span><span class="s0">// Function called each time a new form is added</span>
+        <span class="s1">removed</span><span class="s5">: </span><span class="s6">null</span><span class="s5">, </span><span class="s0">// Function called each time a form is deleted</span>
+        <span class="s1">addButton</span><span class="s5">: </span><span class="s6">null </span><span class="s0">// Existing add button to use</span>
+    <span class="s5">};</span>
+
+
+    <span class="s0">// Tabular inlines ---------------------------------------------------------</span>
+    <span class="s1">$</span><span class="s5">.</span><span class="s1">fn</span><span class="s5">.</span><span class="s1">tabularFormset </span><span class="s5">= </span><span class="s6">function</span><span class="s5">(</span><span class="s1">selector</span><span class="s5">, </span><span class="s1">options</span><span class="s5">) {</span>
+        <span class="s6">const </span><span class="s1">$rows </span><span class="s5">= </span><span class="s1">$</span><span class="s5">(</span><span class="s6">this</span><span class="s5">);</span>
+
+        <span class="s6">const </span><span class="s1">reinitDateTimeShortCuts </span><span class="s5">= </span><span class="s6">function</span><span class="s5">() {</span>
+            <span class="s0">// Reinitialize the calendar and clock widgets by force</span>
+            <span class="s6">if </span><span class="s5">(</span><span class="s6">typeof </span><span class="s1">DateTimeShortcuts </span><span class="s5">!== </span><span class="s4">&quot;undefined&quot;</span><span class="s5">) {</span>
+                <span class="s1">$</span><span class="s5">(</span><span class="s4">&quot;.datetimeshortcuts&quot;</span><span class="s5">).</span><span class="s1">remove</span><span class="s5">();</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s5">.</span><span class="s1">init</span><span class="s5">();</span>
+            <span class="s5">}</span>
+        <span class="s5">};</span>
+
+        <span class="s6">const </span><span class="s1">updateSelectFilter </span><span class="s5">= </span><span class="s6">function</span><span class="s5">() {</span>
+            <span class="s0">// If any SelectFilter widgets are a part of the new form,</span>
+            <span class="s0">// instantiate a new SelectFilter instance for it.</span>
+            <span class="s6">if </span><span class="s5">(</span><span class="s6">typeof </span><span class="s1">SelectFilter </span><span class="s5">!== </span><span class="s4">'undefined'</span><span class="s5">) {</span>
+                <span class="s1">$</span><span class="s5">(</span><span class="s4">'.selectfilter'</span><span class="s5">).</span><span class="s1">each</span><span class="s5">(</span><span class="s6">function</span><span class="s5">(</span><span class="s1">index</span><span class="s5">, </span><span class="s1">value</span><span class="s5">) {</span>
+                    <span class="s1">SelectFilter</span><span class="s5">.</span><span class="s1">init</span><span class="s5">(</span><span class="s1">value</span><span class="s5">.</span><span class="s1">id</span><span class="s5">, </span><span class="s6">this</span><span class="s5">.</span><span class="s1">dataset</span><span class="s5">.</span><span class="s1">fieldName</span><span class="s5">, </span><span class="s6">false</span><span class="s5">);</span>
+                <span class="s5">});</span>
+                <span class="s1">$</span><span class="s5">(</span><span class="s4">'.selectfilterstacked'</span><span class="s5">).</span><span class="s1">each</span><span class="s5">(</span><span class="s6">function</span><span class="s5">(</span><span class="s1">index</span><span class="s5">, </span><span class="s1">value</span><span class="s5">) {</span>
+                    <span class="s1">SelectFilter</span><span class="s5">.</span><span class="s1">init</span><span class="s5">(</span><span class="s1">value</span><span class="s5">.</span><span class="s1">id</span><span class="s5">, </span><span class="s6">this</span><span class="s5">.</span><span class="s1">dataset</span><span class="s5">.</span><span class="s1">fieldName</span><span class="s5">, </span><span class="s6">true</span><span class="s5">);</span>
+                <span class="s5">});</span>
+            <span class="s5">}</span>
+        <span class="s5">};</span>
+
+        <span class="s6">const </span><span class="s1">initPrepopulatedFields </span><span class="s5">= </span><span class="s6">function</span><span class="s5">(</span><span class="s1">row</span><span class="s5">) {</span>
+            <span class="s1">row</span><span class="s5">.</span><span class="s1">find</span><span class="s5">(</span><span class="s4">'.prepopulated_field'</span><span class="s5">).</span><span class="s1">each</span><span class="s5">(</span><span class="s6">function</span><span class="s5">() {</span>
+                <span class="s6">const </span><span class="s1">field </span><span class="s5">= </span><span class="s1">$</span><span class="s5">(</span><span class="s6">this</span><span class="s5">),</span>
+                    <span class="s1">input </span><span class="s5">= </span><span class="s1">field</span><span class="s5">.</span><span class="s1">find</span><span class="s5">(</span><span class="s4">'input, select, textarea'</span><span class="s5">),</span>
+                    <span class="s1">dependency_list </span><span class="s5">= </span><span class="s1">input</span><span class="s5">.</span><span class="s1">data</span><span class="s5">(</span><span class="s4">'dependency_list'</span><span class="s5">) || [],</span>
+                    <span class="s1">dependencies </span><span class="s5">= [];</span>
+                <span class="s1">$</span><span class="s5">.</span><span class="s1">each</span><span class="s5">(</span><span class="s1">dependency_list</span><span class="s5">, </span><span class="s6">function</span><span class="s5">(</span><span class="s1">i</span><span class="s5">, </span><span class="s1">field_name</span><span class="s5">) {</span>
+                    <span class="s1">dependencies</span><span class="s5">.</span><span class="s1">push</span><span class="s5">(</span><span class="s4">'#' </span><span class="s5">+ </span><span class="s1">row</span><span class="s5">.</span><span class="s1">find</span><span class="s5">(</span><span class="s4">'.field-' </span><span class="s5">+ </span><span class="s1">field_name</span><span class="s5">).</span><span class="s1">find</span><span class="s5">(</span><span class="s4">'input, select, textarea'</span><span class="s5">).</span><span class="s1">attr</span><span class="s5">(</span><span class="s4">'id'</span><span class="s5">));</span>
+                <span class="s5">});</span>
+                <span class="s6">if </span><span class="s5">(</span><span class="s1">dependencies</span><span class="s5">.</span><span class="s1">length</span><span class="s5">) {</span>
+                    <span class="s1">input</span><span class="s5">.</span><span class="s1">prepopulate</span><span class="s5">(</span><span class="s1">dependencies</span><span class="s5">, </span><span class="s1">input</span><span class="s5">.</span><span class="s1">attr</span><span class="s5">(</span><span class="s4">'maxlength'</span><span class="s5">));</span>
+                <span class="s5">}</span>
+            <span class="s5">});</span>
+        <span class="s5">};</span>
+
+        <span class="s1">$rows</span><span class="s5">.</span><span class="s1">formset</span><span class="s5">({</span>
+            <span class="s1">prefix</span><span class="s5">: </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix</span><span class="s5">,</span>
+            <span class="s1">addText</span><span class="s5">: </span><span class="s1">options</span><span class="s5">.</span><span class="s1">addText</span><span class="s5">,</span>
+            <span class="s1">formCssClass</span><span class="s5">: </span><span class="s4">&quot;dynamic-&quot; </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix</span><span class="s5">,</span>
+            <span class="s1">deleteCssClass</span><span class="s5">: </span><span class="s4">&quot;inline-deletelink&quot;</span><span class="s5">,</span>
+            <span class="s1">deleteText</span><span class="s5">: </span><span class="s1">options</span><span class="s5">.</span><span class="s1">deleteText</span><span class="s5">,</span>
+            <span class="s1">emptyCssClass</span><span class="s5">: </span><span class="s4">&quot;empty-form&quot;</span><span class="s5">,</span>
+            <span class="s1">added</span><span class="s5">: </span><span class="s6">function</span><span class="s5">(</span><span class="s1">row</span><span class="s5">) {</span>
+                <span class="s1">initPrepopulatedFields</span><span class="s5">(</span><span class="s1">row</span><span class="s5">);</span>
+                <span class="s1">reinitDateTimeShortCuts</span><span class="s5">();</span>
+                <span class="s1">updateSelectFilter</span><span class="s5">();</span>
+            <span class="s5">},</span>
+            <span class="s1">addButton</span><span class="s5">: </span><span class="s1">options</span><span class="s5">.</span><span class="s1">addButton</span>
+        <span class="s5">});</span>
+
+        <span class="s6">return </span><span class="s1">$rows</span><span class="s5">;</span>
+    <span class="s5">};</span>
+
+    <span class="s0">// Stacked inlines ---------------------------------------------------------</span>
+    <span class="s1">$</span><span class="s5">.</span><span class="s1">fn</span><span class="s5">.</span><span class="s1">stackedFormset </span><span class="s5">= </span><span class="s6">function</span><span class="s5">(</span><span class="s1">selector</span><span class="s5">, </span><span class="s1">options</span><span class="s5">) {</span>
+        <span class="s6">const </span><span class="s1">$rows </span><span class="s5">= </span><span class="s1">$</span><span class="s5">(</span><span class="s6">this</span><span class="s5">);</span>
+        <span class="s6">const </span><span class="s1">updateInlineLabel </span><span class="s5">= </span><span class="s6">function</span><span class="s5">(</span><span class="s1">row</span><span class="s5">) {</span>
+            <span class="s1">$</span><span class="s5">(</span><span class="s1">selector</span><span class="s5">).</span><span class="s1">find</span><span class="s5">(</span><span class="s4">&quot;.inline_label&quot;</span><span class="s5">).</span><span class="s1">each</span><span class="s5">(</span><span class="s6">function</span><span class="s5">(</span><span class="s1">i</span><span class="s5">) {</span>
+                <span class="s6">const </span><span class="s1">count </span><span class="s5">= </span><span class="s1">i </span><span class="s5">+ </span><span class="s7">1</span><span class="s5">;</span>
+                <span class="s1">$</span><span class="s5">(</span><span class="s6">this</span><span class="s5">).</span><span class="s1">html</span><span class="s5">(</span><span class="s1">$</span><span class="s5">(</span><span class="s6">this</span><span class="s5">).</span><span class="s1">html</span><span class="s5">().</span><span class="s1">replace</span><span class="s5">(</span><span class="s8">/(#\d+)/g</span><span class="s5">, </span><span class="s4">&quot;#&quot; </span><span class="s5">+ </span><span class="s1">count</span><span class="s5">));</span>
+            <span class="s5">});</span>
+        <span class="s5">};</span>
+
+        <span class="s6">const </span><span class="s1">reinitDateTimeShortCuts </span><span class="s5">= </span><span class="s6">function</span><span class="s5">() {</span>
+            <span class="s0">// Reinitialize the calendar and clock widgets by force, yuck.</span>
+            <span class="s6">if </span><span class="s5">(</span><span class="s6">typeof </span><span class="s1">DateTimeShortcuts </span><span class="s5">!== </span><span class="s4">&quot;undefined&quot;</span><span class="s5">) {</span>
+                <span class="s1">$</span><span class="s5">(</span><span class="s4">&quot;.datetimeshortcuts&quot;</span><span class="s5">).</span><span class="s1">remove</span><span class="s5">();</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s5">.</span><span class="s1">init</span><span class="s5">();</span>
+            <span class="s5">}</span>
+        <span class="s5">};</span>
+
+        <span class="s6">const </span><span class="s1">updateSelectFilter </span><span class="s5">= </span><span class="s6">function</span><span class="s5">() {</span>
+            <span class="s0">// If any SelectFilter widgets were added, instantiate a new instance.</span>
+            <span class="s6">if </span><span class="s5">(</span><span class="s6">typeof </span><span class="s1">SelectFilter </span><span class="s5">!== </span><span class="s4">&quot;undefined&quot;</span><span class="s5">) {</span>
+                <span class="s1">$</span><span class="s5">(</span><span class="s4">&quot;.selectfilter&quot;</span><span class="s5">).</span><span class="s1">each</span><span class="s5">(</span><span class="s6">function</span><span class="s5">(</span><span class="s1">index</span><span class="s5">, </span><span class="s1">value</span><span class="s5">) {</span>
+                    <span class="s1">SelectFilter</span><span class="s5">.</span><span class="s1">init</span><span class="s5">(</span><span class="s1">value</span><span class="s5">.</span><span class="s1">id</span><span class="s5">, </span><span class="s6">this</span><span class="s5">.</span><span class="s1">dataset</span><span class="s5">.</span><span class="s1">fieldName</span><span class="s5">, </span><span class="s6">false</span><span class="s5">);</span>
+                <span class="s5">});</span>
+                <span class="s1">$</span><span class="s5">(</span><span class="s4">&quot;.selectfilterstacked&quot;</span><span class="s5">).</span><span class="s1">each</span><span class="s5">(</span><span class="s6">function</span><span class="s5">(</span><span class="s1">index</span><span class="s5">, </span><span class="s1">value</span><span class="s5">) {</span>
+                    <span class="s1">SelectFilter</span><span class="s5">.</span><span class="s1">init</span><span class="s5">(</span><span class="s1">value</span><span class="s5">.</span><span class="s1">id</span><span class="s5">, </span><span class="s6">this</span><span class="s5">.</span><span class="s1">dataset</span><span class="s5">.</span><span class="s1">fieldName</span><span class="s5">, </span><span class="s6">true</span><span class="s5">);</span>
+                <span class="s5">});</span>
+            <span class="s5">}</span>
+        <span class="s5">};</span>
+
+        <span class="s6">const </span><span class="s1">initPrepopulatedFields </span><span class="s5">= </span><span class="s6">function</span><span class="s5">(</span><span class="s1">row</span><span class="s5">) {</span>
+            <span class="s1">row</span><span class="s5">.</span><span class="s1">find</span><span class="s5">(</span><span class="s4">'.prepopulated_field'</span><span class="s5">).</span><span class="s1">each</span><span class="s5">(</span><span class="s6">function</span><span class="s5">() {</span>
+                <span class="s6">const </span><span class="s1">field </span><span class="s5">= </span><span class="s1">$</span><span class="s5">(</span><span class="s6">this</span><span class="s5">),</span>
+                    <span class="s1">input </span><span class="s5">= </span><span class="s1">field</span><span class="s5">.</span><span class="s1">find</span><span class="s5">(</span><span class="s4">'input, select, textarea'</span><span class="s5">),</span>
+                    <span class="s1">dependency_list </span><span class="s5">= </span><span class="s1">input</span><span class="s5">.</span><span class="s1">data</span><span class="s5">(</span><span class="s4">'dependency_list'</span><span class="s5">) || [],</span>
+                    <span class="s1">dependencies </span><span class="s5">= [];</span>
+                <span class="s1">$</span><span class="s5">.</span><span class="s1">each</span><span class="s5">(</span><span class="s1">dependency_list</span><span class="s5">, </span><span class="s6">function</span><span class="s5">(</span><span class="s1">i</span><span class="s5">, </span><span class="s1">field_name</span><span class="s5">) {</span>
+                    <span class="s0">// Dependency in a fieldset.</span>
+                    <span class="s6">let </span><span class="s1">field_element </span><span class="s5">= </span><span class="s1">row</span><span class="s5">.</span><span class="s1">find</span><span class="s5">(</span><span class="s4">'.form-row .field-' </span><span class="s5">+ </span><span class="s1">field_name</span><span class="s5">);</span>
+                    <span class="s0">// Dependency without a fieldset.</span>
+                    <span class="s6">if </span><span class="s5">(!</span><span class="s1">field_element</span><span class="s5">.</span><span class="s1">length</span><span class="s5">) {</span>
+                        <span class="s1">field_element </span><span class="s5">= </span><span class="s1">row</span><span class="s5">.</span><span class="s1">find</span><span class="s5">(</span><span class="s4">'.form-row.field-' </span><span class="s5">+ </span><span class="s1">field_name</span><span class="s5">);</span>
+                    <span class="s5">}</span>
+                    <span class="s1">dependencies</span><span class="s5">.</span><span class="s1">push</span><span class="s5">(</span><span class="s4">'#' </span><span class="s5">+ </span><span class="s1">field_element</span><span class="s5">.</span><span class="s1">find</span><span class="s5">(</span><span class="s4">'input, select, textarea'</span><span class="s5">).</span><span class="s1">attr</span><span class="s5">(</span><span class="s4">'id'</span><span class="s5">));</span>
+                <span class="s5">});</span>
+                <span class="s6">if </span><span class="s5">(</span><span class="s1">dependencies</span><span class="s5">.</span><span class="s1">length</span><span class="s5">) {</span>
+                    <span class="s1">input</span><span class="s5">.</span><span class="s1">prepopulate</span><span class="s5">(</span><span class="s1">dependencies</span><span class="s5">, </span><span class="s1">input</span><span class="s5">.</span><span class="s1">attr</span><span class="s5">(</span><span class="s4">'maxlength'</span><span class="s5">));</span>
+                <span class="s5">}</span>
+            <span class="s5">});</span>
+        <span class="s5">};</span>
+
+        <span class="s1">$rows</span><span class="s5">.</span><span class="s1">formset</span><span class="s5">({</span>
+            <span class="s1">prefix</span><span class="s5">: </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix</span><span class="s5">,</span>
+            <span class="s1">addText</span><span class="s5">: </span><span class="s1">options</span><span class="s5">.</span><span class="s1">addText</span><span class="s5">,</span>
+            <span class="s1">formCssClass</span><span class="s5">: </span><span class="s4">&quot;dynamic-&quot; </span><span class="s5">+ </span><span class="s1">options</span><span class="s5">.</span><span class="s1">prefix</span><span class="s5">,</span>
+            <span class="s1">deleteCssClass</span><span class="s5">: </span><span class="s4">&quot;inline-deletelink&quot;</span><span class="s5">,</span>
+            <span class="s1">deleteText</span><span class="s5">: </span><span class="s1">options</span><span class="s5">.</span><span class="s1">deleteText</span><span class="s5">,</span>
+            <span class="s1">emptyCssClass</span><span class="s5">: </span><span class="s4">&quot;empty-form&quot;</span><span class="s5">,</span>
+            <span class="s1">removed</span><span class="s5">: </span><span class="s1">updateInlineLabel</span><span class="s5">,</span>
+            <span class="s1">added</span><span class="s5">: </span><span class="s6">function</span><span class="s5">(</span><span class="s1">row</span><span class="s5">) {</span>
+                <span class="s1">initPrepopulatedFields</span><span class="s5">(</span><span class="s1">row</span><span class="s5">);</span>
+                <span class="s1">reinitDateTimeShortCuts</span><span class="s5">();</span>
+                <span class="s1">updateSelectFilter</span><span class="s5">();</span>
+                <span class="s1">updateInlineLabel</span><span class="s5">(</span><span class="s1">row</span><span class="s5">);</span>
+            <span class="s5">},</span>
+            <span class="s1">addButton</span><span class="s5">: </span><span class="s1">options</span><span class="s5">.</span><span class="s1">addButton</span>
+        <span class="s5">});</span>
+
+        <span class="s6">return </span><span class="s1">$rows</span><span class="s5">;</span>
+    <span class="s5">};</span>
+
+    <span class="s1">$</span><span class="s5">(</span><span class="s1">document</span><span class="s5">).</span><span class="s1">ready</span><span class="s5">(</span><span class="s6">function</span><span class="s5">() {</span>
+        <span class="s1">$</span><span class="s5">(</span><span class="s4">&quot;.js-inline-admin-formset&quot;</span><span class="s5">).</span><span class="s1">each</span><span class="s5">(</span><span class="s6">function</span><span class="s5">() {</span>
+            <span class="s6">const </span><span class="s1">data </span><span class="s5">= </span><span class="s1">$</span><span class="s5">(</span><span class="s6">this</span><span class="s5">).</span><span class="s1">data</span><span class="s5">(),</span>
+                <span class="s1">inlineOptions </span><span class="s5">= </span><span class="s1">data</span><span class="s5">.</span><span class="s1">inlineFormset</span><span class="s5">;</span>
+            <span class="s6">let </span><span class="s1">selector</span><span class="s5">;</span>
+            <span class="s6">switch</span><span class="s5">(</span><span class="s1">data</span><span class="s5">.</span><span class="s1">inlineType</span><span class="s5">) {</span>
+            <span class="s6">case </span><span class="s4">&quot;stacked&quot;</span><span class="s5">:</span>
+                <span class="s1">selector </span><span class="s5">= </span><span class="s1">inlineOptions</span><span class="s5">.</span><span class="s1">name </span><span class="s5">+ </span><span class="s4">&quot;-group .inline-related&quot;</span><span class="s5">;</span>
+                <span class="s1">$</span><span class="s5">(</span><span class="s1">selector</span><span class="s5">).</span><span class="s1">stackedFormset</span><span class="s5">(</span><span class="s1">selector</span><span class="s5">, </span><span class="s1">inlineOptions</span><span class="s5">.</span><span class="s1">options</span><span class="s5">);</span>
+                <span class="s6">break</span><span class="s5">;</span>
+            <span class="s6">case </span><span class="s4">&quot;tabular&quot;</span><span class="s5">:</span>
+                <span class="s1">selector </span><span class="s5">= </span><span class="s1">inlineOptions</span><span class="s5">.</span><span class="s1">name </span><span class="s5">+ </span><span class="s4">&quot;-group .tabular.inline-related tbody:first &gt; tr.form-row&quot;</span><span class="s5">;</span>
+                <span class="s1">$</span><span class="s5">(</span><span class="s1">selector</span><span class="s5">).</span><span class="s1">tabularFormset</span><span class="s5">(</span><span class="s1">selector</span><span class="s5">, </span><span class="s1">inlineOptions</span><span class="s5">.</span><span class="s1">options</span><span class="s5">);</span>
+                <span class="s6">break</span><span class="s5">;</span>
+            <span class="s5">}</span>
+        <span class="s5">});</span>
+    <span class="s5">});</span>
+<span class="s5">}</span>
+</pre>
+</body>
+</html>

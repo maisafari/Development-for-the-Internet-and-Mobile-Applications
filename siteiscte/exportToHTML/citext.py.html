@@ -1,0 +1,100 @@
+<html>
+<head>
+<title>citext.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+citext.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">warnings</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">CharField</span><span class="s2">, </span><span class="s1">EmailField</span><span class="s2">, </span><span class="s1">TextField</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">test</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">ignore_warnings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">deprecation </span><span class="s0">import </span><span class="s1">RemovedInDjango51Warning</span>
+
+<span class="s1">__all__ </span><span class="s2">= [</span><span class="s3">&quot;CICharField&quot;</span><span class="s2">, </span><span class="s3">&quot;CIEmailField&quot;</span><span class="s2">, </span><span class="s3">&quot;CIText&quot;</span><span class="s2">, </span><span class="s3">&quot;CITextField&quot;</span><span class="s2">]</span>
+
+
+<span class="s4"># RemovedInDjango51Warning.</span>
+<span class="s0">class </span><span class="s1">CIText</span><span class="s2">:</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">warnings</span><span class="s2">.</span><span class="s1">warn</span><span class="s2">(</span>
+            <span class="s3">&quot;django.contrib.postgres.fields.CIText mixin is deprecated.&quot;</span><span class="s2">,</span>
+            <span class="s1">RemovedInDjango51Warning</span><span class="s2">,</span>
+            <span class="s1">stacklevel</span><span class="s2">=</span><span class="s5">2</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_internal_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;CI&quot; </span><span class="s2">+ </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_internal_type</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">db_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;citext&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">CICharField</span><span class="s2">(</span><span class="s1">CIText</span><span class="s2">, </span><span class="s1">CharField</span><span class="s2">):</span>
+    <span class="s1">system_check_deprecated_details </span><span class="s2">= {</span>
+        <span class="s3">&quot;msg&quot;</span><span class="s2">: (</span>
+            <span class="s3">&quot;django.contrib.postgres.fields.CICharField is deprecated. Support for it &quot;</span>
+            <span class="s3">&quot;(except in historical migrations) will be removed in Django 5.1.&quot;</span>
+        <span class="s2">),</span>
+        <span class="s3">&quot;hint&quot;</span><span class="s2">: (</span>
+            <span class="s3">'Use CharField(db_collation=&quot;…&quot;) with a case-insensitive non-deterministic '</span>
+            <span class="s3">&quot;collation instead.&quot;</span>
+        <span class="s2">),</span>
+        <span class="s3">&quot;id&quot;</span><span class="s2">: </span><span class="s3">&quot;fields.W905&quot;</span><span class="s2">,</span>
+    <span class="s2">}</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">with </span><span class="s1">ignore_warnings</span><span class="s2">(</span><span class="s1">category</span><span class="s2">=</span><span class="s1">RemovedInDjango51Warning</span><span class="s2">):</span>
+            <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">CIEmailField</span><span class="s2">(</span><span class="s1">CIText</span><span class="s2">, </span><span class="s1">EmailField</span><span class="s2">):</span>
+    <span class="s1">system_check_deprecated_details </span><span class="s2">= {</span>
+        <span class="s3">&quot;msg&quot;</span><span class="s2">: (</span>
+            <span class="s3">&quot;django.contrib.postgres.fields.CIEmailField is deprecated. Support for it &quot;</span>
+            <span class="s3">&quot;(except in historical migrations) will be removed in Django 5.1.&quot;</span>
+        <span class="s2">),</span>
+        <span class="s3">&quot;hint&quot;</span><span class="s2">: (</span>
+            <span class="s3">'Use EmailField(db_collation=&quot;…&quot;) with a case-insensitive '</span>
+            <span class="s3">&quot;non-deterministic collation instead.&quot;</span>
+        <span class="s2">),</span>
+        <span class="s3">&quot;id&quot;</span><span class="s2">: </span><span class="s3">&quot;fields.W906&quot;</span><span class="s2">,</span>
+    <span class="s2">}</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">with </span><span class="s1">ignore_warnings</span><span class="s2">(</span><span class="s1">category</span><span class="s2">=</span><span class="s1">RemovedInDjango51Warning</span><span class="s2">):</span>
+            <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">CITextField</span><span class="s2">(</span><span class="s1">CIText</span><span class="s2">, </span><span class="s1">TextField</span><span class="s2">):</span>
+    <span class="s1">system_check_deprecated_details </span><span class="s2">= {</span>
+        <span class="s3">&quot;msg&quot;</span><span class="s2">: (</span>
+            <span class="s3">&quot;django.contrib.postgres.fields.CITextField is deprecated. Support for it &quot;</span>
+            <span class="s3">&quot;(except in historical migrations) will be removed in Django 5.1.&quot;</span>
+        <span class="s2">),</span>
+        <span class="s3">&quot;hint&quot;</span><span class="s2">: (</span>
+            <span class="s3">'Use TextField(db_collation=&quot;…&quot;) with a case-insensitive non-deterministic '</span>
+            <span class="s3">&quot;collation instead.&quot;</span>
+        <span class="s2">),</span>
+        <span class="s3">&quot;id&quot;</span><span class="s2">: </span><span class="s3">&quot;fields.W907&quot;</span><span class="s2">,</span>
+    <span class="s2">}</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">with </span><span class="s1">ignore_warnings</span><span class="s2">(</span><span class="s1">category</span><span class="s2">=</span><span class="s1">RemovedInDjango51Warning</span><span class="s2">):</span>
+            <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

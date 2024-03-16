@@ -1,0 +1,297 @@
+<html>
+<head>
+<title>config.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+config.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">inspect</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">from </span><span class="s1">importlib </span><span class="s0">import </span><span class="s1">import_module</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">module_loading </span><span class="s0">import </span><span class="s1">import_string</span><span class="s2">, </span><span class="s1">module_has_submodule</span>
+
+<span class="s1">APPS_MODULE_NAME </span><span class="s2">= </span><span class="s3">&quot;apps&quot;</span>
+<span class="s1">MODELS_MODULE_NAME </span><span class="s2">= </span><span class="s3">&quot;models&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">AppConfig</span><span class="s2">:</span>
+    <span class="s4">&quot;&quot;&quot;Class representing a Django application and its configuration.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_name</span><span class="s2">, </span><span class="s1">app_module</span><span class="s2">):</span>
+        <span class="s5"># Full Python path to the application e.g. 'django.contrib.admin'.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">app_name</span>
+
+        <span class="s5"># Root module for the application e.g. &lt;module 'django.contrib.admin'</span>
+        <span class="s5"># from 'django/contrib/admin/__init__.py'&gt;.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">module </span><span class="s2">= </span><span class="s1">app_module</span>
+
+        <span class="s5"># Reference to the Apps registry that holds this AppConfig. Set by the</span>
+        <span class="s5"># registry when it registers the AppConfig instance.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">apps </span><span class="s2">= </span><span class="s0">None</span>
+
+        <span class="s5"># The following attributes could be defined at the class level in a</span>
+        <span class="s5"># subclass, hence the test-and-set pattern.</span>
+
+        <span class="s5"># Last component of the Python path to the application e.g. 'admin'.</span>
+        <span class="s5"># This value must be unique across a Django project.</span>
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s3">&quot;label&quot;</span><span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">label </span><span class="s2">= </span><span class="s1">app_name</span><span class="s2">.</span><span class="s1">rpartition</span><span class="s2">(</span><span class="s3">&quot;.&quot;</span><span class="s2">)[</span><span class="s6">2</span><span class="s2">]</span>
+        <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">label</span><span class="s2">.</span><span class="s1">isidentifier</span><span class="s2">():</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                <span class="s3">&quot;The app label '%s' is not a valid Python identifier.&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">label</span>
+            <span class="s2">)</span>
+
+        <span class="s5"># Human-readable name for the application e.g. &quot;Admin&quot;.</span>
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s3">&quot;verbose_name&quot;</span><span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">verbose_name </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">label</span><span class="s2">.</span><span class="s1">title</span><span class="s2">()</span>
+
+        <span class="s5"># Filesystem path to the application directory e.g.</span>
+        <span class="s5"># '/path/to/django/contrib/admin'.</span>
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s3">&quot;path&quot;</span><span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">path </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_path_from_module</span><span class="s2">(</span><span class="s1">app_module</span><span class="s2">)</span>
+
+        <span class="s5"># Module containing models e.g. &lt;module 'django.contrib.admin.models'</span>
+        <span class="s5"># from 'django/contrib/admin/models.py'&gt;. Set by import_models().</span>
+        <span class="s5"># None if the application doesn't have a models module.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">models_module </span><span class="s2">= </span><span class="s0">None</span>
+
+        <span class="s5"># Mapping of lowercase model names to model classes. Initially set to</span>
+        <span class="s5"># None to prevent accidental access before import_models() runs.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">models </span><span class="s2">= </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;&lt;%s: %s&gt;&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">label</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">default_auto_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+
+        <span class="s0">return </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DEFAULT_AUTO_FIELD</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">_is_default_auto_field_overridden</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">default_auto_field </span><span class="s0">is not </span><span class="s1">AppConfig</span><span class="s2">.</span><span class="s1">default_auto_field</span>
+
+    <span class="s0">def </span><span class="s1">_path_from_module</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">module</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot;Attempt to determine app's filesystem path from its module.&quot;&quot;&quot;</span>
+        <span class="s5"># See #21874 for extended discussion of the behavior of this method in</span>
+        <span class="s5"># various cases.</span>
+        <span class="s5"># Convert to list because __path__ may not support indexing.</span>
+        <span class="s1">paths </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">module</span><span class="s2">, </span><span class="s3">&quot;__path__&quot;</span><span class="s2">, []))</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">paths</span><span class="s2">) != </span><span class="s6">1</span><span class="s2">:</span>
+            <span class="s1">filename </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">module</span><span class="s2">, </span><span class="s3">&quot;__file__&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">filename </span><span class="s0">is not None</span><span class="s2">:</span>
+                <span class="s1">paths </span><span class="s2">= [</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">dirname</span><span class="s2">(</span><span class="s1">filename</span><span class="s2">)]</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s5"># For unknown reasons, sometimes the list returned by __path__</span>
+                <span class="s5"># contains duplicates that must be removed (#25246).</span>
+                <span class="s1">paths </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">set</span><span class="s2">(</span><span class="s1">paths</span><span class="s2">))</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">paths</span><span class="s2">) &gt; </span><span class="s6">1</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                <span class="s3">&quot;The app module %r has multiple filesystem locations (%r); &quot;</span>
+                <span class="s3">&quot;you must configure this app with an AppConfig subclass &quot;</span>
+                <span class="s3">&quot;with a 'path' class attribute.&quot; </span><span class="s2">% (</span><span class="s1">module</span><span class="s2">, </span><span class="s1">paths</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">elif not </span><span class="s1">paths</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                <span class="s3">&quot;The app module %r has no filesystem location, &quot;</span>
+                <span class="s3">&quot;you must configure this app with an AppConfig subclass &quot;</span>
+                <span class="s3">&quot;with a 'path' class attribute.&quot; </span><span class="s2">% </span><span class="s1">module</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">paths</span><span class="s2">[</span><span class="s6">0</span><span class="s2">]</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">create</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">entry</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Factory that creates an app config from an entry in INSTALLED_APPS. 
+        &quot;&quot;&quot;</span>
+        <span class="s5"># create() eventually returns app_config_class(app_name, app_module).</span>
+        <span class="s1">app_config_class </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">app_name </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">app_module </span><span class="s2">= </span><span class="s0">None</span>
+
+        <span class="s5"># If import_module succeeds, entry points to the app module.</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">app_module </span><span class="s2">= </span><span class="s1">import_module</span><span class="s2">(</span><span class="s1">entry</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">Exception</span><span class="s2">:</span>
+            <span class="s0">pass</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s5"># If app_module has an apps submodule that defines a single</span>
+            <span class="s5"># AppConfig subclass, use it automatically.</span>
+            <span class="s5"># To prevent this, an AppConfig subclass can declare a class</span>
+            <span class="s5"># variable default = False.</span>
+            <span class="s5"># If the apps module defines more than one AppConfig subclass,</span>
+            <span class="s5"># the default one can declare default = True.</span>
+            <span class="s0">if </span><span class="s1">module_has_submodule</span><span class="s2">(</span><span class="s1">app_module</span><span class="s2">, </span><span class="s1">APPS_MODULE_NAME</span><span class="s2">):</span>
+                <span class="s1">mod_path </span><span class="s2">= </span><span class="s3">&quot;%s.%s&quot; </span><span class="s2">% (</span><span class="s1">entry</span><span class="s2">, </span><span class="s1">APPS_MODULE_NAME</span><span class="s2">)</span>
+                <span class="s1">mod </span><span class="s2">= </span><span class="s1">import_module</span><span class="s2">(</span><span class="s1">mod_path</span><span class="s2">)</span>
+                <span class="s5"># Check if there's exactly one AppConfig candidate,</span>
+                <span class="s5"># excluding those that explicitly define default = False.</span>
+                <span class="s1">app_configs </span><span class="s2">= [</span>
+                    <span class="s2">(</span><span class="s1">name</span><span class="s2">, </span><span class="s1">candidate</span><span class="s2">)</span>
+                    <span class="s0">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">candidate </span><span class="s0">in </span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">getmembers</span><span class="s2">(</span><span class="s1">mod</span><span class="s2">, </span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">isclass</span><span class="s2">)</span>
+                    <span class="s0">if </span><span class="s2">(</span>
+                        <span class="s1">issubclass</span><span class="s2">(</span><span class="s1">candidate</span><span class="s2">, </span><span class="s1">cls</span><span class="s2">)</span>
+                        <span class="s0">and </span><span class="s1">candidate </span><span class="s0">is not </span><span class="s1">cls</span>
+                        <span class="s0">and </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">candidate</span><span class="s2">, </span><span class="s3">&quot;default&quot;</span><span class="s2">, </span><span class="s0">True</span><span class="s2">)</span>
+                    <span class="s2">)</span>
+                <span class="s2">]</span>
+                <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">) == </span><span class="s6">1</span><span class="s2">:</span>
+                    <span class="s1">app_config_class </span><span class="s2">= </span><span class="s1">app_configs</span><span class="s2">[</span><span class="s6">0</span><span class="s2">][</span><span class="s6">1</span><span class="s2">]</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s5"># Check if there's exactly one AppConfig subclass,</span>
+                    <span class="s5"># among those that explicitly define default = True.</span>
+                    <span class="s1">app_configs </span><span class="s2">= [</span>
+                        <span class="s2">(</span><span class="s1">name</span><span class="s2">, </span><span class="s1">candidate</span><span class="s2">)</span>
+                        <span class="s0">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">candidate </span><span class="s0">in </span><span class="s1">app_configs</span>
+                        <span class="s0">if </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">candidate</span><span class="s2">, </span><span class="s3">&quot;default&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">)</span>
+                    <span class="s2">]</span>
+                    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">) &gt; </span><span class="s6">1</span><span class="s2">:</span>
+                        <span class="s1">candidates </span><span class="s2">= [</span><span class="s1">repr</span><span class="s2">(</span><span class="s1">name</span><span class="s2">) </span><span class="s0">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">_ </span><span class="s0">in </span><span class="s1">app_configs</span><span class="s2">]</span>
+                        <span class="s0">raise </span><span class="s1">RuntimeError</span><span class="s2">(</span>
+                            <span class="s3">&quot;%r declares more than one default AppConfig: &quot;</span>
+                            <span class="s3">&quot;%s.&quot; </span><span class="s2">% (</span><span class="s1">mod_path</span><span class="s2">, </span><span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">candidates</span><span class="s2">))</span>
+                        <span class="s2">)</span>
+                    <span class="s0">elif </span><span class="s1">len</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">) == </span><span class="s6">1</span><span class="s2">:</span>
+                        <span class="s1">app_config_class </span><span class="s2">= </span><span class="s1">app_configs</span><span class="s2">[</span><span class="s6">0</span><span class="s2">][</span><span class="s6">1</span><span class="s2">]</span>
+
+            <span class="s5"># Use the default app config class if we didn't find anything.</span>
+            <span class="s0">if </span><span class="s1">app_config_class </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s1">app_config_class </span><span class="s2">= </span><span class="s1">cls</span>
+                <span class="s1">app_name </span><span class="s2">= </span><span class="s1">entry</span>
+
+        <span class="s5"># If import_string succeeds, entry is an app config class.</span>
+        <span class="s0">if </span><span class="s1">app_config_class </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">app_config_class </span><span class="s2">= </span><span class="s1">import_string</span><span class="s2">(</span><span class="s1">entry</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">Exception</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+        <span class="s5"># If both import_module and import_string failed, it means that entry</span>
+        <span class="s5"># doesn't have a valid value.</span>
+        <span class="s0">if </span><span class="s1">app_module </span><span class="s0">is None and </span><span class="s1">app_config_class </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s5"># If the last component of entry starts with an uppercase letter,</span>
+            <span class="s5"># then it was likely intended to be an app config class; if not,</span>
+            <span class="s5"># an app module. Provide a nice error message in both cases.</span>
+            <span class="s1">mod_path</span><span class="s2">, </span><span class="s1">_</span><span class="s2">, </span><span class="s1">cls_name </span><span class="s2">= </span><span class="s1">entry</span><span class="s2">.</span><span class="s1">rpartition</span><span class="s2">(</span><span class="s3">&quot;.&quot;</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">mod_path </span><span class="s0">and </span><span class="s1">cls_name</span><span class="s2">[</span><span class="s6">0</span><span class="s2">].</span><span class="s1">isupper</span><span class="s2">():</span>
+                <span class="s5"># We could simply re-trigger the string import exception, but</span>
+                <span class="s5"># we're going the extra mile and providing a better error</span>
+                <span class="s5"># message for typos in INSTALLED_APPS.</span>
+                <span class="s5"># This may raise ImportError, which is the best exception</span>
+                <span class="s5"># possible if the module at mod_path cannot be imported.</span>
+                <span class="s1">mod </span><span class="s2">= </span><span class="s1">import_module</span><span class="s2">(</span><span class="s1">mod_path</span><span class="s2">)</span>
+                <span class="s1">candidates </span><span class="s2">= [</span>
+                    <span class="s1">repr</span><span class="s2">(</span><span class="s1">name</span><span class="s2">)</span>
+                    <span class="s0">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">candidate </span><span class="s0">in </span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">getmembers</span><span class="s2">(</span><span class="s1">mod</span><span class="s2">, </span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">isclass</span><span class="s2">)</span>
+                    <span class="s0">if </span><span class="s1">issubclass</span><span class="s2">(</span><span class="s1">candidate</span><span class="s2">, </span><span class="s1">cls</span><span class="s2">) </span><span class="s0">and </span><span class="s1">candidate </span><span class="s0">is not </span><span class="s1">cls</span>
+                <span class="s2">]</span>
+                <span class="s1">msg </span><span class="s2">= </span><span class="s3">&quot;Module '%s' does not contain a '%s' class.&quot; </span><span class="s2">% (</span>
+                    <span class="s1">mod_path</span><span class="s2">,</span>
+                    <span class="s1">cls_name</span><span class="s2">,</span>
+                <span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">candidates</span><span class="s2">:</span>
+                    <span class="s1">msg </span><span class="s2">+= </span><span class="s3">&quot; Choices are: %s.&quot; </span><span class="s2">% </span><span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">candidates</span><span class="s2">)</span>
+                <span class="s0">raise </span><span class="s1">ImportError</span><span class="s2">(</span><span class="s1">msg</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s5"># Re-trigger the module import exception.</span>
+                <span class="s1">import_module</span><span class="s2">(</span><span class="s1">entry</span><span class="s2">)</span>
+
+        <span class="s5"># Check for obvious errors. (This check prevents duck typing, but</span>
+        <span class="s5"># it could be removed if it became a problem in practice.)</span>
+        <span class="s0">if not </span><span class="s1">issubclass</span><span class="s2">(</span><span class="s1">app_config_class</span><span class="s2">, </span><span class="s1">AppConfig</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span><span class="s3">&quot;'%s' isn't a subclass of AppConfig.&quot; </span><span class="s2">% </span><span class="s1">entry</span><span class="s2">)</span>
+
+        <span class="s5"># Obtain app name here rather than in AppClass.__init__ to keep</span>
+        <span class="s5"># all error checking for entries in INSTALLED_APPS in one place.</span>
+        <span class="s0">if </span><span class="s1">app_name </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">app_name </span><span class="s2">= </span><span class="s1">app_config_class</span><span class="s2">.</span><span class="s1">name</span>
+            <span class="s0">except </span><span class="s1">AttributeError</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span><span class="s3">&quot;'%s' must supply a name attribute.&quot; </span><span class="s2">% </span><span class="s1">entry</span><span class="s2">)</span>
+
+        <span class="s5"># Ensure app_name points to a valid module.</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">app_module </span><span class="s2">= </span><span class="s1">import_module</span><span class="s2">(</span><span class="s1">app_name</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">ImportError</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                <span class="s3">&quot;Cannot import '%s'. Check that '%s.%s.name' is correct.&quot;</span>
+                <span class="s2">% (</span>
+                    <span class="s1">app_name</span><span class="s2">,</span>
+                    <span class="s1">app_config_class</span><span class="s2">.</span><span class="s1">__module__</span><span class="s2">,</span>
+                    <span class="s1">app_config_class</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+
+        <span class="s5"># Entry is a path to an app config class.</span>
+        <span class="s0">return </span><span class="s1">app_config_class</span><span class="s2">(</span><span class="s1">app_name</span><span class="s2">, </span><span class="s1">app_module</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">require_ready</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Return the model with the given case-insensitive model_name. 
+ 
+        Raise LookupError if no model exists with this name. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">require_ready</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">check_models_ready</span><span class="s2">()</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">check_apps_ready</span><span class="s2">()</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">model_name</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">()]</span>
+        <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">LookupError</span><span class="s2">(</span>
+                <span class="s3">&quot;App '%s' doesn't have a '%s' model.&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">)</span>
+            <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_models</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">include_auto_created</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">include_swapped</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Return an iterable of models. 
+ 
+        By default, the following models aren't included: 
+ 
+        - auto-created models for many-to-many relations without 
+          an explicit intermediate table, 
+        - models that have been swapped out. 
+ 
+        Set the corresponding keyword argument to True to include such models. 
+        Keyword arguments aren't documented; they're a private API. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">check_models_ready</span><span class="s2">()</span>
+        <span class="s0">for </span><span class="s1">model </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">values</span><span class="s2">():</span>
+            <span class="s0">if </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">auto_created </span><span class="s0">and not </span><span class="s1">include_auto_created</span><span class="s2">:</span>
+                <span class="s0">continue</span>
+            <span class="s0">if </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">swapped </span><span class="s0">and not </span><span class="s1">include_swapped</span><span class="s2">:</span>
+                <span class="s0">continue</span>
+            <span class="s0">yield </span><span class="s1">model</span>
+
+    <span class="s0">def </span><span class="s1">import_models</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s5"># Dictionary of models for this app, primarily maintained in the</span>
+        <span class="s5"># 'all_models' attribute of the Apps this AppConfig is attached to.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">models </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">all_models</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">label</span><span class="s2">]</span>
+
+        <span class="s0">if </span><span class="s1">module_has_submodule</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">module</span><span class="s2">, </span><span class="s1">MODELS_MODULE_NAME</span><span class="s2">):</span>
+            <span class="s1">models_module_name </span><span class="s2">= </span><span class="s3">&quot;%s.%s&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">, </span><span class="s1">MODELS_MODULE_NAME</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">models_module </span><span class="s2">= </span><span class="s1">import_module</span><span class="s2">(</span><span class="s1">models_module_name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">ready</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Override this method in subclasses to run code when Django starts. 
+        &quot;&quot;&quot;</span>
+</pre>
+</body>
+</html>

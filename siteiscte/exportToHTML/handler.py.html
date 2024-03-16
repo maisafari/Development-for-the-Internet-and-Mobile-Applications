@@ -1,0 +1,76 @@
+<html>
+<head>
+<title>handler.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+handler.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">DEFAULT_STORAGE_ALIAS</span><span class="s2">, </span><span class="s1">STATICFILES_STORAGE_ALIAS</span><span class="s2">, </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">module_loading </span><span class="s0">import </span><span class="s1">import_string</span>
+
+
+<span class="s0">class </span><span class="s1">InvalidStorageError</span><span class="s2">(</span><span class="s1">ImproperlyConfigured</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">StorageHandler</span><span class="s2">:</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">backends</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3"># backends is an optional dict of storage backend definitions</span>
+        <span class="s3"># (structured like settings.STORAGES).</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_backends </span><span class="s2">= </span><span class="s1">backends</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_storages </span><span class="s2">= {}</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">backends</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_backends </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_backends </span><span class="s2">= </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">STORAGES</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+            <span class="s3"># RemovedInDjango51Warning.</span>
+            <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">is_overridden</span><span class="s2">(</span><span class="s4">&quot;DEFAULT_FILE_STORAGE&quot;</span><span class="s2">):</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">_backends</span><span class="s2">[</span><span class="s1">DEFAULT_STORAGE_ALIAS</span><span class="s2">] = {</span>
+                    <span class="s4">&quot;BACKEND&quot;</span><span class="s2">: </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DEFAULT_FILE_STORAGE</span>
+                <span class="s2">}</span>
+            <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">is_overridden</span><span class="s2">(</span><span class="s4">&quot;STATICFILES_STORAGE&quot;</span><span class="s2">):</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">_backends</span><span class="s2">[</span><span class="s1">STATICFILES_STORAGE_ALIAS</span><span class="s2">] = {</span>
+                    <span class="s4">&quot;BACKEND&quot;</span><span class="s2">: </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">STATICFILES_STORAGE</span>
+                <span class="s2">}</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_backends</span>
+
+    <span class="s0">def </span><span class="s1">__getitem__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">alias</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_storages</span><span class="s2">[</span><span class="s1">alias</span><span class="s2">]</span>
+        <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">params </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">[</span><span class="s1">alias</span><span class="s2">]</span>
+            <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">InvalidStorageError</span><span class="s2">(</span>
+                    <span class="s4">f&quot;Could not find config for '</span><span class="s0">{</span><span class="s1">alias</span><span class="s0">}</span><span class="s4">' in settings.STORAGES.&quot;</span>
+                <span class="s2">)</span>
+            <span class="s1">storage </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">create_storage</span><span class="s2">(</span><span class="s1">params</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_storages</span><span class="s2">[</span><span class="s1">alias</span><span class="s2">] = </span><span class="s1">storage</span>
+            <span class="s0">return </span><span class="s1">storage</span>
+
+    <span class="s0">def </span><span class="s1">create_storage</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">params</span><span class="s2">):</span>
+        <span class="s1">params </span><span class="s2">= </span><span class="s1">params</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s1">backend </span><span class="s2">= </span><span class="s1">params</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s4">&quot;BACKEND&quot;</span><span class="s2">)</span>
+        <span class="s1">options </span><span class="s2">= </span><span class="s1">params</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s4">&quot;OPTIONS&quot;</span><span class="s2">, {})</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">storage_cls </span><span class="s2">= </span><span class="s1">import_string</span><span class="s2">(</span><span class="s1">backend</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">ImportError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">InvalidStorageError</span><span class="s2">(</span><span class="s4">f&quot;Could not find backend </span><span class="s0">{</span><span class="s1">backend</span><span class="s0">!r}</span><span class="s4">: </span><span class="s0">{</span><span class="s1">e</span><span class="s0">}</span><span class="s4">&quot;</span><span class="s2">) </span><span class="s0">from </span><span class="s1">e</span>
+        <span class="s0">return </span><span class="s1">storage_cls</span><span class="s2">(**</span><span class="s1">options</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

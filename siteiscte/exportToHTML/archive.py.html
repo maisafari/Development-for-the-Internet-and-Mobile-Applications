@@ -1,0 +1,281 @@
+<html>
+<head>
+<title>archive.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+archive.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Based on &quot;python-archive&quot; -- https://pypi.org/project/python-archive/ 
+ 
+Copyright (c) 2010 Gary Wilson Jr. &lt;gary.wilson@gmail.com&gt; and contributors. 
+ 
+Permission is hereby granted, free of charge, to any person obtaining a copy 
+of this software and associated documentation files (the &quot;Software&quot;), to deal 
+in the Software without restriction, including without limitation the rights 
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
+copies of the Software, and to permit persons to whom the Software is 
+furnished to do so, subject to the following conditions: 
+ 
+The above copyright notice and this permission notice shall be included in 
+all copies or substantial portions of the Software. 
+ 
+THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN 
+THE SOFTWARE. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">import </span><span class="s1">shutil</span>
+<span class="s2">import </span><span class="s1">stat</span>
+<span class="s2">import </span><span class="s1">tarfile</span>
+<span class="s2">import </span><span class="s1">zipfile</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">exceptions </span><span class="s2">import </span><span class="s1">SuspiciousOperation</span>
+
+
+<span class="s2">class </span><span class="s1">ArchiveException</span><span class="s3">(</span><span class="s1">Exception</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Base exception class for all archive errors. 
+    &quot;&quot;&quot;</span>
+
+
+<span class="s2">class </span><span class="s1">UnrecognizedArchiveFormat</span><span class="s3">(</span><span class="s1">ArchiveException</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Error raised when passed file is not a recognized archive format. 
+    &quot;&quot;&quot;</span>
+
+
+<span class="s2">def </span><span class="s1">extract</span><span class="s3">(</span><span class="s1">path</span><span class="s3">, </span><span class="s1">to_path</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Unpack the tar or zip file at the specified path to the directory 
+    specified by to_path. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">with </span><span class="s1">Archive</span><span class="s3">(</span><span class="s1">path</span><span class="s3">) </span><span class="s2">as </span><span class="s1">archive</span><span class="s3">:</span>
+        <span class="s1">archive</span><span class="s3">.</span><span class="s1">extract</span><span class="s3">(</span><span class="s1">to_path</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">Archive</span><span class="s3">:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    The external API class that encapsulates an archive implementation. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">file</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_archive </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_archive_cls</span><span class="s3">(</span><span class="s1">file</span><span class="s3">)(</span><span class="s1">file</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">staticmethod</span>
+    <span class="s2">def </span><span class="s1">_archive_cls</span><span class="s3">(</span><span class="s1">file</span><span class="s3">):</span>
+        <span class="s1">cls </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">file</span><span class="s3">, </span><span class="s1">str</span><span class="s3">):</span>
+            <span class="s1">filename </span><span class="s3">= </span><span class="s1">file</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s1">filename </span><span class="s3">= </span><span class="s1">file</span><span class="s3">.</span><span class="s1">name</span>
+            <span class="s2">except </span><span class="s1">AttributeError</span><span class="s3">:</span>
+                <span class="s2">raise </span><span class="s1">UnrecognizedArchiveFormat</span><span class="s3">(</span>
+                    <span class="s4">&quot;File object not a recognized archive format.&quot;</span>
+                <span class="s3">)</span>
+        <span class="s1">base</span><span class="s3">, </span><span class="s1">tail_ext </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">splitext</span><span class="s3">(</span><span class="s1">filename</span><span class="s3">.</span><span class="s1">lower</span><span class="s3">())</span>
+        <span class="s1">cls </span><span class="s3">= </span><span class="s1">extension_map</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">tail_ext</span><span class="s3">)</span>
+        <span class="s2">if not </span><span class="s1">cls</span><span class="s3">:</span>
+            <span class="s1">base</span><span class="s3">, </span><span class="s1">ext </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">splitext</span><span class="s3">(</span><span class="s1">base</span><span class="s3">)</span>
+            <span class="s1">cls </span><span class="s3">= </span><span class="s1">extension_map</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">ext</span><span class="s3">)</span>
+        <span class="s2">if not </span><span class="s1">cls</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">UnrecognizedArchiveFormat</span><span class="s3">(</span>
+                <span class="s4">&quot;Path not a recognized archive format: %s&quot; </span><span class="s3">% </span><span class="s1">filename</span>
+            <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">cls</span>
+
+    <span class="s2">def </span><span class="s1">__enter__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+    <span class="s2">def </span><span class="s1">__exit__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">exc_type</span><span class="s3">, </span><span class="s1">exc_value</span><span class="s3">, </span><span class="s1">traceback</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">close</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">extract</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">to_path</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_archive</span><span class="s3">.</span><span class="s1">extract</span><span class="s3">(</span><span class="s1">to_path</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">list</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_archive</span><span class="s3">.</span><span class="s1">list</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">close</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_archive</span><span class="s3">.</span><span class="s1">close</span><span class="s3">()</span>
+
+
+<span class="s2">class </span><span class="s1">BaseArchive</span><span class="s3">:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Base Archive class.  Implementations should inherit this class. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s3">@</span><span class="s1">staticmethod</span>
+    <span class="s2">def </span><span class="s1">_copy_permissions</span><span class="s3">(</span><span class="s1">mode</span><span class="s3">, </span><span class="s1">filename</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        If the file in the archive has some permissions (this assumes a file 
+        won't be writable/executable without being readable), apply those 
+        permissions to the unarchived file. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">mode </span><span class="s3">&amp; </span><span class="s1">stat</span><span class="s3">.</span><span class="s1">S_IROTH</span><span class="s3">:</span>
+            <span class="s1">os</span><span class="s3">.</span><span class="s1">chmod</span><span class="s3">(</span><span class="s1">filename</span><span class="s3">, </span><span class="s1">mode</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">split_leading_dir</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">path</span><span class="s3">):</span>
+        <span class="s1">path </span><span class="s3">= </span><span class="s1">str</span><span class="s3">(</span><span class="s1">path</span><span class="s3">)</span>
+        <span class="s1">path </span><span class="s3">= </span><span class="s1">path</span><span class="s3">.</span><span class="s1">lstrip</span><span class="s3">(</span><span class="s4">&quot;/&quot;</span><span class="s3">).</span><span class="s1">lstrip</span><span class="s3">(</span><span class="s4">&quot;</span><span class="s2">\\</span><span class="s4">&quot;</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s4">&quot;/&quot; </span><span class="s2">in </span><span class="s1">path </span><span class="s2">and </span><span class="s3">(</span>
+            <span class="s3">(</span><span class="s4">&quot;</span><span class="s2">\\</span><span class="s4">&quot; </span><span class="s2">in </span><span class="s1">path </span><span class="s2">and </span><span class="s1">path</span><span class="s3">.</span><span class="s1">find</span><span class="s3">(</span><span class="s4">&quot;/&quot;</span><span class="s3">) &lt; </span><span class="s1">path</span><span class="s3">.</span><span class="s1">find</span><span class="s3">(</span><span class="s4">&quot;</span><span class="s2">\\</span><span class="s4">&quot;</span><span class="s3">)) </span><span class="s2">or </span><span class="s4">&quot;</span><span class="s2">\\</span><span class="s4">&quot; </span><span class="s2">not in </span><span class="s1">path</span>
+        <span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">path</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s4">&quot;/&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">)</span>
+        <span class="s2">elif </span><span class="s4">&quot;</span><span class="s2">\\</span><span class="s4">&quot; </span><span class="s2">in </span><span class="s1">path</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">path</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s4">&quot;</span><span class="s2">\\</span><span class="s4">&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">path</span><span class="s3">, </span><span class="s4">&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">has_leading_dir</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">paths</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return True if all the paths have the same leading path name 
+        (i.e., everything is in one subdirectory in an archive). 
+        &quot;&quot;&quot;</span>
+        <span class="s1">common_prefix </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s2">for </span><span class="s1">path </span><span class="s2">in </span><span class="s1">paths</span><span class="s3">:</span>
+            <span class="s1">prefix</span><span class="s3">, </span><span class="s1">rest </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">split_leading_dir</span><span class="s3">(</span><span class="s1">path</span><span class="s3">)</span>
+            <span class="s2">if not </span><span class="s1">prefix</span><span class="s3">:</span>
+                <span class="s2">return False</span>
+            <span class="s2">elif </span><span class="s1">common_prefix </span><span class="s2">is None</span><span class="s3">:</span>
+                <span class="s1">common_prefix </span><span class="s3">= </span><span class="s1">prefix</span>
+            <span class="s2">elif </span><span class="s1">prefix </span><span class="s3">!= </span><span class="s1">common_prefix</span><span class="s3">:</span>
+                <span class="s2">return False</span>
+        <span class="s2">return True</span>
+
+    <span class="s2">def </span><span class="s1">target_filename</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">to_path</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+        <span class="s1">target_path </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">abspath</span><span class="s3">(</span><span class="s1">to_path</span><span class="s3">)</span>
+        <span class="s1">filename </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">abspath</span><span class="s3">(</span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">target_path</span><span class="s3">, </span><span class="s1">name</span><span class="s3">))</span>
+        <span class="s2">if not </span><span class="s1">filename</span><span class="s3">.</span><span class="s1">startswith</span><span class="s3">(</span><span class="s1">target_path</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">SuspiciousOperation</span><span class="s3">(</span><span class="s4">&quot;Archive contains invalid path: '%s'&quot; </span><span class="s3">% </span><span class="s1">name</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">filename</span>
+
+    <span class="s2">def </span><span class="s1">extract</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError</span><span class="s3">(</span>
+            <span class="s4">&quot;subclasses of BaseArchive must provide an extract() method&quot;</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">list</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError</span><span class="s3">(</span>
+            <span class="s4">&quot;subclasses of BaseArchive must provide a list() method&quot;</span>
+        <span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">TarArchive</span><span class="s3">(</span><span class="s1">BaseArchive</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">file</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_archive </span><span class="s3">= </span><span class="s1">tarfile</span><span class="s3">.</span><span class="s1">open</span><span class="s3">(</span><span class="s1">file</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">list</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_archive</span><span class="s3">.</span><span class="s1">list</span><span class="s3">(*</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">extract</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">to_path</span><span class="s3">):</span>
+        <span class="s1">members </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_archive</span><span class="s3">.</span><span class="s1">getmembers</span><span class="s3">()</span>
+        <span class="s1">leading </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">has_leading_dir</span><span class="s3">(</span><span class="s1">x</span><span class="s3">.</span><span class="s1">name </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">members</span><span class="s3">)</span>
+        <span class="s2">for </span><span class="s1">member </span><span class="s2">in </span><span class="s1">members</span><span class="s3">:</span>
+            <span class="s1">name </span><span class="s3">= </span><span class="s1">member</span><span class="s3">.</span><span class="s1">name</span>
+            <span class="s2">if </span><span class="s1">leading</span><span class="s3">:</span>
+                <span class="s1">name </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">split_leading_dir</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)[</span><span class="s5">1</span><span class="s3">]</span>
+            <span class="s1">filename </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">target_filename</span><span class="s3">(</span><span class="s1">to_path</span><span class="s3">, </span><span class="s1">name</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">member</span><span class="s3">.</span><span class="s1">isdir</span><span class="s3">():</span>
+                <span class="s2">if </span><span class="s1">filename</span><span class="s3">:</span>
+                    <span class="s1">os</span><span class="s3">.</span><span class="s1">makedirs</span><span class="s3">(</span><span class="s1">filename</span><span class="s3">, </span><span class="s1">exist_ok</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s2">try</span><span class="s3">:</span>
+                    <span class="s1">extracted </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_archive</span><span class="s3">.</span><span class="s1">extractfile</span><span class="s3">(</span><span class="s1">member</span><span class="s3">)</span>
+                <span class="s2">except </span><span class="s3">(</span><span class="s1">KeyError</span><span class="s3">, </span><span class="s1">AttributeError</span><span class="s3">) </span><span class="s2">as </span><span class="s1">exc</span><span class="s3">:</span>
+                    <span class="s6"># Some corrupt tar files seem to produce this</span>
+                    <span class="s6"># (specifically bad symlinks)</span>
+                    <span class="s1">print</span><span class="s3">(</span>
+                        <span class="s4">&quot;In the tar file %s the member %s is invalid: %s&quot;</span>
+                        <span class="s3">% (</span><span class="s1">name</span><span class="s3">, </span><span class="s1">member</span><span class="s3">.</span><span class="s1">name</span><span class="s3">, </span><span class="s1">exc</span><span class="s3">)</span>
+                    <span class="s3">)</span>
+                <span class="s2">else</span><span class="s3">:</span>
+                    <span class="s1">dirname </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">dirname</span><span class="s3">(</span><span class="s1">filename</span><span class="s3">)</span>
+                    <span class="s2">if </span><span class="s1">dirname</span><span class="s3">:</span>
+                        <span class="s1">os</span><span class="s3">.</span><span class="s1">makedirs</span><span class="s3">(</span><span class="s1">dirname</span><span class="s3">, </span><span class="s1">exist_ok</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+                    <span class="s2">with </span><span class="s1">open</span><span class="s3">(</span><span class="s1">filename</span><span class="s3">, </span><span class="s4">&quot;wb&quot;</span><span class="s3">) </span><span class="s2">as </span><span class="s1">outfile</span><span class="s3">:</span>
+                        <span class="s1">shutil</span><span class="s3">.</span><span class="s1">copyfileobj</span><span class="s3">(</span><span class="s1">extracted</span><span class="s3">, </span><span class="s1">outfile</span><span class="s3">)</span>
+                        <span class="s1">self</span><span class="s3">.</span><span class="s1">_copy_permissions</span><span class="s3">(</span><span class="s1">member</span><span class="s3">.</span><span class="s1">mode</span><span class="s3">, </span><span class="s1">filename</span><span class="s3">)</span>
+                <span class="s2">finally</span><span class="s3">:</span>
+                    <span class="s2">if </span><span class="s1">extracted</span><span class="s3">:</span>
+                        <span class="s1">extracted</span><span class="s3">.</span><span class="s1">close</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">close</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_archive</span><span class="s3">.</span><span class="s1">close</span><span class="s3">()</span>
+
+
+<span class="s2">class </span><span class="s1">ZipArchive</span><span class="s3">(</span><span class="s1">BaseArchive</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">file</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_archive </span><span class="s3">= </span><span class="s1">zipfile</span><span class="s3">.</span><span class="s1">ZipFile</span><span class="s3">(</span><span class="s1">file</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">list</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_archive</span><span class="s3">.</span><span class="s1">printdir</span><span class="s3">(*</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">extract</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">to_path</span><span class="s3">):</span>
+        <span class="s1">namelist </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_archive</span><span class="s3">.</span><span class="s1">namelist</span><span class="s3">()</span>
+        <span class="s1">leading </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">has_leading_dir</span><span class="s3">(</span><span class="s1">namelist</span><span class="s3">)</span>
+        <span class="s2">for </span><span class="s1">name </span><span class="s2">in </span><span class="s1">namelist</span><span class="s3">:</span>
+            <span class="s1">data </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_archive</span><span class="s3">.</span><span class="s1">read</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+            <span class="s1">info </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_archive</span><span class="s3">.</span><span class="s1">getinfo</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">leading</span><span class="s3">:</span>
+                <span class="s1">name </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">split_leading_dir</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)[</span><span class="s5">1</span><span class="s3">]</span>
+            <span class="s2">if not </span><span class="s1">name</span><span class="s3">:</span>
+                <span class="s2">continue</span>
+            <span class="s1">filename </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">target_filename</span><span class="s3">(</span><span class="s1">to_path</span><span class="s3">, </span><span class="s1">name</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">name</span><span class="s3">.</span><span class="s1">endswith</span><span class="s3">((</span><span class="s4">&quot;/&quot;</span><span class="s3">, </span><span class="s4">&quot;</span><span class="s2">\\</span><span class="s4">&quot;</span><span class="s3">)):</span>
+                <span class="s6"># A directory</span>
+                <span class="s1">os</span><span class="s3">.</span><span class="s1">makedirs</span><span class="s3">(</span><span class="s1">filename</span><span class="s3">, </span><span class="s1">exist_ok</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s1">dirname </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">dirname</span><span class="s3">(</span><span class="s1">filename</span><span class="s3">)</span>
+                <span class="s2">if </span><span class="s1">dirname</span><span class="s3">:</span>
+                    <span class="s1">os</span><span class="s3">.</span><span class="s1">makedirs</span><span class="s3">(</span><span class="s1">dirname</span><span class="s3">, </span><span class="s1">exist_ok</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+                <span class="s2">with </span><span class="s1">open</span><span class="s3">(</span><span class="s1">filename</span><span class="s3">, </span><span class="s4">&quot;wb&quot;</span><span class="s3">) </span><span class="s2">as </span><span class="s1">outfile</span><span class="s3">:</span>
+                    <span class="s1">outfile</span><span class="s3">.</span><span class="s1">write</span><span class="s3">(</span><span class="s1">data</span><span class="s3">)</span>
+                <span class="s6"># Convert ZipInfo.external_attr to mode</span>
+                <span class="s1">mode </span><span class="s3">= </span><span class="s1">info</span><span class="s3">.</span><span class="s1">external_attr </span><span class="s3">&gt;&gt; </span><span class="s5">16</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">_copy_permissions</span><span class="s3">(</span><span class="s1">mode</span><span class="s3">, </span><span class="s1">filename</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">close</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_archive</span><span class="s3">.</span><span class="s1">close</span><span class="s3">()</span>
+
+
+<span class="s1">extension_map </span><span class="s3">= </span><span class="s1">dict</span><span class="s3">.</span><span class="s1">fromkeys</span><span class="s3">(</span>
+    <span class="s3">(</span>
+        <span class="s4">&quot;.tar&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;.tar.bz2&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;.tbz2&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;.tbz&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;.tz2&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;.tar.gz&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;.tgz&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;.taz&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;.tar.lzma&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;.tlz&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;.tar.xz&quot;</span><span class="s3">,</span>
+        <span class="s4">&quot;.txz&quot;</span><span class="s3">,</span>
+    <span class="s3">),</span>
+    <span class="s1">TarArchive</span><span class="s3">,</span>
+<span class="s3">)</span>
+<span class="s1">extension_map</span><span class="s3">[</span><span class="s4">&quot;.zip&quot;</span><span class="s3">] = </span><span class="s1">ZipArchive</span>
+</pre>
+</body>
+</html>

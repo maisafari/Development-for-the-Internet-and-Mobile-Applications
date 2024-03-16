@@ -1,0 +1,55 @@
+<html>
+<head>
+<title>factory.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+factory.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos</span><span class="s2">.</span><span class="s1">geometry </span><span class="s0">import </span><span class="s1">GEOSGeometry</span><span class="s2">, </span><span class="s1">hex_regex</span><span class="s2">, </span><span class="s1">wkt_regex</span>
+
+
+<span class="s0">def </span><span class="s1">fromfile</span><span class="s2">(</span><span class="s1">file_h</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Given a string file name, returns a GEOSGeometry. The file may contain WKB, 
+    WKT, or HEX. 
+    &quot;&quot;&quot;</span>
+    <span class="s4"># If given a file name, get a real handle.</span>
+    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">file_h</span><span class="s2">, </span><span class="s1">str</span><span class="s2">):</span>
+        <span class="s0">with </span><span class="s1">open</span><span class="s2">(</span><span class="s1">file_h</span><span class="s2">, </span><span class="s5">&quot;rb&quot;</span><span class="s2">) </span><span class="s0">as </span><span class="s1">file_h</span><span class="s2">:</span>
+            <span class="s1">buf </span><span class="s2">= </span><span class="s1">file_h</span><span class="s2">.</span><span class="s1">read</span><span class="s2">()</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">buf </span><span class="s2">= </span><span class="s1">file_h</span><span class="s2">.</span><span class="s1">read</span><span class="s2">()</span>
+
+    <span class="s4"># If we get WKB need to wrap in memoryview(), so run through regexes.</span>
+    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">buf</span><span class="s2">, </span><span class="s1">bytes</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">decoded </span><span class="s2">= </span><span class="s1">buf</span><span class="s2">.</span><span class="s1">decode</span><span class="s2">()</span>
+        <span class="s0">except </span><span class="s1">UnicodeDecodeError</span><span class="s2">:</span>
+            <span class="s0">pass</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">wkt_regex</span><span class="s2">.</span><span class="s1">match</span><span class="s2">(</span><span class="s1">decoded</span><span class="s2">) </span><span class="s0">or </span><span class="s1">hex_regex</span><span class="s2">.</span><span class="s1">match</span><span class="s2">(</span><span class="s1">decoded</span><span class="s2">):</span>
+                <span class="s0">return </span><span class="s1">GEOSGeometry</span><span class="s2">(</span><span class="s1">decoded</span><span class="s2">)</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">GEOSGeometry</span><span class="s2">(</span><span class="s1">buf</span><span class="s2">)</span>
+
+    <span class="s0">return </span><span class="s1">GEOSGeometry</span><span class="s2">(</span><span class="s1">memoryview</span><span class="s2">(</span><span class="s1">buf</span><span class="s2">))</span>
+
+
+<span class="s0">def </span><span class="s1">fromstr</span><span class="s2">(</span><span class="s1">string</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s3">&quot;Given a string value, return a GEOSGeometry object.&quot;</span>
+    <span class="s0">return </span><span class="s1">GEOSGeometry</span><span class="s2">(</span><span class="s1">string</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

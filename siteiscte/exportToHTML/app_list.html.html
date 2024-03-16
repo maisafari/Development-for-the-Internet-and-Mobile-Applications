@@ -1,0 +1,60 @@
+<html>
+<head>
+<title>app_list.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #bcbec4;}
+.s1 { color: #d5b778;}
+.s2 { color: #bababa;}
+.s3 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+app_list.html</font>
+</center></td></tr></table>
+<pre><span class="s0">{% load i18n %}</span>
+
+<span class="s0">{% if app_list %}</span>
+  <span class="s0">{% for app in app_list %}</span>
+    <span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;app-{{ app.app_label }} module{% if app.app_url in request.path|urlencode %} current-app{% endif %}&quot;</span><span class="s1">&gt;</span>
+      <span class="s1">&lt;table&gt;</span>
+        <span class="s1">&lt;caption&gt;</span>
+          <span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{{ app.app_url }}&quot; </span><span class="s2">class</span><span class="s3">=&quot;section&quot; </span><span class="s2">title</span><span class="s3">=&quot;{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}&quot;</span><span class="s1">&gt;</span><span class="s0">{{ app.name }}</span><span class="s1">&lt;/a&gt;</span>
+        <span class="s1">&lt;/caption&gt;</span>
+        <span class="s0">{% for model in app.models %}</span>
+          <span class="s1">&lt;tr </span><span class="s2">class</span><span class="s3">=&quot;model-{{ model.object_name|lower }}{% if model.admin_url in request.path|urlencode %} current-model{% endif %}&quot;</span><span class="s1">&gt;</span>
+            <span class="s0">{% if model.admin_url %}</span>
+              <span class="s1">&lt;th </span><span class="s2">scope</span><span class="s3">=&quot;row&quot;</span><span class="s1">&gt;&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{{ model.admin_url }}&quot;</span><span class="s2">{% if model.admin_url in request.path|urlencode %} aria-current</span><span class="s3">=&quot;page&quot;</span><span class="s2">{% endif %}</span><span class="s1">&gt;</span><span class="s0">{{ model.name }}</span><span class="s1">&lt;/a&gt;&lt;/th&gt;</span>
+            <span class="s0">{% else %}</span>
+              <span class="s1">&lt;th </span><span class="s2">scope</span><span class="s3">=&quot;row&quot;</span><span class="s1">&gt;</span><span class="s0">{{ model.name }}</span><span class="s1">&lt;/th&gt;</span>
+            <span class="s0">{% endif %}</span>
+
+            <span class="s0">{% if model.add_url %}</span>
+              <span class="s1">&lt;td&gt;&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{{ model.add_url }}&quot; </span><span class="s2">class</span><span class="s3">=&quot;addlink&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'Add' %}</span><span class="s1">&lt;/a&gt;&lt;/td&gt;</span>
+            <span class="s0">{% else %}</span>
+              <span class="s1">&lt;td&gt;&lt;/td&gt;</span>
+            <span class="s0">{% endif %}</span>
+
+            <span class="s0">{% if model.admin_url and show_changelinks %}</span>
+              <span class="s0">{% if model.view_only %}</span>
+                <span class="s1">&lt;td&gt;&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{{ model.admin_url }}&quot; </span><span class="s2">class</span><span class="s3">=&quot;viewlink&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'View' %}</span><span class="s1">&lt;/a&gt;&lt;/td&gt;</span>
+              <span class="s0">{% else %}</span>
+                <span class="s1">&lt;td&gt;&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{{ model.admin_url }}&quot; </span><span class="s2">class</span><span class="s3">=&quot;changelink&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'Change' %}</span><span class="s1">&lt;/a&gt;&lt;/td&gt;</span>
+              <span class="s0">{% endif %}</span>
+            <span class="s0">{% elif show_changelinks %}</span>
+              <span class="s1">&lt;td&gt;&lt;/td&gt;</span>
+            <span class="s0">{% endif %}</span>
+          <span class="s1">&lt;/tr&gt;</span>
+        <span class="s0">{% endfor %}</span>
+      <span class="s1">&lt;/table&gt;</span>
+    <span class="s1">&lt;/div&gt;</span>
+  <span class="s0">{% endfor %}</span>
+<span class="s0">{% else %}</span>
+  <span class="s1">&lt;p&gt;</span><span class="s0">{% translate 'You don’t have permission to view or edit anything.' %}</span><span class="s1">&lt;/p&gt;</span>
+<span class="s0">{% endif %}</span>
+</pre>
+</body>
+</html>

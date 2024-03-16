@@ -1,0 +1,304 @@
+<html>
+<head>
+<title>basehttp.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+basehttp.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+HTTP server that implements the Python WSGI protocol (PEP 333, rev 1.21). 
+ 
+Based on wsgiref.simple_server which is part of the standard library since 2.5. 
+ 
+This is a simple server for use in testing or debugging Django apps. It hasn't 
+been reviewed for security issues. DON'T USE IT FOR PRODUCTION USE! 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">logging</span>
+<span class="s2">import </span><span class="s1">socket</span>
+<span class="s2">import </span><span class="s1">socketserver</span>
+<span class="s2">import </span><span class="s1">sys</span>
+<span class="s2">from </span><span class="s1">collections </span><span class="s2">import </span><span class="s1">deque</span>
+<span class="s2">from </span><span class="s1">wsgiref </span><span class="s2">import </span><span class="s1">simple_server</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">exceptions </span><span class="s2">import </span><span class="s1">ImproperlyConfigured</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">handlers</span><span class="s3">.</span><span class="s1">wsgi </span><span class="s2">import </span><span class="s1">LimitedStream</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">wsgi </span><span class="s2">import </span><span class="s1">get_wsgi_application</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db </span><span class="s2">import </span><span class="s1">connections</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">module_loading </span><span class="s2">import </span><span class="s1">import_string</span>
+
+<span class="s1">__all__ </span><span class="s3">= (</span><span class="s4">&quot;WSGIServer&quot;</span><span class="s3">, </span><span class="s4">&quot;WSGIRequestHandler&quot;</span><span class="s3">)</span>
+
+<span class="s1">logger </span><span class="s3">= </span><span class="s1">logging</span><span class="s3">.</span><span class="s1">getLogger</span><span class="s3">(</span><span class="s4">&quot;django.server&quot;</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">get_internal_wsgi_application</span><span class="s3">():</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Load and return the WSGI application as configured by the user in 
+    ``settings.WSGI_APPLICATION``. With the default ``startproject`` layout, 
+    this will be the ``application`` object in ``projectname/wsgi.py``. 
+ 
+    This function, and the ``WSGI_APPLICATION`` setting itself, are only useful 
+    for Django's internal server (runserver); external WSGI servers should just 
+    be configured to point to the correct application object directly. 
+ 
+    If settings.WSGI_APPLICATION is not set (is ``None``), return 
+    whatever ``django.core.wsgi.get_wsgi_application`` returns. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf </span><span class="s2">import </span><span class="s1">settings</span>
+
+    <span class="s1">app_path </span><span class="s3">= </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">settings</span><span class="s3">, </span><span class="s4">&quot;WSGI_APPLICATION&quot;</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">app_path </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">get_wsgi_application</span><span class="s3">()</span>
+
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">import_string</span><span class="s3">(</span><span class="s1">app_path</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">ImportError </span><span class="s2">as </span><span class="s1">err</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">ImproperlyConfigured</span><span class="s3">(</span>
+            <span class="s4">&quot;WSGI application '%s' could not be loaded; &quot;</span>
+            <span class="s4">&quot;Error importing module.&quot; </span><span class="s3">% </span><span class="s1">app_path</span>
+        <span class="s3">) </span><span class="s2">from </span><span class="s1">err</span>
+
+
+<span class="s2">def </span><span class="s1">is_broken_pipe_error</span><span class="s3">():</span>
+    <span class="s1">exc_type</span><span class="s3">, </span><span class="s1">_</span><span class="s3">, </span><span class="s1">_ </span><span class="s3">= </span><span class="s1">sys</span><span class="s3">.</span><span class="s1">exc_info</span><span class="s3">()</span>
+    <span class="s2">return </span><span class="s1">issubclass</span><span class="s3">(</span>
+        <span class="s1">exc_type</span><span class="s3">,</span>
+        <span class="s3">(</span>
+            <span class="s1">BrokenPipeError</span><span class="s3">,</span>
+            <span class="s1">ConnectionAbortedError</span><span class="s3">,</span>
+            <span class="s1">ConnectionResetError</span><span class="s3">,</span>
+        <span class="s3">),</span>
+    <span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">WSGIServer</span><span class="s3">(</span><span class="s1">simple_server</span><span class="s3">.</span><span class="s1">WSGIServer</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;BaseHTTPServer that implements the Python WSGI protocol&quot;&quot;&quot;</span>
+
+    <span class="s1">request_queue_size </span><span class="s3">= </span><span class="s5">10</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, </span><span class="s1">ipv6</span><span class="s3">=</span><span class="s2">False</span><span class="s3">, </span><span class="s1">allow_reuse_address</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">ipv6</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">address_family </span><span class="s3">= </span><span class="s1">socket</span><span class="s3">.</span><span class="s1">AF_INET6</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">allow_reuse_address </span><span class="s3">= </span><span class="s1">allow_reuse_address</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(*</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">handle_error</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">client_address</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">is_broken_pipe_error</span><span class="s3">():</span>
+            <span class="s1">logger</span><span class="s3">.</span><span class="s1">info</span><span class="s3">(</span><span class="s4">&quot;- Broken pipe from %s&quot;</span><span class="s3">, </span><span class="s1">client_address</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">super</span><span class="s3">().</span><span class="s1">handle_error</span><span class="s3">(</span><span class="s1">request</span><span class="s3">, </span><span class="s1">client_address</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">ThreadedWSGIServer</span><span class="s3">(</span><span class="s1">socketserver</span><span class="s3">.</span><span class="s1">ThreadingMixIn</span><span class="s3">, </span><span class="s1">WSGIServer</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;A threaded version of the WSGIServer&quot;&quot;&quot;</span>
+
+    <span class="s1">daemon_threads </span><span class="s3">= </span><span class="s2">True</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, </span><span class="s1">connections_override</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(*</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">connections_override </span><span class="s3">= </span><span class="s1">connections_override</span>
+
+    <span class="s6"># socketserver.ThreadingMixIn.process_request() passes this method as</span>
+    <span class="s6"># the target to a new Thread object.</span>
+    <span class="s2">def </span><span class="s1">process_request_thread</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">client_address</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">connections_override</span><span class="s3">:</span>
+            <span class="s6"># Override this thread's database connections with the ones</span>
+            <span class="s6"># provided by the parent thread.</span>
+            <span class="s2">for </span><span class="s1">alias</span><span class="s3">, </span><span class="s1">conn </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">connections_override</span><span class="s3">.</span><span class="s1">items</span><span class="s3">():</span>
+                <span class="s1">connections</span><span class="s3">[</span><span class="s1">alias</span><span class="s3">] = </span><span class="s1">conn</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">process_request_thread</span><span class="s3">(</span><span class="s1">request</span><span class="s3">, </span><span class="s1">client_address</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_close_connections</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s6"># Used for mocking in tests.</span>
+        <span class="s1">connections</span><span class="s3">.</span><span class="s1">close_all</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">close_request</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">request</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_close_connections</span><span class="s3">()</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">close_request</span><span class="s3">(</span><span class="s1">request</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">ServerHandler</span><span class="s3">(</span><span class="s1">simple_server</span><span class="s3">.</span><span class="s1">ServerHandler</span><span class="s3">):</span>
+    <span class="s1">http_version </span><span class="s3">= </span><span class="s4">&quot;1.1&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">stdin</span><span class="s3">, </span><span class="s1">stdout</span><span class="s3">, </span><span class="s1">stderr</span><span class="s3">, </span><span class="s1">environ</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Use a LimitedStream so that unread request data will be ignored at 
+        the end of the request. WSGIRequest uses a LimitedStream but it 
+        shouldn't discard the data since the upstream servers usually do this. 
+        This fix applies only for testserver/runserver. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">content_length </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">environ</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;CONTENT_LENGTH&quot;</span><span class="s3">))</span>
+        <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+            <span class="s1">content_length </span><span class="s3">= </span><span class="s5">0</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span>
+            <span class="s1">LimitedStream</span><span class="s3">(</span><span class="s1">stdin</span><span class="s3">, </span><span class="s1">content_length</span><span class="s3">), </span><span class="s1">stdout</span><span class="s3">, </span><span class="s1">stderr</span><span class="s3">, </span><span class="s1">environ</span><span class="s3">, **</span><span class="s1">kwargs</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">cleanup_headers</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">cleanup_headers</span><span class="s3">()</span>
+        <span class="s2">if </span><span class="s3">(</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">environ</span><span class="s3">[</span><span class="s4">&quot;REQUEST_METHOD&quot;</span><span class="s3">] == </span><span class="s4">&quot;HEAD&quot;</span>
+            <span class="s2">and </span><span class="s4">&quot;Content-Length&quot; </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">headers</span>
+        <span class="s3">):</span>
+            <span class="s2">del </span><span class="s1">self</span><span class="s3">.</span><span class="s1">headers</span><span class="s3">[</span><span class="s4">&quot;Content-Length&quot;</span><span class="s3">]</span>
+        <span class="s6"># HTTP/1.1 requires support for persistent connections. Send 'close' if</span>
+        <span class="s6"># the content length is unknown to prevent clients from reusing the</span>
+        <span class="s6"># connection.</span>
+        <span class="s2">if </span><span class="s3">(</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">environ</span><span class="s3">[</span><span class="s4">&quot;REQUEST_METHOD&quot;</span><span class="s3">] != </span><span class="s4">&quot;HEAD&quot;</span>
+            <span class="s2">and </span><span class="s4">&quot;Content-Length&quot; </span><span class="s2">not in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">headers</span>
+        <span class="s3">):</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">headers</span><span class="s3">[</span><span class="s4">&quot;Connection&quot;</span><span class="s3">] = </span><span class="s4">&quot;close&quot;</span>
+        <span class="s6"># Persistent connections require threading server.</span>
+        <span class="s2">elif not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">request_handler</span><span class="s3">.</span><span class="s1">server</span><span class="s3">, </span><span class="s1">socketserver</span><span class="s3">.</span><span class="s1">ThreadingMixIn</span><span class="s3">):</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">headers</span><span class="s3">[</span><span class="s4">&quot;Connection&quot;</span><span class="s3">] = </span><span class="s4">&quot;close&quot;</span>
+        <span class="s6"># Mark the connection for closing if it's set as such above or if the</span>
+        <span class="s6"># application sent the header.</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">headers</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;Connection&quot;</span><span class="s3">) == </span><span class="s4">&quot;close&quot;</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">request_handler</span><span class="s3">.</span><span class="s1">close_connection </span><span class="s3">= </span><span class="s2">True</span>
+
+    <span class="s2">def </span><span class="s1">close</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">get_stdin</span><span class="s3">().</span><span class="s1">read</span><span class="s3">()</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">close</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">finish_response</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">environ</span><span class="s3">[</span><span class="s4">&quot;REQUEST_METHOD&quot;</span><span class="s3">] == </span><span class="s4">&quot;HEAD&quot;</span><span class="s3">:</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s1">deque</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">result</span><span class="s3">, </span><span class="s1">maxlen</span><span class="s3">=</span><span class="s5">0</span><span class="s3">)  </span><span class="s6"># Consume iterator.</span>
+                <span class="s6"># Don't call self.finish_content() as, if the headers have not</span>
+                <span class="s6"># been sent and Content-Length isn't set, it'll default to &quot;0&quot;</span>
+                <span class="s6"># which will prevent omission of the Content-Length header with</span>
+                <span class="s6"># HEAD requests as permitted by RFC 9110 Section 9.3.2.</span>
+                <span class="s6"># Instead, send the headers, if not sent yet.</span>
+                <span class="s2">if not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">headers_sent</span><span class="s3">:</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">send_headers</span><span class="s3">()</span>
+            <span class="s2">finally</span><span class="s3">:</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">close</span><span class="s3">()</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">super</span><span class="s3">().</span><span class="s1">finish_response</span><span class="s3">()</span>
+
+
+<span class="s2">class </span><span class="s1">WSGIRequestHandler</span><span class="s3">(</span><span class="s1">simple_server</span><span class="s3">.</span><span class="s1">WSGIRequestHandler</span><span class="s3">):</span>
+    <span class="s1">protocol_version </span><span class="s3">= </span><span class="s4">&quot;HTTP/1.1&quot;</span>
+
+    <span class="s2">def </span><span class="s1">address_string</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s6"># Short-circuit parent method to not call socket.getfqdn</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">client_address</span><span class="s3">[</span><span class="s5">0</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">log_message</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">format</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">):</span>
+        <span class="s1">extra </span><span class="s3">= {</span>
+            <span class="s4">&quot;request&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">request</span><span class="s3">,</span>
+            <span class="s4">&quot;server_time&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">log_date_time_string</span><span class="s3">(),</span>
+        <span class="s3">}</span>
+        <span class="s2">if </span><span class="s1">args</span><span class="s3">[</span><span class="s5">1</span><span class="s3">][</span><span class="s5">0</span><span class="s3">] == </span><span class="s4">&quot;4&quot;</span><span class="s3">:</span>
+            <span class="s6"># 0x16 = Handshake, 0x03 = SSL 3.0 or TLS 1.x</span>
+            <span class="s2">if </span><span class="s1">args</span><span class="s3">[</span><span class="s5">0</span><span class="s3">].</span><span class="s1">startswith</span><span class="s3">(</span><span class="s4">&quot;</span><span class="s2">\x16\x03</span><span class="s4">&quot;</span><span class="s3">):</span>
+                <span class="s1">extra</span><span class="s3">[</span><span class="s4">&quot;status_code&quot;</span><span class="s3">] = </span><span class="s5">500</span>
+                <span class="s1">logger</span><span class="s3">.</span><span class="s1">error</span><span class="s3">(</span>
+                    <span class="s4">&quot;You're accessing the development server over HTTPS, but &quot;</span>
+                    <span class="s4">&quot;it only supports HTTP.&quot;</span><span class="s3">,</span>
+                    <span class="s1">extra</span><span class="s3">=</span><span class="s1">extra</span><span class="s3">,</span>
+                <span class="s3">)</span>
+                <span class="s2">return</span>
+
+        <span class="s2">if </span><span class="s1">args</span><span class="s3">[</span><span class="s5">1</span><span class="s3">].</span><span class="s1">isdigit</span><span class="s3">() </span><span class="s2">and </span><span class="s1">len</span><span class="s3">(</span><span class="s1">args</span><span class="s3">[</span><span class="s5">1</span><span class="s3">]) == </span><span class="s5">3</span><span class="s3">:</span>
+            <span class="s1">status_code </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">args</span><span class="s3">[</span><span class="s5">1</span><span class="s3">])</span>
+            <span class="s1">extra</span><span class="s3">[</span><span class="s4">&quot;status_code&quot;</span><span class="s3">] = </span><span class="s1">status_code</span>
+
+            <span class="s2">if </span><span class="s1">status_code </span><span class="s3">&gt;= </span><span class="s5">500</span><span class="s3">:</span>
+                <span class="s1">level </span><span class="s3">= </span><span class="s1">logger</span><span class="s3">.</span><span class="s1">error</span>
+            <span class="s2">elif </span><span class="s1">status_code </span><span class="s3">&gt;= </span><span class="s5">400</span><span class="s3">:</span>
+                <span class="s1">level </span><span class="s3">= </span><span class="s1">logger</span><span class="s3">.</span><span class="s1">warning</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s1">level </span><span class="s3">= </span><span class="s1">logger</span><span class="s3">.</span><span class="s1">info</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">level </span><span class="s3">= </span><span class="s1">logger</span><span class="s3">.</span><span class="s1">info</span>
+
+        <span class="s1">level</span><span class="s3">(</span><span class="s1">format</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, </span><span class="s1">extra</span><span class="s3">=</span><span class="s1">extra</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_environ</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s6"># Strip all headers with underscores in the name before constructing</span>
+        <span class="s6"># the WSGI environ. This prevents header-spoofing based on ambiguity</span>
+        <span class="s6"># between underscores and dashes both normalized to underscores in WSGI</span>
+        <span class="s6"># env vars. Nginx and Apache 2.4+ both do this as well.</span>
+        <span class="s2">for </span><span class="s1">k </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">headers</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s4">&quot;_&quot; </span><span class="s2">in </span><span class="s1">k</span><span class="s3">:</span>
+                <span class="s2">del </span><span class="s1">self</span><span class="s3">.</span><span class="s1">headers</span><span class="s3">[</span><span class="s1">k</span><span class="s3">]</span>
+
+        <span class="s2">return </span><span class="s1">super</span><span class="s3">().</span><span class="s1">get_environ</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">handle</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">close_connection </span><span class="s3">= </span><span class="s2">True</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">handle_one_request</span><span class="s3">()</span>
+        <span class="s2">while not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">close_connection</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">handle_one_request</span><span class="s3">()</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">connection</span><span class="s3">.</span><span class="s1">shutdown</span><span class="s3">(</span><span class="s1">socket</span><span class="s3">.</span><span class="s1">SHUT_WR</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s3">(</span><span class="s1">AttributeError</span><span class="s3">, </span><span class="s1">OSError</span><span class="s3">):</span>
+            <span class="s2">pass</span>
+
+    <span class="s2">def </span><span class="s1">handle_one_request</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Copy of WSGIRequestHandler.handle() but with different ServerHandler&quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">raw_requestline </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">rfile</span><span class="s3">.</span><span class="s1">readline</span><span class="s3">(</span><span class="s5">65537</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">raw_requestline</span><span class="s3">) &gt; </span><span class="s5">65536</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">requestline </span><span class="s3">= </span><span class="s4">&quot;&quot;</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">request_version </span><span class="s3">= </span><span class="s4">&quot;&quot;</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">command </span><span class="s3">= </span><span class="s4">&quot;&quot;</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">send_error</span><span class="s3">(</span><span class="s5">414</span><span class="s3">)</span>
+            <span class="s2">return</span>
+
+        <span class="s2">if not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">parse_request</span><span class="s3">():  </span><span class="s6"># An error code has been sent, just exit</span>
+            <span class="s2">return</span>
+
+        <span class="s1">handler </span><span class="s3">= </span><span class="s1">ServerHandler</span><span class="s3">(</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">rfile</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">wfile</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_stderr</span><span class="s3">(), </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_environ</span><span class="s3">()</span>
+        <span class="s3">)</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">request_handler </span><span class="s3">= </span><span class="s1">self  </span><span class="s6"># backpointer for logging &amp; connection closing</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">run</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">server</span><span class="s3">.</span><span class="s1">get_app</span><span class="s3">())</span>
+
+
+<span class="s2">def </span><span class="s1">run</span><span class="s3">(</span>
+    <span class="s1">addr</span><span class="s3">,</span>
+    <span class="s1">port</span><span class="s3">,</span>
+    <span class="s1">wsgi_handler</span><span class="s3">,</span>
+    <span class="s1">ipv6</span><span class="s3">=</span><span class="s2">False</span><span class="s3">,</span>
+    <span class="s1">threading</span><span class="s3">=</span><span class="s2">False</span><span class="s3">,</span>
+    <span class="s1">on_bind</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+    <span class="s1">server_cls</span><span class="s3">=</span><span class="s1">WSGIServer</span><span class="s3">,</span>
+<span class="s3">):</span>
+    <span class="s1">server_address </span><span class="s3">= (</span><span class="s1">addr</span><span class="s3">, </span><span class="s1">port</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">threading</span><span class="s3">:</span>
+        <span class="s1">httpd_cls </span><span class="s3">= </span><span class="s1">type</span><span class="s3">(</span><span class="s4">&quot;WSGIServer&quot;</span><span class="s3">, (</span><span class="s1">socketserver</span><span class="s3">.</span><span class="s1">ThreadingMixIn</span><span class="s3">, </span><span class="s1">server_cls</span><span class="s3">), {})</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">httpd_cls </span><span class="s3">= </span><span class="s1">server_cls</span>
+    <span class="s1">httpd </span><span class="s3">= </span><span class="s1">httpd_cls</span><span class="s3">(</span><span class="s1">server_address</span><span class="s3">, </span><span class="s1">WSGIRequestHandler</span><span class="s3">, </span><span class="s1">ipv6</span><span class="s3">=</span><span class="s1">ipv6</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">on_bind </span><span class="s2">is not None</span><span class="s3">:</span>
+        <span class="s1">on_bind</span><span class="s3">(</span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">httpd</span><span class="s3">, </span><span class="s4">&quot;server_port&quot;</span><span class="s3">, </span><span class="s1">port</span><span class="s3">))</span>
+    <span class="s2">if </span><span class="s1">threading</span><span class="s3">:</span>
+        <span class="s6"># ThreadingMixIn.daemon_threads indicates how threads will behave on an</span>
+        <span class="s6"># abrupt shutdown; like quitting the server by the user or restarting</span>
+        <span class="s6"># by the auto-reloader. True means the server will not wait for thread</span>
+        <span class="s6"># termination before it quits. This will make auto-reloader faster</span>
+        <span class="s6"># and will prevent the need to kill the server manually if a thread</span>
+        <span class="s6"># isn't terminating correctly.</span>
+        <span class="s1">httpd</span><span class="s3">.</span><span class="s1">daemon_threads </span><span class="s3">= </span><span class="s2">True</span>
+    <span class="s1">httpd</span><span class="s3">.</span><span class="s1">set_app</span><span class="s3">(</span><span class="s1">wsgi_handler</span><span class="s3">)</span>
+    <span class="s1">httpd</span><span class="s3">.</span><span class="s1">serve_forever</span><span class="s3">()</span>
+</pre>
+</body>
+</html>

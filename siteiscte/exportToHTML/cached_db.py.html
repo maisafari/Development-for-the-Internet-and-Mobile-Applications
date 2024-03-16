@@ -1,0 +1,94 @@
+<html>
+<head>
+<title>cached_db.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+cached_db.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Cached, database-backed sessions. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf </span><span class="s2">import </span><span class="s1">settings</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">sessions</span><span class="s3">.</span><span class="s1">backends</span><span class="s3">.</span><span class="s1">db </span><span class="s2">import </span><span class="s1">SessionStore </span><span class="s2">as </span><span class="s1">DBStore</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">cache </span><span class="s2">import </span><span class="s1">caches</span>
+
+<span class="s1">KEY_PREFIX </span><span class="s3">= </span><span class="s4">&quot;django.contrib.sessions.cached_db&quot;</span>
+
+
+<span class="s2">class </span><span class="s1">SessionStore</span><span class="s3">(</span><span class="s1">DBStore</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Implement cached, database backed sessions. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">cache_key_prefix </span><span class="s3">= </span><span class="s1">KEY_PREFIX</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">session_key</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cache </span><span class="s3">= </span><span class="s1">caches</span><span class="s3">[</span><span class="s1">settings</span><span class="s3">.</span><span class="s1">SESSION_CACHE_ALIAS</span><span class="s3">]</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">session_key</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">cache_key</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">cache_key_prefix </span><span class="s3">+ </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_get_or_create_session_key</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">load</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">data </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">cache_key</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">Exception</span><span class="s3">:</span>
+            <span class="s5"># Some backends (e.g. memcache) raise an exception on invalid</span>
+            <span class="s5"># cache keys. If this happens, reset the session. See #17810.</span>
+            <span class="s1">data </span><span class="s3">= </span><span class="s2">None</span>
+
+        <span class="s2">if </span><span class="s1">data </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s1">s </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_get_session_from_db</span><span class="s3">()</span>
+            <span class="s2">if </span><span class="s1">s</span><span class="s3">:</span>
+                <span class="s1">data </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">decode</span><span class="s3">(</span><span class="s1">s</span><span class="s3">.</span><span class="s1">session_data</span><span class="s3">)</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">set</span><span class="s3">(</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">cache_key</span><span class="s3">, </span><span class="s1">data</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_expiry_age</span><span class="s3">(</span><span class="s1">expiry</span><span class="s3">=</span><span class="s1">s</span><span class="s3">.</span><span class="s1">expire_date</span><span class="s3">)</span>
+                <span class="s3">)</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s1">data </span><span class="s3">= {}</span>
+        <span class="s2">return </span><span class="s1">data</span>
+
+    <span class="s2">def </span><span class="s1">exists</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">session_key</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">(</span>
+            <span class="s1">session_key</span>
+            <span class="s2">and </span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">cache_key_prefix </span><span class="s3">+ </span><span class="s1">session_key</span><span class="s3">) </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span>
+            <span class="s2">or </span><span class="s1">super</span><span class="s3">().</span><span class="s1">exists</span><span class="s3">(</span><span class="s1">session_key</span><span class="s3">)</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">save</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">must_create</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">save</span><span class="s3">(</span><span class="s1">must_create</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">set</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">cache_key</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_session</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_expiry_age</span><span class="s3">())</span>
+
+    <span class="s2">def </span><span class="s1">delete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">session_key</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">delete</span><span class="s3">(</span><span class="s1">session_key</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">session_key </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">session_key </span><span class="s2">is None</span><span class="s3">:</span>
+                <span class="s2">return</span>
+            <span class="s1">session_key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">session_key</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">delete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">cache_key_prefix </span><span class="s3">+ </span><span class="s1">session_key</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">flush</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Remove the current session data from the database and regenerate the 
+        key. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">clear</span><span class="s3">()</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">delete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">session_key</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_session_key </span><span class="s3">= </span><span class="s2">None</span>
+</pre>
+</body>
+</html>

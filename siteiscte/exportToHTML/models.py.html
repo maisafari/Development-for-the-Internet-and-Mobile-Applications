@@ -1,0 +1,43 @@
+<html>
+<head>
+<title>models.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #2aacb8;}
+.s4 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+models.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">datetime </span><span class="s0">import </span><span class="s1">timezone</span><span class="s2">, </span><span class="s1">datetime</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">models</span>
+
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">models</span>
+
+<span class="s0">class </span><span class="s1">Questao</span><span class="s2">(</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Model</span><span class="s2">):</span>
+    <span class="s1">questao_texto </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">CharField</span><span class="s2">(</span><span class="s1">max_length</span><span class="s2">=</span><span class="s3">200</span><span class="s2">)</span>
+    <span class="s1">pub_data </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">DateTimeField</span><span class="s2">(</span><span class="s4">'data de publicacao'</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__str__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">questao_texto</span>
+
+    <span class="s0">def </span><span class="s1">foi_publicada_recentemente</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pub_data </span><span class="s2">&gt;= </span><span class="s1">timezone</span><span class="s2">.</span><span class="s1">now</span><span class="s2">() - </span><span class="s1">datetime</span><span class="s2">.</span><span class="s1">timedelta</span><span class="s2">(</span><span class="s1">days</span><span class="s2">=</span><span class="s3">1</span><span class="s2">)</span>
+<span class="s0">class </span><span class="s1">Opcao</span><span class="s2">(</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Model</span><span class="s2">):</span>
+    <span class="s1">questao </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">ForeignKey</span><span class="s2">(</span><span class="s1">Questao</span><span class="s2">, </span><span class="s1">on_delete</span><span class="s2">=</span><span class="s1">models</span><span class="s2">.</span><span class="s1">CASCADE</span><span class="s2">)</span>
+    <span class="s1">opcao_texto </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">CharField</span><span class="s2">(</span><span class="s1">max_length</span><span class="s2">=</span><span class="s3">200</span><span class="s2">)</span>
+    <span class="s1">votos </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">IntegerField</span><span class="s2">(</span><span class="s1">default</span><span class="s2">=</span><span class="s3">0</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__str__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">opcao_texto</span></pre>
+</body>
+</html>

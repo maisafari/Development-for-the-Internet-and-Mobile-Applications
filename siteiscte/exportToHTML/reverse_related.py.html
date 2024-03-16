@@ -1,0 +1,436 @@
+<html>
+<head>
+<title>reverse_related.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+.s6 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+reverse_related.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+&quot;Rel objects&quot; for related fields. 
+ 
+&quot;Rel objects&quot; (for lack of a better name) carry information about the relation 
+modeled by a related field and provide some utility functions. They're stored 
+in the ``remote_field`` attribute of the field. 
+ 
+They also act as reverse fields for the purposes of the Meta API because 
+they're the closest concept currently available. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">warnings</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core </span><span class="s2">import </span><span class="s1">exceptions</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">deprecation </span><span class="s2">import </span><span class="s1">RemovedInDjango60Warning</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">functional </span><span class="s2">import </span><span class="s1">cached_property</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">hashable </span><span class="s2">import </span><span class="s1">make_hashable</span>
+
+<span class="s2">from </span><span class="s3">. </span><span class="s2">import </span><span class="s1">BLANK_CHOICE_DASH</span>
+<span class="s2">from </span><span class="s3">.</span><span class="s1">mixins </span><span class="s2">import </span><span class="s1">FieldCacheMixin</span>
+
+
+<span class="s2">class </span><span class="s1">ForeignObjectRel</span><span class="s3">(</span><span class="s1">FieldCacheMixin</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Used by ForeignObject to store information about the relation. 
+ 
+    ``_meta.get_fields()`` returns this class to provide access to the field 
+    flags for the reverse relation. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s4"># Field flags</span>
+    <span class="s1">auto_created </span><span class="s3">= </span><span class="s2">True</span>
+    <span class="s1">concrete </span><span class="s3">= </span><span class="s2">False</span>
+    <span class="s1">editable </span><span class="s3">= </span><span class="s2">False</span>
+    <span class="s1">is_relation </span><span class="s3">= </span><span class="s2">True</span>
+
+    <span class="s4"># Reverse relations are always nullable (Django can't enforce that a</span>
+    <span class="s4"># foreign key on the related model points to this model).</span>
+    <span class="s1">null </span><span class="s3">= </span><span class="s2">True</span>
+    <span class="s1">empty_strings_allowed </span><span class="s3">= </span><span class="s2">False</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">field</span><span class="s3">,</span>
+        <span class="s1">to</span><span class="s3">,</span>
+        <span class="s1">related_name</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">related_query_name</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">limit_choices_to</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">parent_link</span><span class="s3">=</span><span class="s2">False</span><span class="s3">,</span>
+        <span class="s1">on_delete</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+    <span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">field </span><span class="s3">= </span><span class="s1">field</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">model </span><span class="s3">= </span><span class="s1">to</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">related_name </span><span class="s3">= </span><span class="s1">related_name</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">related_query_name </span><span class="s3">= </span><span class="s1">related_query_name</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">limit_choices_to </span><span class="s3">= {} </span><span class="s2">if </span><span class="s1">limit_choices_to </span><span class="s2">is None else </span><span class="s1">limit_choices_to</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">parent_link </span><span class="s3">= </span><span class="s1">parent_link</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">on_delete </span><span class="s3">= </span><span class="s1">on_delete</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">symmetrical </span><span class="s3">= </span><span class="s2">False</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">multiple </span><span class="s3">= </span><span class="s2">True</span>
+
+    <span class="s4"># Some of the following cached_properties can't be initialized in</span>
+    <span class="s4"># __init__ as the field doesn't have its model yet. Calling these methods</span>
+    <span class="s4"># before field.contribute_to_class() has been called will result in</span>
+    <span class="s4"># AttributeError</span>
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">hidden</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">is_hidden</span><span class="s3">()</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">name</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">related_query_name</span><span class="s3">()</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">remote_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">target_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        When filtering against this relation, return the field on the remote 
+        model against which the filtering should happen. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">target_fields </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">path_infos</span><span class="s3">[-</span><span class="s5">1</span><span class="s3">].</span><span class="s1">target_fields</span>
+        <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">target_fields</span><span class="s3">) &gt; </span><span class="s5">1</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">exceptions</span><span class="s3">.</span><span class="s1">FieldError</span><span class="s3">(</span>
+                <span class="s6">&quot;Can't use target_field for multicolumn relations.&quot;</span>
+            <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">target_fields</span><span class="s3">[</span><span class="s5">0</span><span class="s3">]</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">related_model</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">if not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">model</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">AttributeError</span><span class="s3">(</span>
+                <span class="s6">&quot;This property can't be accessed before self.field.contribute_to_class &quot;</span>
+                <span class="s6">&quot;has been called.&quot;</span>
+            <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">model</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">many_to_many</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">many_to_many</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">many_to_one</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">one_to_many</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">one_to_many</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">many_to_one</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">one_to_one</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">one_to_one</span>
+
+    <span class="s2">def </span><span class="s1">get_lookup</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">lookup_name</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">get_lookup</span><span class="s3">(</span><span class="s1">lookup_name</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_lookups</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">get_lookups</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">get_transform</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">get_transform</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_internal_type</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">get_internal_type</span><span class="s3">()</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">db_type</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">db_type</span>
+
+    <span class="s2">def </span><span class="s1">__repr__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s6">&quot;&lt;%s: %s.%s&gt;&quot; </span><span class="s3">% (</span>
+            <span class="s1">type</span><span class="s3">(</span><span class="s1">self</span><span class="s3">).</span><span class="s1">__name__</span><span class="s3">,</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">related_model</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">.</span><span class="s1">app_label</span><span class="s3">,</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">related_model</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">.</span><span class="s1">model_name</span><span class="s3">,</span>
+        <span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">identity</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">(</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">,</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">model</span><span class="s3">,</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">related_name</span><span class="s3">,</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">related_query_name</span><span class="s3">,</span>
+            <span class="s1">make_hashable</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">limit_choices_to</span><span class="s3">),</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">parent_link</span><span class="s3">,</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">on_delete</span><span class="s3">,</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">symmetrical</span><span class="s3">,</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">multiple</span><span class="s3">,</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">__eq__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s2">if not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">other</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">__class__</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">NotImplemented</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">identity </span><span class="s3">== </span><span class="s1">other</span><span class="s3">.</span><span class="s1">identity</span>
+
+    <span class="s2">def </span><span class="s1">__hash__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">hash</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">identity</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">__getstate__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">state </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">__dict__</span><span class="s3">.</span><span class="s1">copy</span><span class="s3">()</span>
+        <span class="s4"># Delete the path_infos cached property because it can be recalculated</span>
+        <span class="s4"># at first invocation after deserialization. The attribute must be</span>
+        <span class="s4"># removed because subclasses like ManyToOneRel may have a PathInfo</span>
+        <span class="s4"># which contains an intermediate M2M table that's been dynamically</span>
+        <span class="s4"># created and doesn't exist in the .models module.</span>
+        <span class="s4"># This is a reverse relation, so there is no reverse_path_infos to</span>
+        <span class="s4"># delete.</span>
+        <span class="s1">state</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">(</span><span class="s6">&quot;path_infos&quot;</span><span class="s3">, </span><span class="s2">None</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">state</span>
+
+    <span class="s2">def </span><span class="s1">get_choices</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">include_blank</span><span class="s3">=</span><span class="s2">True</span><span class="s3">,</span>
+        <span class="s1">blank_choice</span><span class="s3">=</span><span class="s1">BLANK_CHOICE_DASH</span><span class="s3">,</span>
+        <span class="s1">limit_choices_to</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">ordering</span><span class="s3">=(),</span>
+    <span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return choices with a default blank choices included, for use 
+        as &lt;select&gt; choices for this field. 
+ 
+        Analog of django.db.models.fields.Field.get_choices(), provided 
+        initially for utilization by RelatedFieldListFilter. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">limit_choices_to </span><span class="s3">= </span><span class="s1">limit_choices_to </span><span class="s2">or </span><span class="s1">self</span><span class="s3">.</span><span class="s1">limit_choices_to</span>
+        <span class="s1">qs </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">related_model</span><span class="s3">.</span><span class="s1">_default_manager</span><span class="s3">.</span><span class="s1">complex_filter</span><span class="s3">(</span><span class="s1">limit_choices_to</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">ordering</span><span class="s3">:</span>
+            <span class="s1">qs </span><span class="s3">= </span><span class="s1">qs</span><span class="s3">.</span><span class="s1">order_by</span><span class="s3">(*</span><span class="s1">ordering</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s3">(</span><span class="s1">blank_choice </span><span class="s2">if </span><span class="s1">include_blank </span><span class="s2">else </span><span class="s3">[]) + [(</span><span class="s1">x</span><span class="s3">.</span><span class="s1">pk</span><span class="s3">, </span><span class="s1">str</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)) </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">qs</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">is_hidden</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Should the related object be hidden?&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">related_name</span><span class="s3">) </span><span class="s2">and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">related_name</span><span class="s3">[-</span><span class="s5">1</span><span class="s3">] == </span><span class="s6">&quot;+&quot;</span>
+
+    <span class="s2">def </span><span class="s1">get_joining_columns</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">warnings</span><span class="s3">.</span><span class="s1">warn</span><span class="s3">(</span>
+            <span class="s6">&quot;ForeignObjectRel.get_joining_columns() is deprecated. Use &quot;</span>
+            <span class="s6">&quot;get_joining_fields() instead.&quot;</span><span class="s3">,</span>
+            <span class="s1">RemovedInDjango60Warning</span><span class="s3">,</span>
+        <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">get_reverse_joining_columns</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">get_joining_fields</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">get_reverse_joining_fields</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">get_extra_restriction</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">alias</span><span class="s3">, </span><span class="s1">related_alias</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">get_extra_restriction</span><span class="s3">(</span><span class="s1">related_alias</span><span class="s3">, </span><span class="s1">alias</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">set_field_name</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Set the related field's name, this is not available until later stages 
+        of app loading, so set_field_name is called from 
+        set_attributes_from_rel() 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># By default foreign object doesn't relate to any remote field (for</span>
+        <span class="s4"># example custom multicolumn joins currently have no remote field).</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">field_name </span><span class="s3">= </span><span class="s2">None</span>
+
+    <span class="s2">def </span><span class="s1">get_accessor_name</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">model</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s4"># This method encapsulates the logic that decides what name to give an</span>
+        <span class="s4"># accessor descriptor that retrieves related many-to-one or</span>
+        <span class="s4"># many-to-many objects. It uses the lowercased object_name + &quot;_set&quot;,</span>
+        <span class="s4"># but this can be overridden with the &quot;related_name&quot; option. Due to</span>
+        <span class="s4"># backwards compatibility ModelForms need to be able to provide an</span>
+        <span class="s4"># alternate model. See BaseInlineFormSet.get_default_prefix().</span>
+        <span class="s1">opts </span><span class="s3">= </span><span class="s1">model</span><span class="s3">.</span><span class="s1">_meta </span><span class="s2">if </span><span class="s1">model </span><span class="s2">else </span><span class="s1">self</span><span class="s3">.</span><span class="s1">related_model</span><span class="s3">.</span><span class="s1">_meta</span>
+        <span class="s1">model </span><span class="s3">= </span><span class="s1">model </span><span class="s2">or </span><span class="s1">self</span><span class="s3">.</span><span class="s1">related_model</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">multiple</span><span class="s3">:</span>
+            <span class="s4"># If this is a symmetrical m2m relation on self, there is no</span>
+            <span class="s4"># reverse accessor.</span>
+            <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">symmetrical </span><span class="s2">and </span><span class="s1">model </span><span class="s3">== </span><span class="s1">self</span><span class="s3">.</span><span class="s1">model</span><span class="s3">:</span>
+                <span class="s2">return None</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">related_name</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">related_name</span>
+        <span class="s2">return </span><span class="s1">opts</span><span class="s3">.</span><span class="s1">model_name </span><span class="s3">+ (</span><span class="s6">&quot;_set&quot; </span><span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">multiple </span><span class="s2">else </span><span class="s6">&quot;&quot;</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_path_info</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">filtered_relation</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">filtered_relation</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">get_reverse_path_info</span><span class="s3">(</span><span class="s1">filtered_relation</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">reverse_path_infos</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">path_infos</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_path_info</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">get_cache_name</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the name of the cache key to use for storing an instance of the 
+        forward model on the reverse model. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_accessor_name</span><span class="s3">()</span>
+
+
+<span class="s2">class </span><span class="s1">ManyToOneRel</span><span class="s3">(</span><span class="s1">ForeignObjectRel</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Used by the ForeignKey field to store information about the relation. 
+ 
+    ``_meta.get_fields()`` returns this class to provide access to the field 
+    flags for the reverse relation. 
+ 
+    Note: Because we somewhat abuse the Rel objects by using them as reverse 
+    fields we get the funny situation where 
+    ``ManyToOneRel.many_to_one == False`` and 
+    ``ManyToOneRel.one_to_many == True``. This is unfortunate but the actual 
+    ManyToOneRel class is a private API and there is work underway to turn 
+    reverse relations into actual fields. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">field</span><span class="s3">,</span>
+        <span class="s1">to</span><span class="s3">,</span>
+        <span class="s1">field_name</span><span class="s3">,</span>
+        <span class="s1">related_name</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">related_query_name</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">limit_choices_to</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">parent_link</span><span class="s3">=</span><span class="s2">False</span><span class="s3">,</span>
+        <span class="s1">on_delete</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+    <span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span>
+            <span class="s1">field</span><span class="s3">,</span>
+            <span class="s1">to</span><span class="s3">,</span>
+            <span class="s1">related_name</span><span class="s3">=</span><span class="s1">related_name</span><span class="s3">,</span>
+            <span class="s1">related_query_name</span><span class="s3">=</span><span class="s1">related_query_name</span><span class="s3">,</span>
+            <span class="s1">limit_choices_to</span><span class="s3">=</span><span class="s1">limit_choices_to</span><span class="s3">,</span>
+            <span class="s1">parent_link</span><span class="s3">=</span><span class="s1">parent_link</span><span class="s3">,</span>
+            <span class="s1">on_delete</span><span class="s3">=</span><span class="s1">on_delete</span><span class="s3">,</span>
+        <span class="s3">)</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">field_name </span><span class="s3">= </span><span class="s1">field_name</span>
+
+    <span class="s2">def </span><span class="s1">__getstate__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">state </span><span class="s3">= </span><span class="s1">super</span><span class="s3">().</span><span class="s1">__getstate__</span><span class="s3">()</span>
+        <span class="s1">state</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">(</span><span class="s6">&quot;related_model&quot;</span><span class="s3">, </span><span class="s2">None</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">state</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">identity</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">super</span><span class="s3">().</span><span class="s1">identity </span><span class="s3">+ (</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_name</span><span class="s3">,)</span>
+
+    <span class="s2">def </span><span class="s1">get_related_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the Field in the 'to' object to which this relationship is tied. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">field </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">model</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">.</span><span class="s1">get_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_name</span><span class="s3">)</span>
+        <span class="s2">if not </span><span class="s1">field</span><span class="s3">.</span><span class="s1">concrete</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">exceptions</span><span class="s3">.</span><span class="s1">FieldDoesNotExist</span><span class="s3">(</span>
+                <span class="s6">&quot;No related field named '%s'&quot; </span><span class="s3">% </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_name</span>
+            <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">field</span>
+
+    <span class="s2">def </span><span class="s1">set_field_name</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">field_name </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_name </span><span class="s2">or </span><span class="s1">self</span><span class="s3">.</span><span class="s1">model</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">.</span><span class="s1">pk</span><span class="s3">.</span><span class="s1">name</span>
+
+
+<span class="s2">class </span><span class="s1">OneToOneRel</span><span class="s3">(</span><span class="s1">ManyToOneRel</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Used by OneToOneField to store information about the relation. 
+ 
+    ``_meta.get_fields()`` returns this class to provide access to the field 
+    flags for the reverse relation. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">field</span><span class="s3">,</span>
+        <span class="s1">to</span><span class="s3">,</span>
+        <span class="s1">field_name</span><span class="s3">,</span>
+        <span class="s1">related_name</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">related_query_name</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">limit_choices_to</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">parent_link</span><span class="s3">=</span><span class="s2">False</span><span class="s3">,</span>
+        <span class="s1">on_delete</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+    <span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span>
+            <span class="s1">field</span><span class="s3">,</span>
+            <span class="s1">to</span><span class="s3">,</span>
+            <span class="s1">field_name</span><span class="s3">,</span>
+            <span class="s1">related_name</span><span class="s3">=</span><span class="s1">related_name</span><span class="s3">,</span>
+            <span class="s1">related_query_name</span><span class="s3">=</span><span class="s1">related_query_name</span><span class="s3">,</span>
+            <span class="s1">limit_choices_to</span><span class="s3">=</span><span class="s1">limit_choices_to</span><span class="s3">,</span>
+            <span class="s1">parent_link</span><span class="s3">=</span><span class="s1">parent_link</span><span class="s3">,</span>
+            <span class="s1">on_delete</span><span class="s3">=</span><span class="s1">on_delete</span><span class="s3">,</span>
+        <span class="s3">)</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">multiple </span><span class="s3">= </span><span class="s2">False</span>
+
+
+<span class="s2">class </span><span class="s1">ManyToManyRel</span><span class="s3">(</span><span class="s1">ForeignObjectRel</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Used by ManyToManyField to store information about the relation. 
+ 
+    ``_meta.get_fields()`` returns this class to provide access to the field 
+    flags for the reverse relation. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">field</span><span class="s3">,</span>
+        <span class="s1">to</span><span class="s3">,</span>
+        <span class="s1">related_name</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">related_query_name</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">limit_choices_to</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">symmetrical</span><span class="s3">=</span><span class="s2">True</span><span class="s3">,</span>
+        <span class="s1">through</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">through_fields</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">db_constraint</span><span class="s3">=</span><span class="s2">True</span><span class="s3">,</span>
+    <span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span>
+            <span class="s1">field</span><span class="s3">,</span>
+            <span class="s1">to</span><span class="s3">,</span>
+            <span class="s1">related_name</span><span class="s3">=</span><span class="s1">related_name</span><span class="s3">,</span>
+            <span class="s1">related_query_name</span><span class="s3">=</span><span class="s1">related_query_name</span><span class="s3">,</span>
+            <span class="s1">limit_choices_to</span><span class="s3">=</span><span class="s1">limit_choices_to</span><span class="s3">,</span>
+        <span class="s3">)</span>
+
+        <span class="s2">if </span><span class="s1">through </span><span class="s2">and not </span><span class="s1">db_constraint</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span><span class="s6">&quot;Can't supply a through model and db_constraint=False&quot;</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">through </span><span class="s3">= </span><span class="s1">through</span>
+
+        <span class="s2">if </span><span class="s1">through_fields </span><span class="s2">and not </span><span class="s1">through</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span><span class="s6">&quot;Cannot specify through_fields without a through model&quot;</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">through_fields </span><span class="s3">= </span><span class="s1">through_fields</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">symmetrical </span><span class="s3">= </span><span class="s1">symmetrical</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">db_constraint </span><span class="s3">= </span><span class="s1">db_constraint</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">identity</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">super</span><span class="s3">().</span><span class="s1">identity </span><span class="s3">+ (</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">through</span><span class="s3">,</span>
+            <span class="s1">make_hashable</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">through_fields</span><span class="s3">),</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">db_constraint</span><span class="s3">,</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_related_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the field in the 'to' object to which this relationship is tied. 
+        Provided for symmetry with ManyToOneRel. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">opts </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">through</span><span class="s3">.</span><span class="s1">_meta</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">through_fields</span><span class="s3">:</span>
+            <span class="s1">field </span><span class="s3">= </span><span class="s1">opts</span><span class="s3">.</span><span class="s1">get_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">through_fields</span><span class="s3">[</span><span class="s5">0</span><span class="s3">])</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">for </span><span class="s1">field </span><span class="s2">in </span><span class="s1">opts</span><span class="s3">.</span><span class="s1">fields</span><span class="s3">:</span>
+                <span class="s1">rel </span><span class="s3">= </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s6">&quot;remote_field&quot;</span><span class="s3">, </span><span class="s2">None</span><span class="s3">)</span>
+                <span class="s2">if </span><span class="s1">rel </span><span class="s2">and </span><span class="s1">rel</span><span class="s3">.</span><span class="s1">model </span><span class="s3">== </span><span class="s1">self</span><span class="s3">.</span><span class="s1">model</span><span class="s3">:</span>
+                    <span class="s2">break</span>
+        <span class="s2">return </span><span class="s1">field</span><span class="s3">.</span><span class="s1">foreign_related_fields</span><span class="s3">[</span><span class="s5">0</span><span class="s3">]</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<html>
+<head>
+<title>dbshell.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+dbshell.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">subprocess</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span><span class="s2">, </span><span class="s1">CommandError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">, </span><span class="s1">connections</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= (</span>
+        <span class="s3">&quot;Runs the command-line client for specified database, or the &quot;</span>
+        <span class="s3">&quot;default database if none is provided.&quot;</span>
+    <span class="s2">)</span>
+
+    <span class="s1">requires_system_checks </span><span class="s2">= []</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--database&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Nominates a database onto which to open a shell. Defaults to the &quot;</span>
+                <span class="s3">'&quot;default&quot; database.'</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parameters </span><span class="s2">= </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument_group</span><span class="s2">(</span><span class="s3">&quot;parameters&quot;</span><span class="s2">, </span><span class="s1">prefix_chars</span><span class="s2">=</span><span class="s3">&quot;--&quot;</span><span class="s2">)</span>
+        <span class="s1">parameters</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span><span class="s3">&quot;parameters&quot;</span><span class="s2">, </span><span class="s1">nargs</span><span class="s2">=</span><span class="s3">&quot;*&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">connection </span><span class="s2">= </span><span class="s1">connections</span><span class="s2">[</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;database&quot;</span><span class="s2">]]</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">connection</span><span class="s2">.</span><span class="s1">client</span><span class="s2">.</span><span class="s1">runshell</span><span class="s2">(</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;parameters&quot;</span><span class="s2">])</span>
+        <span class="s0">except </span><span class="s1">FileNotFoundError</span><span class="s2">:</span>
+            <span class="s4"># Note that we're assuming the FileNotFoundError relates to the</span>
+            <span class="s4"># command missing. It could be raised for some other reason, in</span>
+            <span class="s4"># which case this error message would be inaccurate. Still, this</span>
+            <span class="s4"># message catches the common case.</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s3">&quot;You appear not to have the %r program installed or on your path.&quot;</span>
+                <span class="s2">% </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">client</span><span class="s2">.</span><span class="s1">executable_name</span>
+            <span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">subprocess</span><span class="s2">.</span><span class="s1">CalledProcessError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s3">'&quot;%s&quot; returned non-zero exit status %s.'</span>
+                <span class="s2">% (</span>
+                    <span class="s3">&quot; &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">map</span><span class="s2">(</span><span class="s1">str</span><span class="s2">, </span><span class="s1">e</span><span class="s2">.</span><span class="s1">cmd</span><span class="s2">)),</span>
+                    <span class="s1">e</span><span class="s2">.</span><span class="s1">returncode</span><span class="s2">,</span>
+                <span class="s2">),</span>
+                <span class="s1">returncode</span><span class="s2">=</span><span class="s1">e</span><span class="s2">.</span><span class="s1">returncode</span><span class="s2">,</span>
+            <span class="s2">)</span>
+</pre>
+</body>
+</html>

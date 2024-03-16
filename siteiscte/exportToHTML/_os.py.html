@@ -1,0 +1,84 @@
+<html>
+<head>
+<title>_os.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_os.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">tempfile</span>
+<span class="s0">from </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path </span><span class="s0">import </span><span class="s1">abspath</span><span class="s2">, </span><span class="s1">dirname</span><span class="s2">, </span><span class="s1">join</span><span class="s2">, </span><span class="s1">normcase</span><span class="s2">, </span><span class="s1">sep</span>
+<span class="s0">from </span><span class="s1">pathlib </span><span class="s0">import </span><span class="s1">Path</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">SuspiciousFileOperation</span>
+
+
+<span class="s0">def </span><span class="s1">safe_join</span><span class="s2">(</span><span class="s1">base</span><span class="s2">, *</span><span class="s1">paths</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Join one or more path components to the base path component intelligently. 
+    Return a normalized, absolute version of the final path. 
+ 
+    Raise SuspiciousFileOperation if the final path isn't located inside of the 
+    base path component. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">final_path </span><span class="s2">= </span><span class="s1">abspath</span><span class="s2">(</span><span class="s1">join</span><span class="s2">(</span><span class="s1">base</span><span class="s2">, *</span><span class="s1">paths</span><span class="s2">))</span>
+    <span class="s1">base_path </span><span class="s2">= </span><span class="s1">abspath</span><span class="s2">(</span><span class="s1">base</span><span class="s2">)</span>
+    <span class="s4"># Ensure final_path starts with base_path (using normcase to ensure we</span>
+    <span class="s4"># don't false-negative on case insensitive operating systems like Windows),</span>
+    <span class="s4"># further, one of the following conditions must be true:</span>
+    <span class="s4">#  a) The next character is the path separator (to prevent conditions like</span>
+    <span class="s4">#     safe_join(&quot;/dir&quot;, &quot;/../d&quot;))</span>
+    <span class="s4">#  b) The final path must be the same as the base path.</span>
+    <span class="s4">#  c) The base path must be the most root path (meaning either &quot;/&quot; or &quot;C:\\&quot;)</span>
+    <span class="s0">if </span><span class="s2">(</span>
+        <span class="s0">not </span><span class="s1">normcase</span><span class="s2">(</span><span class="s1">final_path</span><span class="s2">).</span><span class="s1">startswith</span><span class="s2">(</span><span class="s1">normcase</span><span class="s2">(</span><span class="s1">base_path </span><span class="s2">+ </span><span class="s1">sep</span><span class="s2">))</span>
+        <span class="s0">and </span><span class="s1">normcase</span><span class="s2">(</span><span class="s1">final_path</span><span class="s2">) != </span><span class="s1">normcase</span><span class="s2">(</span><span class="s1">base_path</span><span class="s2">)</span>
+        <span class="s0">and </span><span class="s1">dirname</span><span class="s2">(</span><span class="s1">normcase</span><span class="s2">(</span><span class="s1">base_path</span><span class="s2">)) != </span><span class="s1">normcase</span><span class="s2">(</span><span class="s1">base_path</span><span class="s2">)</span>
+    <span class="s2">):</span>
+        <span class="s0">raise </span><span class="s1">SuspiciousFileOperation</span><span class="s2">(</span>
+            <span class="s5">&quot;The joined path ({}) is located outside of the base path &quot;</span>
+            <span class="s5">&quot;component ({})&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">final_path</span><span class="s2">, </span><span class="s1">base_path</span><span class="s2">)</span>
+        <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">final_path</span>
+
+
+<span class="s0">def </span><span class="s1">symlinks_supported</span><span class="s2">():</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Return whether or not creating symlinks are supported in the host platform 
+    and/or if they are allowed to be created (e.g. on Windows it requires admin 
+    permissions). 
+    &quot;&quot;&quot;</span>
+    <span class="s0">with </span><span class="s1">tempfile</span><span class="s2">.</span><span class="s1">TemporaryDirectory</span><span class="s2">() </span><span class="s0">as </span><span class="s1">temp_dir</span><span class="s2">:</span>
+        <span class="s1">original_path </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">temp_dir</span><span class="s2">, </span><span class="s5">&quot;original&quot;</span><span class="s2">)</span>
+        <span class="s1">symlink_path </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">temp_dir</span><span class="s2">, </span><span class="s5">&quot;symlink&quot;</span><span class="s2">)</span>
+        <span class="s1">os</span><span class="s2">.</span><span class="s1">makedirs</span><span class="s2">(</span><span class="s1">original_path</span><span class="s2">)</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">os</span><span class="s2">.</span><span class="s1">symlink</span><span class="s2">(</span><span class="s1">original_path</span><span class="s2">, </span><span class="s1">symlink_path</span><span class="s2">)</span>
+            <span class="s1">supported </span><span class="s2">= </span><span class="s0">True</span>
+        <span class="s0">except </span><span class="s2">(</span><span class="s1">OSError</span><span class="s2">, </span><span class="s1">NotImplementedError</span><span class="s2">):</span>
+            <span class="s1">supported </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s0">return </span><span class="s1">supported</span>
+
+
+<span class="s0">def </span><span class="s1">to_path</span><span class="s2">(</span><span class="s1">value</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;Convert value to a pathlib.Path instance, if not already a Path.&quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">Path</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">value</span>
+    <span class="s0">elif not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">str</span><span class="s2">):</span>
+        <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span><span class="s5">&quot;Invalid path type: %s&quot; </span><span class="s2">% </span><span class="s1">type</span><span class="s2">(</span><span class="s1">value</span><span class="s2">).</span><span class="s1">__name__</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">Path</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

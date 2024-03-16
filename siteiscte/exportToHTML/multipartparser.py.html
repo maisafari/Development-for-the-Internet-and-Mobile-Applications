@@ -1,0 +1,768 @@
+<html>
+<head>
+<title>multipartparser.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+.s7 { color: #a5c261;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+multipartparser.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Multi-part parsing for file uploads. 
+ 
+Exposes one class, ``MultiPartParser``, which feeds chunks of uploaded data to 
+file upload handlers for processing. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">base64</span>
+<span class="s2">import </span><span class="s1">binascii</span>
+<span class="s2">import </span><span class="s1">collections</span>
+<span class="s2">import </span><span class="s1">html</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf </span><span class="s2">import </span><span class="s1">settings</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">exceptions </span><span class="s2">import </span><span class="s3">(</span>
+    <span class="s1">RequestDataTooBig</span><span class="s3">,</span>
+    <span class="s1">SuspiciousMultipartForm</span><span class="s3">,</span>
+    <span class="s1">TooManyFieldsSent</span><span class="s3">,</span>
+    <span class="s1">TooManyFilesSent</span><span class="s3">,</span>
+<span class="s3">)</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">files</span><span class="s3">.</span><span class="s1">uploadhandler </span><span class="s2">import </span><span class="s1">SkipFile</span><span class="s3">, </span><span class="s1">StopFutureHandlers</span><span class="s3">, </span><span class="s1">StopUpload</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">datastructures </span><span class="s2">import </span><span class="s1">MultiValueDict</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">encoding </span><span class="s2">import </span><span class="s1">force_str</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">http </span><span class="s2">import </span><span class="s1">parse_header_parameters</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">regex_helper </span><span class="s2">import </span><span class="s1">_lazy_re_compile</span>
+
+<span class="s1">__all__ </span><span class="s3">= (</span><span class="s4">&quot;MultiPartParser&quot;</span><span class="s3">, </span><span class="s4">&quot;MultiPartParserError&quot;</span><span class="s3">, </span><span class="s4">&quot;InputStreamExhausted&quot;</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">MultiPartParserError</span><span class="s3">(</span><span class="s1">Exception</span><span class="s3">):</span>
+    <span class="s2">pass</span>
+
+
+<span class="s2">class </span><span class="s1">InputStreamExhausted</span><span class="s3">(</span><span class="s1">Exception</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    No more reads are allowed from this device. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">pass</span>
+
+
+<span class="s1">RAW </span><span class="s3">= </span><span class="s4">&quot;raw&quot;</span>
+<span class="s1">FILE </span><span class="s3">= </span><span class="s4">&quot;file&quot;</span>
+<span class="s1">FIELD </span><span class="s3">= </span><span class="s4">&quot;field&quot;</span>
+<span class="s1">FIELD_TYPES </span><span class="s3">= </span><span class="s1">frozenset</span><span class="s3">([</span><span class="s1">FIELD</span><span class="s3">, </span><span class="s1">RAW</span><span class="s3">])</span>
+
+
+<span class="s2">class </span><span class="s1">MultiPartParser</span><span class="s3">:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    An RFC 7578 multipart/form-data parser. 
+ 
+    ``MultiValueDict.parse()`` reads the input stream in ``chunk_size`` chunks 
+    and returns a tuple of ``(MultiValueDict(POST), MultiValueDict(FILES))``. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">boundary_re </span><span class="s3">= </span><span class="s1">_lazy_re_compile</span><span class="s3">(</span><span class="s4">r&quot;[ -~]{0,200}[!-~]&quot;</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">META</span><span class="s3">, </span><span class="s1">input_data</span><span class="s3">, </span><span class="s1">upload_handlers</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Initialize the MultiPartParser object. 
+ 
+        :META: 
+            The standard ``META`` dictionary in Django request objects. 
+        :input_data: 
+            The raw post data, as a file-like object. 
+        :upload_handlers: 
+            A list of UploadHandler instances that perform operations on the 
+            uploaded data. 
+        :encoding: 
+            The encoding with which to treat the incoming data. 
+        &quot;&quot;&quot;</span>
+        <span class="s5"># Content-Type should contain multipart and the boundary information.</span>
+        <span class="s1">content_type </span><span class="s3">= </span><span class="s1">META</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;CONTENT_TYPE&quot;</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s3">)</span>
+        <span class="s2">if not </span><span class="s1">content_type</span><span class="s3">.</span><span class="s1">startswith</span><span class="s3">(</span><span class="s4">&quot;multipart/&quot;</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">MultiPartParserError</span><span class="s3">(</span><span class="s4">&quot;Invalid Content-Type: %s&quot; </span><span class="s3">% </span><span class="s1">content_type</span><span class="s3">)</span>
+
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">content_type</span><span class="s3">.</span><span class="s1">encode</span><span class="s3">(</span><span class="s4">&quot;ascii&quot;</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">UnicodeEncodeError</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">MultiPartParserError</span><span class="s3">(</span>
+                <span class="s4">&quot;Invalid non-ASCII Content-Type in multipart: %s&quot;</span>
+                <span class="s3">% </span><span class="s1">force_str</span><span class="s3">(</span><span class="s1">content_type</span><span class="s3">)</span>
+            <span class="s3">)</span>
+
+        <span class="s5"># Parse the header to get the boundary to split the parts.</span>
+        <span class="s1">_</span><span class="s3">, </span><span class="s1">opts </span><span class="s3">= </span><span class="s1">parse_header_parameters</span><span class="s3">(</span><span class="s1">content_type</span><span class="s3">)</span>
+        <span class="s1">boundary </span><span class="s3">= </span><span class="s1">opts</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;boundary&quot;</span><span class="s3">)</span>
+        <span class="s2">if not </span><span class="s1">boundary </span><span class="s2">or not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">boundary_re</span><span class="s3">.</span><span class="s1">fullmatch</span><span class="s3">(</span><span class="s1">boundary</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">MultiPartParserError</span><span class="s3">(</span>
+                <span class="s4">&quot;Invalid boundary in multipart: %s&quot; </span><span class="s3">% </span><span class="s1">force_str</span><span class="s3">(</span><span class="s1">boundary</span><span class="s3">)</span>
+            <span class="s3">)</span>
+
+        <span class="s5"># Content-Length should contain the length of the body we are about</span>
+        <span class="s5"># to receive.</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">content_length </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">META</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;CONTENT_LENGTH&quot;</span><span class="s3">, </span><span class="s6">0</span><span class="s3">))</span>
+        <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+            <span class="s1">content_length </span><span class="s3">= </span><span class="s6">0</span>
+
+        <span class="s2">if </span><span class="s1">content_length </span><span class="s3">&lt; </span><span class="s6">0</span><span class="s3">:</span>
+            <span class="s5"># This means we shouldn't continue...raise an error.</span>
+            <span class="s2">raise </span><span class="s1">MultiPartParserError</span><span class="s3">(</span><span class="s4">&quot;Invalid content length: %r&quot; </span><span class="s3">% </span><span class="s1">content_length</span><span class="s3">)</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_boundary </span><span class="s3">= </span><span class="s1">boundary</span><span class="s3">.</span><span class="s1">encode</span><span class="s3">(</span><span class="s4">&quot;ascii&quot;</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_input_data </span><span class="s3">= </span><span class="s1">input_data</span>
+
+        <span class="s5"># For compatibility with low-level network APIs (with 32-bit integers),</span>
+        <span class="s5"># the chunk size should be &lt; 2^31, but still divisible by 4.</span>
+        <span class="s1">possible_sizes </span><span class="s3">= [</span><span class="s1">x</span><span class="s3">.</span><span class="s1">chunk_size </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">upload_handlers </span><span class="s2">if </span><span class="s1">x</span><span class="s3">.</span><span class="s1">chunk_size</span><span class="s3">]</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_chunk_size </span><span class="s3">= </span><span class="s1">min</span><span class="s3">([</span><span class="s6">2</span><span class="s3">**</span><span class="s6">31 </span><span class="s3">- </span><span class="s6">4</span><span class="s3">] + </span><span class="s1">possible_sizes</span><span class="s3">)</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_meta </span><span class="s3">= </span><span class="s1">META</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_encoding </span><span class="s3">= </span><span class="s1">encoding </span><span class="s2">or </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">DEFAULT_CHARSET</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_content_length </span><span class="s3">= </span><span class="s1">content_length</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_upload_handlers </span><span class="s3">= </span><span class="s1">upload_handlers</span>
+
+    <span class="s2">def </span><span class="s1">parse</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s5"># Call the actual parse routine and close all open files in case of</span>
+        <span class="s5"># errors. This is needed because if exceptions are thrown the</span>
+        <span class="s5"># MultiPartParser will not be garbage collected immediately and</span>
+        <span class="s5"># resources would be kept alive. This is only needed for errors because</span>
+        <span class="s5"># the Request object closes all uploaded files at the end of the</span>
+        <span class="s5"># request.</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_parse</span><span class="s3">()</span>
+        <span class="s2">except </span><span class="s1">Exception</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s4">&quot;_files&quot;</span><span class="s3">):</span>
+                <span class="s2">for </span><span class="s1">_</span><span class="s3">, </span><span class="s1">files </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_files</span><span class="s3">.</span><span class="s1">lists</span><span class="s3">():</span>
+                    <span class="s2">for </span><span class="s1">fileobj </span><span class="s2">in </span><span class="s1">files</span><span class="s3">:</span>
+                        <span class="s1">fileobj</span><span class="s3">.</span><span class="s1">close</span><span class="s3">()</span>
+            <span class="s2">raise</span>
+
+    <span class="s2">def </span><span class="s1">_parse</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Parse the POST data and break it into a FILES MultiValueDict and a POST 
+        MultiValueDict. 
+ 
+        Return a tuple containing the POST and FILES dictionary, respectively. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">http </span><span class="s2">import </span><span class="s1">QueryDict</span>
+
+        <span class="s1">encoding </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_encoding</span>
+        <span class="s1">handlers </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_upload_handlers</span>
+
+        <span class="s5"># HTTP spec says that Content-Length &gt;= 0 is valid</span>
+        <span class="s5"># handling content-length == 0 before continuing</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_content_length </span><span class="s3">== </span><span class="s6">0</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">QueryDict</span><span class="s3">(</span><span class="s1">encoding</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_encoding</span><span class="s3">), </span><span class="s1">MultiValueDict</span><span class="s3">()</span>
+
+        <span class="s5"># See if any of the handlers take care of the parsing.</span>
+        <span class="s5"># This allows overriding everything if need be.</span>
+        <span class="s2">for </span><span class="s1">handler </span><span class="s2">in </span><span class="s1">handlers</span><span class="s3">:</span>
+            <span class="s1">result </span><span class="s3">= </span><span class="s1">handler</span><span class="s3">.</span><span class="s1">handle_raw_input</span><span class="s3">(</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">_input_data</span><span class="s3">,</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">,</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">_content_length</span><span class="s3">,</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">_boundary</span><span class="s3">,</span>
+                <span class="s1">encoding</span><span class="s3">,</span>
+            <span class="s3">)</span>
+            <span class="s5"># Check to see if it was handled</span>
+            <span class="s2">if </span><span class="s1">result </span><span class="s2">is not None</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">result</span><span class="s3">[</span><span class="s6">0</span><span class="s3">], </span><span class="s1">result</span><span class="s3">[</span><span class="s6">1</span><span class="s3">]</span>
+
+        <span class="s5"># Create the data structures to be used later.</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_post </span><span class="s3">= </span><span class="s1">QueryDict</span><span class="s3">(</span><span class="s1">mutable</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_files </span><span class="s3">= </span><span class="s1">MultiValueDict</span><span class="s3">()</span>
+
+        <span class="s5"># Instantiate the parser and stream:</span>
+        <span class="s1">stream </span><span class="s3">= </span><span class="s1">LazyStream</span><span class="s3">(</span><span class="s1">ChunkIter</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_input_data</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_chunk_size</span><span class="s3">))</span>
+
+        <span class="s5"># Whether or not to signal a file-completion at the beginning of the loop.</span>
+        <span class="s1">old_field_name </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s1">counters </span><span class="s3">= [</span><span class="s6">0</span><span class="s3">] * </span><span class="s1">len</span><span class="s3">(</span><span class="s1">handlers</span><span class="s3">)</span>
+
+        <span class="s5"># Number of bytes that have been read.</span>
+        <span class="s1">num_bytes_read </span><span class="s3">= </span><span class="s6">0</span>
+        <span class="s5"># To count the number of keys in the request.</span>
+        <span class="s1">num_post_keys </span><span class="s3">= </span><span class="s6">0</span>
+        <span class="s5"># To count the number of files in the request.</span>
+        <span class="s1">num_files </span><span class="s3">= </span><span class="s6">0</span>
+        <span class="s5"># To limit the amount of data read from the request.</span>
+        <span class="s1">read_size </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s5"># Whether a file upload is finished.</span>
+        <span class="s1">uploaded_file </span><span class="s3">= </span><span class="s2">True</span>
+
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">for </span><span class="s1">item_type</span><span class="s3">, </span><span class="s1">meta_data</span><span class="s3">, </span><span class="s1">field_stream </span><span class="s2">in </span><span class="s1">Parser</span><span class="s3">(</span><span class="s1">stream</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_boundary</span><span class="s3">):</span>
+                <span class="s2">if </span><span class="s1">old_field_name</span><span class="s3">:</span>
+                    <span class="s5"># We run this at the beginning of the next loop</span>
+                    <span class="s5"># since we cannot be sure a file is complete until</span>
+                    <span class="s5"># we hit the next boundary/part of the multipart content.</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">handle_file_complete</span><span class="s3">(</span><span class="s1">old_field_name</span><span class="s3">, </span><span class="s1">counters</span><span class="s3">)</span>
+                    <span class="s1">old_field_name </span><span class="s3">= </span><span class="s2">None</span>
+                    <span class="s1">uploaded_file </span><span class="s3">= </span><span class="s2">True</span>
+
+                <span class="s2">if </span><span class="s3">(</span>
+                    <span class="s1">item_type </span><span class="s2">in </span><span class="s1">FIELD_TYPES</span>
+                    <span class="s2">and </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">DATA_UPLOAD_MAX_NUMBER_FIELDS </span><span class="s2">is not None</span>
+                <span class="s3">):</span>
+                    <span class="s5"># Avoid storing more than DATA_UPLOAD_MAX_NUMBER_FIELDS.</span>
+                    <span class="s1">num_post_keys </span><span class="s3">+= </span><span class="s6">1</span>
+                    <span class="s5"># 2 accounts for empty raw fields before and after the</span>
+                    <span class="s5"># last boundary.</span>
+                    <span class="s2">if </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">DATA_UPLOAD_MAX_NUMBER_FIELDS </span><span class="s3">+ </span><span class="s6">2 </span><span class="s3">&lt; </span><span class="s1">num_post_keys</span><span class="s3">:</span>
+                        <span class="s2">raise </span><span class="s1">TooManyFieldsSent</span><span class="s3">(</span>
+                            <span class="s4">&quot;The number of GET/POST parameters exceeded &quot;</span>
+                            <span class="s4">&quot;settings.DATA_UPLOAD_MAX_NUMBER_FIELDS.&quot;</span>
+                        <span class="s3">)</span>
+
+                <span class="s2">try</span><span class="s3">:</span>
+                    <span class="s1">disposition </span><span class="s3">= </span><span class="s1">meta_data</span><span class="s3">[</span><span class="s4">&quot;content-disposition&quot;</span><span class="s3">][</span><span class="s6">1</span><span class="s3">]</span>
+                    <span class="s1">field_name </span><span class="s3">= </span><span class="s1">disposition</span><span class="s3">[</span><span class="s4">&quot;name&quot;</span><span class="s3">].</span><span class="s1">strip</span><span class="s3">()</span>
+                <span class="s2">except </span><span class="s3">(</span><span class="s1">KeyError</span><span class="s3">, </span><span class="s1">IndexError</span><span class="s3">, </span><span class="s1">AttributeError</span><span class="s3">):</span>
+                    <span class="s2">continue</span>
+
+                <span class="s1">transfer_encoding </span><span class="s3">= </span><span class="s1">meta_data</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;content-transfer-encoding&quot;</span><span class="s3">)</span>
+                <span class="s2">if </span><span class="s1">transfer_encoding </span><span class="s2">is not None</span><span class="s3">:</span>
+                    <span class="s1">transfer_encoding </span><span class="s3">= </span><span class="s1">transfer_encoding</span><span class="s3">[</span><span class="s6">0</span><span class="s3">].</span><span class="s1">strip</span><span class="s3">()</span>
+                <span class="s1">field_name </span><span class="s3">= </span><span class="s1">force_str</span><span class="s3">(</span><span class="s1">field_name</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">, </span><span class="s1">errors</span><span class="s3">=</span><span class="s4">&quot;replace&quot;</span><span class="s3">)</span>
+
+                <span class="s2">if </span><span class="s1">item_type </span><span class="s3">== </span><span class="s1">FIELD</span><span class="s3">:</span>
+                    <span class="s5"># Avoid reading more than DATA_UPLOAD_MAX_MEMORY_SIZE.</span>
+                    <span class="s2">if </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">DATA_UPLOAD_MAX_MEMORY_SIZE </span><span class="s2">is not None</span><span class="s3">:</span>
+                        <span class="s1">read_size </span><span class="s3">= (</span>
+                            <span class="s1">settings</span><span class="s3">.</span><span class="s1">DATA_UPLOAD_MAX_MEMORY_SIZE </span><span class="s3">- </span><span class="s1">num_bytes_read</span>
+                        <span class="s3">)</span>
+
+                    <span class="s5"># This is a post field, we can just set it in the post</span>
+                    <span class="s2">if </span><span class="s1">transfer_encoding </span><span class="s3">== </span><span class="s4">&quot;base64&quot;</span><span class="s3">:</span>
+                        <span class="s1">raw_data </span><span class="s3">= </span><span class="s1">field_stream</span><span class="s3">.</span><span class="s1">read</span><span class="s3">(</span><span class="s1">size</span><span class="s3">=</span><span class="s1">read_size</span><span class="s3">)</span>
+                        <span class="s1">num_bytes_read </span><span class="s3">+= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">raw_data</span><span class="s3">)</span>
+                        <span class="s2">try</span><span class="s3">:</span>
+                            <span class="s1">data </span><span class="s3">= </span><span class="s1">base64</span><span class="s3">.</span><span class="s1">b64decode</span><span class="s3">(</span><span class="s1">raw_data</span><span class="s3">)</span>
+                        <span class="s2">except </span><span class="s1">binascii</span><span class="s3">.</span><span class="s1">Error</span><span class="s3">:</span>
+                            <span class="s1">data </span><span class="s3">= </span><span class="s1">raw_data</span>
+                    <span class="s2">else</span><span class="s3">:</span>
+                        <span class="s1">data </span><span class="s3">= </span><span class="s1">field_stream</span><span class="s3">.</span><span class="s1">read</span><span class="s3">(</span><span class="s1">size</span><span class="s3">=</span><span class="s1">read_size</span><span class="s3">)</span>
+                        <span class="s1">num_bytes_read </span><span class="s3">+= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">data</span><span class="s3">)</span>
+
+                    <span class="s5"># Add two here to make the check consistent with the</span>
+                    <span class="s5"># x-www-form-urlencoded check that includes '&amp;='.</span>
+                    <span class="s1">num_bytes_read </span><span class="s3">+= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">field_name</span><span class="s3">) + </span><span class="s6">2</span>
+                    <span class="s2">if </span><span class="s3">(</span>
+                        <span class="s1">settings</span><span class="s3">.</span><span class="s1">DATA_UPLOAD_MAX_MEMORY_SIZE </span><span class="s2">is not None</span>
+                        <span class="s2">and </span><span class="s1">num_bytes_read </span><span class="s3">&gt; </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">DATA_UPLOAD_MAX_MEMORY_SIZE</span>
+                    <span class="s3">):</span>
+                        <span class="s2">raise </span><span class="s1">RequestDataTooBig</span><span class="s3">(</span>
+                            <span class="s4">&quot;Request body exceeded &quot;</span>
+                            <span class="s4">&quot;settings.DATA_UPLOAD_MAX_MEMORY_SIZE.&quot;</span>
+                        <span class="s3">)</span>
+
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">_post</span><span class="s3">.</span><span class="s1">appendlist</span><span class="s3">(</span>
+                        <span class="s1">field_name</span><span class="s3">, </span><span class="s1">force_str</span><span class="s3">(</span><span class="s1">data</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">, </span><span class="s1">errors</span><span class="s3">=</span><span class="s4">&quot;replace&quot;</span><span class="s3">)</span>
+                    <span class="s3">)</span>
+                <span class="s2">elif </span><span class="s1">item_type </span><span class="s3">== </span><span class="s1">FILE</span><span class="s3">:</span>
+                    <span class="s5"># Avoid storing more than DATA_UPLOAD_MAX_NUMBER_FILES.</span>
+                    <span class="s1">num_files </span><span class="s3">+= </span><span class="s6">1</span>
+                    <span class="s2">if </span><span class="s3">(</span>
+                        <span class="s1">settings</span><span class="s3">.</span><span class="s1">DATA_UPLOAD_MAX_NUMBER_FILES </span><span class="s2">is not None</span>
+                        <span class="s2">and </span><span class="s1">num_files </span><span class="s3">&gt; </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">DATA_UPLOAD_MAX_NUMBER_FILES</span>
+                    <span class="s3">):</span>
+                        <span class="s2">raise </span><span class="s1">TooManyFilesSent</span><span class="s3">(</span>
+                            <span class="s4">&quot;The number of files exceeded &quot;</span>
+                            <span class="s4">&quot;settings.DATA_UPLOAD_MAX_NUMBER_FILES.&quot;</span>
+                        <span class="s3">)</span>
+                    <span class="s5"># This is a file, use the handler...</span>
+                    <span class="s1">file_name </span><span class="s3">= </span><span class="s1">disposition</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;filename&quot;</span><span class="s3">)</span>
+                    <span class="s2">if </span><span class="s1">file_name</span><span class="s3">:</span>
+                        <span class="s1">file_name </span><span class="s3">= </span><span class="s1">force_str</span><span class="s3">(</span><span class="s1">file_name</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">, </span><span class="s1">errors</span><span class="s3">=</span><span class="s4">&quot;replace&quot;</span><span class="s3">)</span>
+                        <span class="s1">file_name </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">sanitize_file_name</span><span class="s3">(</span><span class="s1">file_name</span><span class="s3">)</span>
+                    <span class="s2">if not </span><span class="s1">file_name</span><span class="s3">:</span>
+                        <span class="s2">continue</span>
+
+                    <span class="s1">content_type</span><span class="s3">, </span><span class="s1">content_type_extra </span><span class="s3">= </span><span class="s1">meta_data</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span>
+                        <span class="s4">&quot;content-type&quot;</span><span class="s3">, (</span><span class="s4">&quot;&quot;</span><span class="s3">, {})</span>
+                    <span class="s3">)</span>
+                    <span class="s1">content_type </span><span class="s3">= </span><span class="s1">content_type</span><span class="s3">.</span><span class="s1">strip</span><span class="s3">()</span>
+                    <span class="s1">charset </span><span class="s3">= </span><span class="s1">content_type_extra</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;charset&quot;</span><span class="s3">)</span>
+
+                    <span class="s2">try</span><span class="s3">:</span>
+                        <span class="s1">content_length </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">meta_data</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;content-length&quot;</span><span class="s3">)[</span><span class="s6">0</span><span class="s3">])</span>
+                    <span class="s2">except </span><span class="s3">(</span><span class="s1">IndexError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">, </span><span class="s1">ValueError</span><span class="s3">):</span>
+                        <span class="s1">content_length </span><span class="s3">= </span><span class="s2">None</span>
+
+                    <span class="s1">counters </span><span class="s3">= [</span><span class="s6">0</span><span class="s3">] * </span><span class="s1">len</span><span class="s3">(</span><span class="s1">handlers</span><span class="s3">)</span>
+                    <span class="s1">uploaded_file </span><span class="s3">= </span><span class="s2">False</span>
+                    <span class="s2">try</span><span class="s3">:</span>
+                        <span class="s2">for </span><span class="s1">handler </span><span class="s2">in </span><span class="s1">handlers</span><span class="s3">:</span>
+                            <span class="s2">try</span><span class="s3">:</span>
+                                <span class="s1">handler</span><span class="s3">.</span><span class="s1">new_file</span><span class="s3">(</span>
+                                    <span class="s1">field_name</span><span class="s3">,</span>
+                                    <span class="s1">file_name</span><span class="s3">,</span>
+                                    <span class="s1">content_type</span><span class="s3">,</span>
+                                    <span class="s1">content_length</span><span class="s3">,</span>
+                                    <span class="s1">charset</span><span class="s3">,</span>
+                                    <span class="s1">content_type_extra</span><span class="s3">,</span>
+                                <span class="s3">)</span>
+                            <span class="s2">except </span><span class="s1">StopFutureHandlers</span><span class="s3">:</span>
+                                <span class="s2">break</span>
+
+                        <span class="s2">for </span><span class="s1">chunk </span><span class="s2">in </span><span class="s1">field_stream</span><span class="s3">:</span>
+                            <span class="s2">if </span><span class="s1">transfer_encoding </span><span class="s3">== </span><span class="s4">&quot;base64&quot;</span><span class="s3">:</span>
+                                <span class="s5"># We only special-case base64 transfer encoding</span>
+                                <span class="s5"># We should always decode base64 chunks by</span>
+                                <span class="s5"># multiple of 4, ignoring whitespace.</span>
+
+                                <span class="s1">stripped_chunk </span><span class="s3">= </span><span class="s7">b&quot;&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">chunk</span><span class="s3">.</span><span class="s1">split</span><span class="s3">())</span>
+
+                                <span class="s1">remaining </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">stripped_chunk</span><span class="s3">) % </span><span class="s6">4</span>
+                                <span class="s2">while </span><span class="s1">remaining </span><span class="s3">!= </span><span class="s6">0</span><span class="s3">:</span>
+                                    <span class="s1">over_chunk </span><span class="s3">= </span><span class="s1">field_stream</span><span class="s3">.</span><span class="s1">read</span><span class="s3">(</span><span class="s6">4 </span><span class="s3">- </span><span class="s1">remaining</span><span class="s3">)</span>
+                                    <span class="s2">if not </span><span class="s1">over_chunk</span><span class="s3">:</span>
+                                        <span class="s2">break</span>
+                                    <span class="s1">stripped_chunk </span><span class="s3">+= </span><span class="s7">b&quot;&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">over_chunk</span><span class="s3">.</span><span class="s1">split</span><span class="s3">())</span>
+                                    <span class="s1">remaining </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">stripped_chunk</span><span class="s3">) % </span><span class="s6">4</span>
+
+                                <span class="s2">try</span><span class="s3">:</span>
+                                    <span class="s1">chunk </span><span class="s3">= </span><span class="s1">base64</span><span class="s3">.</span><span class="s1">b64decode</span><span class="s3">(</span><span class="s1">stripped_chunk</span><span class="s3">)</span>
+                                <span class="s2">except </span><span class="s1">Exception </span><span class="s2">as </span><span class="s1">exc</span><span class="s3">:</span>
+                                    <span class="s5"># Since this is only a chunk, any error is</span>
+                                    <span class="s5"># an unfixable error.</span>
+                                    <span class="s2">raise </span><span class="s1">MultiPartParserError</span><span class="s3">(</span>
+                                        <span class="s4">&quot;Could not decode base64 data.&quot;</span>
+                                    <span class="s3">) </span><span class="s2">from </span><span class="s1">exc</span>
+
+                            <span class="s2">for </span><span class="s1">i</span><span class="s3">, </span><span class="s1">handler </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">handlers</span><span class="s3">):</span>
+                                <span class="s1">chunk_length </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">chunk</span><span class="s3">)</span>
+                                <span class="s1">chunk </span><span class="s3">= </span><span class="s1">handler</span><span class="s3">.</span><span class="s1">receive_data_chunk</span><span class="s3">(</span><span class="s1">chunk</span><span class="s3">, </span><span class="s1">counters</span><span class="s3">[</span><span class="s1">i</span><span class="s3">])</span>
+                                <span class="s1">counters</span><span class="s3">[</span><span class="s1">i</span><span class="s3">] += </span><span class="s1">chunk_length</span>
+                                <span class="s2">if </span><span class="s1">chunk </span><span class="s2">is None</span><span class="s3">:</span>
+                                    <span class="s5"># Don't continue if the chunk received by</span>
+                                    <span class="s5"># the handler is None.</span>
+                                    <span class="s2">break</span>
+
+                    <span class="s2">except </span><span class="s1">SkipFile</span><span class="s3">:</span>
+                        <span class="s1">self</span><span class="s3">.</span><span class="s1">_close_files</span><span class="s3">()</span>
+                        <span class="s5"># Just use up the rest of this file...</span>
+                        <span class="s1">exhaust</span><span class="s3">(</span><span class="s1">field_stream</span><span class="s3">)</span>
+                    <span class="s2">else</span><span class="s3">:</span>
+                        <span class="s5"># Handle file upload completions on next iteration.</span>
+                        <span class="s1">old_field_name </span><span class="s3">= </span><span class="s1">field_name</span>
+                <span class="s2">else</span><span class="s3">:</span>
+                    <span class="s5"># If this is neither a FIELD nor a FILE, exhaust the field</span>
+                    <span class="s5"># stream. Note: There could be an error here at some point,</span>
+                    <span class="s5"># but there will be at least two RAW types (before and</span>
+                    <span class="s5"># after the other boundaries). This branch is usually not</span>
+                    <span class="s5"># reached at all, because a missing content-disposition</span>
+                    <span class="s5"># header will skip the whole boundary.</span>
+                    <span class="s1">exhaust</span><span class="s3">(</span><span class="s1">field_stream</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">StopUpload </span><span class="s2">as </span><span class="s1">e</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_close_files</span><span class="s3">()</span>
+            <span class="s2">if not </span><span class="s1">e</span><span class="s3">.</span><span class="s1">connection_reset</span><span class="s3">:</span>
+                <span class="s1">exhaust</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_input_data</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">if not </span><span class="s1">uploaded_file</span><span class="s3">:</span>
+                <span class="s2">for </span><span class="s1">handler </span><span class="s2">in </span><span class="s1">handlers</span><span class="s3">:</span>
+                    <span class="s1">handler</span><span class="s3">.</span><span class="s1">upload_interrupted</span><span class="s3">()</span>
+            <span class="s5"># Make sure that the request data is all fed</span>
+            <span class="s1">exhaust</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_input_data</span><span class="s3">)</span>
+
+        <span class="s5"># Signal that the upload has completed.</span>
+        <span class="s5"># any() shortcircuits if a handler's upload_complete() returns a value.</span>
+        <span class="s1">any</span><span class="s3">(</span><span class="s1">handler</span><span class="s3">.</span><span class="s1">upload_complete</span><span class="s3">() </span><span class="s2">for </span><span class="s1">handler </span><span class="s2">in </span><span class="s1">handlers</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_post</span><span class="s3">.</span><span class="s1">_mutable </span><span class="s3">= </span><span class="s2">False</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_post</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_files</span>
+
+    <span class="s2">def </span><span class="s1">handle_file_complete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">old_field_name</span><span class="s3">, </span><span class="s1">counters</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Handle all the signaling that takes place when a file is complete. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s3">, </span><span class="s1">handler </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_upload_handlers</span><span class="s3">):</span>
+            <span class="s1">file_obj </span><span class="s3">= </span><span class="s1">handler</span><span class="s3">.</span><span class="s1">file_complete</span><span class="s3">(</span><span class="s1">counters</span><span class="s3">[</span><span class="s1">i</span><span class="s3">])</span>
+            <span class="s2">if </span><span class="s1">file_obj</span><span class="s3">:</span>
+                <span class="s5"># If it returns a file object, then set the files dict.</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">_files</span><span class="s3">.</span><span class="s1">appendlist</span><span class="s3">(</span>
+                    <span class="s1">force_str</span><span class="s3">(</span><span class="s1">old_field_name</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_encoding</span><span class="s3">, </span><span class="s1">errors</span><span class="s3">=</span><span class="s4">&quot;replace&quot;</span><span class="s3">),</span>
+                    <span class="s1">file_obj</span><span class="s3">,</span>
+                <span class="s3">)</span>
+                <span class="s2">break</span>
+
+    <span class="s2">def </span><span class="s1">sanitize_file_name</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">file_name</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Sanitize the filename of an upload. 
+ 
+        Remove all possible path separators, even though that might remove more 
+        than actually required by the target system. Filenames that could 
+        potentially cause problems (current/parent dir) are also discarded. 
+ 
+        It should be noted that this function could still return a &quot;filepath&quot; 
+        like &quot;C:some_file.txt&quot; which is handled later on by the storage layer. 
+        So while this function does sanitize filenames to some extent, the 
+        resulting filename should still be considered as untrusted user input. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">file_name </span><span class="s3">= </span><span class="s1">html</span><span class="s3">.</span><span class="s1">unescape</span><span class="s3">(</span><span class="s1">file_name</span><span class="s3">)</span>
+        <span class="s1">file_name </span><span class="s3">= </span><span class="s1">file_name</span><span class="s3">.</span><span class="s1">rsplit</span><span class="s3">(</span><span class="s4">&quot;/&quot;</span><span class="s3">)[-</span><span class="s6">1</span><span class="s3">]</span>
+        <span class="s1">file_name </span><span class="s3">= </span><span class="s1">file_name</span><span class="s3">.</span><span class="s1">rsplit</span><span class="s3">(</span><span class="s4">&quot;</span><span class="s2">\\</span><span class="s4">&quot;</span><span class="s3">)[-</span><span class="s6">1</span><span class="s3">]</span>
+        <span class="s5"># Remove non-printable characters.</span>
+        <span class="s1">file_name </span><span class="s3">= </span><span class="s4">&quot;&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">([</span><span class="s1">char </span><span class="s2">for </span><span class="s1">char </span><span class="s2">in </span><span class="s1">file_name </span><span class="s2">if </span><span class="s1">char</span><span class="s3">.</span><span class="s1">isprintable</span><span class="s3">()])</span>
+
+        <span class="s2">if </span><span class="s1">file_name </span><span class="s2">in </span><span class="s3">{</span><span class="s4">&quot;&quot;</span><span class="s3">, </span><span class="s4">&quot;.&quot;</span><span class="s3">, </span><span class="s4">&quot;..&quot;</span><span class="s3">}:</span>
+            <span class="s2">return None</span>
+        <span class="s2">return </span><span class="s1">file_name</span>
+
+    <span class="s1">IE_sanitize </span><span class="s3">= </span><span class="s1">sanitize_file_name</span>
+
+    <span class="s2">def </span><span class="s1">_close_files</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s5"># Free up all file handles.</span>
+        <span class="s5"># FIXME: this currently assumes that upload handlers store the file as 'file'</span>
+        <span class="s5"># We should document that...</span>
+        <span class="s5"># (Maybe add handler.free_file to complement new_file)</span>
+        <span class="s2">for </span><span class="s1">handler </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_upload_handlers</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">handler</span><span class="s3">, </span><span class="s4">&quot;file&quot;</span><span class="s3">):</span>
+                <span class="s1">handler</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">close</span><span class="s3">()</span>
+
+
+<span class="s2">class </span><span class="s1">LazyStream</span><span class="s3">:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    The LazyStream wrapper allows one to get and &quot;unget&quot; bytes from a stream. 
+ 
+    Given a producer object (an iterator that yields bytestrings), the 
+    LazyStream object will support iteration, reading, and keeping a &quot;look-back&quot; 
+    variable in case you need to &quot;unget&quot; some bytes. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">producer</span><span class="s3">, </span><span class="s1">length</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Every LazyStream must have a producer when instantiated. 
+ 
+        A producer is an iterable that returns a string each time it 
+        is called. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_producer </span><span class="s3">= </span><span class="s1">producer</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_empty </span><span class="s3">= </span><span class="s2">False</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_leftover </span><span class="s3">= </span><span class="s7">b&quot;&quot;</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">length </span><span class="s3">= </span><span class="s1">length</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">position </span><span class="s3">= </span><span class="s6">0</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_remaining </span><span class="s3">= </span><span class="s1">length</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_unget_history </span><span class="s3">= []</span>
+
+    <span class="s2">def </span><span class="s1">tell</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">position</span>
+
+    <span class="s2">def </span><span class="s1">read</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">size</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s2">def </span><span class="s1">parts</span><span class="s3">():</span>
+            <span class="s1">remaining </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_remaining </span><span class="s2">if </span><span class="s1">size </span><span class="s2">is None else </span><span class="s1">size</span>
+            <span class="s5"># do the whole thing in one shot if no limit was provided.</span>
+            <span class="s2">if </span><span class="s1">remaining </span><span class="s2">is None</span><span class="s3">:</span>
+                <span class="s2">yield </span><span class="s7">b&quot;&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">self</span><span class="s3">)</span>
+                <span class="s2">return</span>
+
+            <span class="s5"># otherwise do some bookkeeping to return exactly enough</span>
+            <span class="s5"># of the stream and stashing any extra content we get from</span>
+            <span class="s5"># the producer</span>
+            <span class="s2">while </span><span class="s1">remaining </span><span class="s3">!= </span><span class="s6">0</span><span class="s3">:</span>
+                <span class="s2">assert </span><span class="s1">remaining </span><span class="s3">&gt; </span><span class="s6">0</span><span class="s3">, </span><span class="s4">&quot;remaining bytes to read should never go negative&quot;</span>
+
+                <span class="s2">try</span><span class="s3">:</span>
+                    <span class="s1">chunk </span><span class="s3">= </span><span class="s1">next</span><span class="s3">(</span><span class="s1">self</span><span class="s3">)</span>
+                <span class="s2">except </span><span class="s1">StopIteration</span><span class="s3">:</span>
+                    <span class="s2">return</span>
+                <span class="s2">else</span><span class="s3">:</span>
+                    <span class="s1">emitting </span><span class="s3">= </span><span class="s1">chunk</span><span class="s3">[:</span><span class="s1">remaining</span><span class="s3">]</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">unget</span><span class="s3">(</span><span class="s1">chunk</span><span class="s3">[</span><span class="s1">remaining</span><span class="s3">:])</span>
+                    <span class="s1">remaining </span><span class="s3">-= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">emitting</span><span class="s3">)</span>
+                    <span class="s2">yield </span><span class="s1">emitting</span>
+
+        <span class="s2">return </span><span class="s7">b&quot;&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">parts</span><span class="s3">())</span>
+
+    <span class="s2">def </span><span class="s1">__next__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Used when the exact number of bytes to read is unimportant. 
+ 
+        Return whatever chunk is conveniently returned from the iterator. 
+        Useful to avoid unnecessary bookkeeping if performance is an issue. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_leftover</span><span class="s3">:</span>
+            <span class="s1">output </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_leftover</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_leftover </span><span class="s3">= </span><span class="s7">b&quot;&quot;</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">output </span><span class="s3">= </span><span class="s1">next</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_producer</span><span class="s3">)</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_unget_history </span><span class="s3">= []</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">position </span><span class="s3">+= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">output</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">output</span>
+
+    <span class="s2">def </span><span class="s1">close</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Used to invalidate/disable this lazy stream. 
+ 
+        Replace the producer with an empty list. Any leftover bytes that have 
+        already been read will still be reported upon read() and/or next(). 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_producer </span><span class="s3">= []</span>
+
+    <span class="s2">def </span><span class="s1">__iter__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+    <span class="s2">def </span><span class="s1">unget</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">bytes</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Place bytes back onto the front of the lazy stream. 
+ 
+        Future calls to read() will return those bytes first. The 
+        stream position and thus tell() will be rewound. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">bytes</span><span class="s3">:</span>
+            <span class="s2">return</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_update_unget_history</span><span class="s3">(</span><span class="s1">len</span><span class="s3">(</span><span class="s1">bytes</span><span class="s3">))</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">position </span><span class="s3">-= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bytes</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_leftover </span><span class="s3">= </span><span class="s1">bytes </span><span class="s3">+ </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_leftover</span>
+
+    <span class="s2">def </span><span class="s1">_update_unget_history</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">num_bytes</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Update the unget history as a sanity check to see if we've pushed 
+        back the same number of bytes in one chunk. If we keep ungetting the 
+        same number of bytes many times (here, 50), we're mostly likely in an 
+        infinite loop of some sort. This is usually caused by a 
+        maliciously-malformed MIME request. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_unget_history </span><span class="s3">= [</span><span class="s1">num_bytes</span><span class="s3">] + </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_unget_history</span><span class="s3">[:</span><span class="s6">49</span><span class="s3">]</span>
+        <span class="s1">number_equal </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span>
+            <span class="s3">[</span>
+                <span class="s1">current_number</span>
+                <span class="s2">for </span><span class="s1">current_number </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_unget_history</span>
+                <span class="s2">if </span><span class="s1">current_number </span><span class="s3">== </span><span class="s1">num_bytes</span>
+            <span class="s3">]</span>
+        <span class="s3">)</span>
+
+        <span class="s2">if </span><span class="s1">number_equal </span><span class="s3">&gt; </span><span class="s6">40</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">SuspiciousMultipartForm</span><span class="s3">(</span>
+                <span class="s4">&quot;The multipart parser got stuck, which shouldn't happen with&quot;</span>
+                <span class="s4">&quot; normal uploaded files. Check for malicious upload activity;&quot;</span>
+                <span class="s4">&quot; if there is none, report this to the Django developers.&quot;</span>
+            <span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">ChunkIter</span><span class="s3">:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    An iterable that will yield chunks of data. Given a file-like object as the 
+    constructor, yield chunks of read operations from that object. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">flo</span><span class="s3">, </span><span class="s1">chunk_size</span><span class="s3">=</span><span class="s6">64 </span><span class="s3">* </span><span class="s6">1024</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">flo </span><span class="s3">= </span><span class="s1">flo</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">chunk_size </span><span class="s3">= </span><span class="s1">chunk_size</span>
+
+    <span class="s2">def </span><span class="s1">__next__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">data </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">flo</span><span class="s3">.</span><span class="s1">read</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">chunk_size</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">InputStreamExhausted</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">StopIteration</span><span class="s3">()</span>
+        <span class="s2">if </span><span class="s1">data</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">data</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">StopIteration</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">__iter__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+
+<span class="s2">class </span><span class="s1">InterBoundaryIter</span><span class="s3">:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    A Producer that will iterate over boundaries. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">stream</span><span class="s3">, </span><span class="s1">boundary</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_stream </span><span class="s3">= </span><span class="s1">stream</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_boundary </span><span class="s3">= </span><span class="s1">boundary</span>
+
+    <span class="s2">def </span><span class="s1">__iter__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+    <span class="s2">def </span><span class="s1">__next__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">LazyStream</span><span class="s3">(</span><span class="s1">BoundaryIter</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_stream</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_boundary</span><span class="s3">))</span>
+        <span class="s2">except </span><span class="s1">InputStreamExhausted</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">StopIteration</span><span class="s3">()</span>
+
+
+<span class="s2">class </span><span class="s1">BoundaryIter</span><span class="s3">:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    A Producer that is sensitive to boundaries. 
+ 
+    Will happily yield bytes until a boundary is found. Will yield the bytes 
+    before the boundary, throw away the boundary bytes themselves, and push the 
+    post-boundary bytes back on the stream. 
+ 
+    The future calls to next() after locating the boundary will raise a 
+    StopIteration exception. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">stream</span><span class="s3">, </span><span class="s1">boundary</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_stream </span><span class="s3">= </span><span class="s1">stream</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_boundary </span><span class="s3">= </span><span class="s1">boundary</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_done </span><span class="s3">= </span><span class="s2">False</span>
+        <span class="s5"># rollback an additional six bytes because the format is like</span>
+        <span class="s5"># this: CRLF&lt;boundary&gt;[--CRLF]</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_rollback </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">boundary</span><span class="s3">) + </span><span class="s6">6</span>
+
+        <span class="s5"># Try to use mx fast string search if available. Otherwise</span>
+        <span class="s5"># use Python find. Wrap the latter for consistency.</span>
+        <span class="s1">unused_char </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_stream</span><span class="s3">.</span><span class="s1">read</span><span class="s3">(</span><span class="s6">1</span><span class="s3">)</span>
+        <span class="s2">if not </span><span class="s1">unused_char</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">InputStreamExhausted</span><span class="s3">()</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_stream</span><span class="s3">.</span><span class="s1">unget</span><span class="s3">(</span><span class="s1">unused_char</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">__iter__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+    <span class="s2">def </span><span class="s1">__next__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_done</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">StopIteration</span><span class="s3">()</span>
+
+        <span class="s1">stream </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_stream</span>
+        <span class="s1">rollback </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_rollback</span>
+
+        <span class="s1">bytes_read </span><span class="s3">= </span><span class="s6">0</span>
+        <span class="s1">chunks </span><span class="s3">= []</span>
+        <span class="s2">for </span><span class="s1">bytes </span><span class="s2">in </span><span class="s1">stream</span><span class="s3">:</span>
+            <span class="s1">bytes_read </span><span class="s3">+= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bytes</span><span class="s3">)</span>
+            <span class="s1">chunks</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">bytes</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">bytes_read </span><span class="s3">&gt; </span><span class="s1">rollback</span><span class="s3">:</span>
+                <span class="s2">break</span>
+            <span class="s2">if not </span><span class="s1">bytes</span><span class="s3">:</span>
+                <span class="s2">break</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_done </span><span class="s3">= </span><span class="s2">True</span>
+
+        <span class="s2">if not </span><span class="s1">chunks</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">StopIteration</span><span class="s3">()</span>
+
+        <span class="s1">chunk </span><span class="s3">= </span><span class="s7">b&quot;&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">chunks</span><span class="s3">)</span>
+        <span class="s1">boundary </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_find_boundary</span><span class="s3">(</span><span class="s1">chunk</span><span class="s3">)</span>
+
+        <span class="s2">if </span><span class="s1">boundary</span><span class="s3">:</span>
+            <span class="s1">end</span><span class="s3">, </span><span class="s1">next </span><span class="s3">= </span><span class="s1">boundary</span>
+            <span class="s1">stream</span><span class="s3">.</span><span class="s1">unget</span><span class="s3">(</span><span class="s1">chunk</span><span class="s3">[</span><span class="s1">next</span><span class="s3">:])</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_done </span><span class="s3">= </span><span class="s2">True</span>
+            <span class="s2">return </span><span class="s1">chunk</span><span class="s3">[:</span><span class="s1">end</span><span class="s3">]</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s5"># make sure we don't treat a partial boundary (and</span>
+            <span class="s5"># its separators) as data</span>
+            <span class="s2">if not </span><span class="s1">chunk</span><span class="s3">[:-</span><span class="s1">rollback</span><span class="s3">]:  </span><span class="s5"># and len(chunk) &gt;= (len(self._boundary) + 6):</span>
+                <span class="s5"># There's nothing left, we should just return and mark as done.</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">_done </span><span class="s3">= </span><span class="s2">True</span>
+                <span class="s2">return </span><span class="s1">chunk</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s1">stream</span><span class="s3">.</span><span class="s1">unget</span><span class="s3">(</span><span class="s1">chunk</span><span class="s3">[-</span><span class="s1">rollback</span><span class="s3">:])</span>
+                <span class="s2">return </span><span class="s1">chunk</span><span class="s3">[:-</span><span class="s1">rollback</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">_find_boundary</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">data</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Find a multipart boundary in data. 
+ 
+        Should no boundary exist in the data, return None. Otherwise, return 
+        a tuple containing the indices of the following: 
+         * the end of current encapsulation 
+         * the start of the next encapsulation 
+        &quot;&quot;&quot;</span>
+        <span class="s1">index </span><span class="s3">= </span><span class="s1">data</span><span class="s3">.</span><span class="s1">find</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_boundary</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">index </span><span class="s3">&lt; </span><span class="s6">0</span><span class="s3">:</span>
+            <span class="s2">return None</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">end </span><span class="s3">= </span><span class="s1">index</span>
+            <span class="s1">next </span><span class="s3">= </span><span class="s1">index </span><span class="s3">+ </span><span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_boundary</span><span class="s3">)</span>
+            <span class="s5"># backup over CRLF</span>
+            <span class="s1">last </span><span class="s3">= </span><span class="s1">max</span><span class="s3">(</span><span class="s6">0</span><span class="s3">, </span><span class="s1">end </span><span class="s3">- </span><span class="s6">1</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">data</span><span class="s3">[</span><span class="s1">last </span><span class="s3">: </span><span class="s1">last </span><span class="s3">+ </span><span class="s6">1</span><span class="s3">] == </span><span class="s7">b&quot;</span><span class="s2">\n</span><span class="s7">&quot;</span><span class="s3">:</span>
+                <span class="s1">end </span><span class="s3">-= </span><span class="s6">1</span>
+            <span class="s1">last </span><span class="s3">= </span><span class="s1">max</span><span class="s3">(</span><span class="s6">0</span><span class="s3">, </span><span class="s1">end </span><span class="s3">- </span><span class="s6">1</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">data</span><span class="s3">[</span><span class="s1">last </span><span class="s3">: </span><span class="s1">last </span><span class="s3">+ </span><span class="s6">1</span><span class="s3">] == </span><span class="s7">b&quot;</span><span class="s2">\r</span><span class="s7">&quot;</span><span class="s3">:</span>
+                <span class="s1">end </span><span class="s3">-= </span><span class="s6">1</span>
+            <span class="s2">return </span><span class="s1">end</span><span class="s3">, </span><span class="s1">next</span>
+
+
+<span class="s2">def </span><span class="s1">exhaust</span><span class="s3">(</span><span class="s1">stream_or_iterable</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Exhaust an iterator or stream.&quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">iterator </span><span class="s3">= </span><span class="s1">iter</span><span class="s3">(</span><span class="s1">stream_or_iterable</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">TypeError</span><span class="s3">:</span>
+        <span class="s1">iterator </span><span class="s3">= </span><span class="s1">ChunkIter</span><span class="s3">(</span><span class="s1">stream_or_iterable</span><span class="s3">, </span><span class="s6">16384</span><span class="s3">)</span>
+    <span class="s1">collections</span><span class="s3">.</span><span class="s1">deque</span><span class="s3">(</span><span class="s1">iterator</span><span class="s3">, </span><span class="s1">maxlen</span><span class="s3">=</span><span class="s6">0</span><span class="s3">)  </span><span class="s5"># consume iterator quickly.</span>
+
+
+<span class="s2">def </span><span class="s1">parse_boundary_stream</span><span class="s3">(</span><span class="s1">stream</span><span class="s3">, </span><span class="s1">max_header_size</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Parse one and exactly one stream that encapsulates a boundary. 
+    &quot;&quot;&quot;</span>
+    <span class="s5"># Stream at beginning of header, look for end of header</span>
+    <span class="s5"># and parse it if found. The header must fit within one</span>
+    <span class="s5"># chunk.</span>
+    <span class="s1">chunk </span><span class="s3">= </span><span class="s1">stream</span><span class="s3">.</span><span class="s1">read</span><span class="s3">(</span><span class="s1">max_header_size</span><span class="s3">)</span>
+
+    <span class="s5"># 'find' returns the top of these four bytes, so we'll</span>
+    <span class="s5"># need to munch them later to prevent them from polluting</span>
+    <span class="s5"># the payload.</span>
+    <span class="s1">header_end </span><span class="s3">= </span><span class="s1">chunk</span><span class="s3">.</span><span class="s1">find</span><span class="s3">(</span><span class="s7">b&quot;</span><span class="s2">\r\n\r\n</span><span class="s7">&quot;</span><span class="s3">)</span>
+
+    <span class="s2">if </span><span class="s1">header_end </span><span class="s3">== -</span><span class="s6">1</span><span class="s3">:</span>
+        <span class="s5"># we find no header, so we just mark this fact and pass on</span>
+        <span class="s5"># the stream verbatim</span>
+        <span class="s1">stream</span><span class="s3">.</span><span class="s1">unget</span><span class="s3">(</span><span class="s1">chunk</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s3">(</span><span class="s1">RAW</span><span class="s3">, {}, </span><span class="s1">stream</span><span class="s3">)</span>
+
+    <span class="s1">header </span><span class="s3">= </span><span class="s1">chunk</span><span class="s3">[:</span><span class="s1">header_end</span><span class="s3">]</span>
+
+    <span class="s5"># here we place any excess chunk back onto the stream, as</span>
+    <span class="s5"># well as throwing away the CRLFCRLF bytes from above.</span>
+    <span class="s1">stream</span><span class="s3">.</span><span class="s1">unget</span><span class="s3">(</span><span class="s1">chunk</span><span class="s3">[</span><span class="s1">header_end </span><span class="s3">+ </span><span class="s6">4 </span><span class="s3">:])</span>
+
+    <span class="s1">TYPE </span><span class="s3">= </span><span class="s1">RAW</span>
+    <span class="s1">outdict </span><span class="s3">= {}</span>
+
+    <span class="s5"># Eliminate blank lines</span>
+    <span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">header</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s7">b&quot;</span><span class="s2">\r\n</span><span class="s7">&quot;</span><span class="s3">):</span>
+        <span class="s5"># This terminology (&quot;main value&quot; and &quot;dictionary of</span>
+        <span class="s5"># parameters&quot;) is from the Python docs.</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">main_value_pair</span><span class="s3">, </span><span class="s1">params </span><span class="s3">= </span><span class="s1">parse_header_parameters</span><span class="s3">(</span><span class="s1">line</span><span class="s3">.</span><span class="s1">decode</span><span class="s3">())</span>
+            <span class="s1">name</span><span class="s3">, </span><span class="s1">value </span><span class="s3">= </span><span class="s1">main_value_pair</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s4">&quot;:&quot;</span><span class="s3">, </span><span class="s6">1</span><span class="s3">)</span>
+            <span class="s1">params </span><span class="s3">= {</span><span class="s1">k</span><span class="s3">: </span><span class="s1">v</span><span class="s3">.</span><span class="s1">encode</span><span class="s3">() </span><span class="s2">for </span><span class="s1">k</span><span class="s3">, </span><span class="s1">v </span><span class="s2">in </span><span class="s1">params</span><span class="s3">.</span><span class="s1">items</span><span class="s3">()}</span>
+        <span class="s2">except </span><span class="s1">ValueError</span><span class="s3">:  </span><span class="s5"># Invalid header.</span>
+            <span class="s2">continue</span>
+
+        <span class="s2">if </span><span class="s1">name </span><span class="s3">== </span><span class="s4">&quot;content-disposition&quot;</span><span class="s3">:</span>
+            <span class="s1">TYPE </span><span class="s3">= </span><span class="s1">FIELD</span>
+            <span class="s2">if </span><span class="s1">params</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;filename&quot;</span><span class="s3">):</span>
+                <span class="s1">TYPE </span><span class="s3">= </span><span class="s1">FILE</span>
+
+        <span class="s1">outdict</span><span class="s3">[</span><span class="s1">name</span><span class="s3">] = </span><span class="s1">value</span><span class="s3">, </span><span class="s1">params</span>
+
+    <span class="s2">if </span><span class="s1">TYPE </span><span class="s3">== </span><span class="s1">RAW</span><span class="s3">:</span>
+        <span class="s1">stream</span><span class="s3">.</span><span class="s1">unget</span><span class="s3">(</span><span class="s1">chunk</span><span class="s3">)</span>
+
+    <span class="s2">return </span><span class="s3">(</span><span class="s1">TYPE</span><span class="s3">, </span><span class="s1">outdict</span><span class="s3">, </span><span class="s1">stream</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">Parser</span><span class="s3">:</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">stream</span><span class="s3">, </span><span class="s1">boundary</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_stream </span><span class="s3">= </span><span class="s1">stream</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_separator </span><span class="s3">= </span><span class="s7">b&quot;--&quot; </span><span class="s3">+ </span><span class="s1">boundary</span>
+
+    <span class="s2">def </span><span class="s1">__iter__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">boundarystream </span><span class="s3">= </span><span class="s1">InterBoundaryIter</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_stream</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_separator</span><span class="s3">)</span>
+        <span class="s2">for </span><span class="s1">sub_stream </span><span class="s2">in </span><span class="s1">boundarystream</span><span class="s3">:</span>
+            <span class="s5"># Iterate over each part</span>
+            <span class="s2">yield </span><span class="s1">parse_boundary_stream</span><span class="s3">(</span><span class="s1">sub_stream</span><span class="s3">, </span><span class="s6">1024</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<html>
+<head>
+<title>delete_selected_confirmation.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #bcbec4;}
+.s1 { color: #d5b778;}
+.s2 { color: #bababa;}
+.s3 { color: #6aab73;}
+.s4 { color: #56a8f5;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+delete_selected_confirmation.html</font>
+</center></td></tr></table>
+<pre><span class="s0">{% extends &quot;admin/base_site.html&quot; %}</span>
+<span class="s0">{% load i18n l10n admin_urls static %}</span>
+
+<span class="s0">{% block extrahead %}</span>
+    <span class="s0">{{ block.super }}</span>
+    <span class="s0">{{ media }}</span>
+    <span class="s1">&lt;script </span><span class="s2">src</span><span class="s3">=&quot;{% static 'admin/js/cancel.js' %}&quot; </span><span class="s2">async</span><span class="s1">&gt;&lt;/script&gt;</span>
+<span class="s0">{% endblock %}</span>
+
+<span class="s0">{% block bodyclass %}{{ block.super }} app-{{ opts.app_label }} model-{{ opts.model_name }} delete-confirmation delete-selected-confirmation{% endblock %}</span>
+
+<span class="s0">{% block breadcrumbs %}</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;breadcrumbs&quot;</span><span class="s1">&gt;</span>
+<span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url 'admin:index' %}&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'Home' %}</span><span class="s1">&lt;/a&gt;</span>
+<span class="s4">&amp;rsaquo; </span><span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url 'admin:app_list' app_label=opts.app_label %}&quot;</span><span class="s1">&gt;</span><span class="s0">{{ opts.app_config.verbose_name }}</span><span class="s1">&lt;/a&gt;</span>
+<span class="s4">&amp;rsaquo; </span><span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url opts|admin_urlname:'changelist' %}&quot;</span><span class="s1">&gt;</span><span class="s0">{{ opts.verbose_name_plural|capfirst }}</span><span class="s1">&lt;/a&gt;</span>
+<span class="s4">&amp;rsaquo; </span><span class="s0">{% translate 'Delete multiple objects' %}</span>
+<span class="s1">&lt;/div&gt;</span>
+<span class="s0">{% endblock %}</span>
+
+<span class="s0">{% block content %}</span>
+<span class="s0">{% if perms_lacking %}</span>
+    <span class="s1">&lt;p&gt;</span><span class="s0">{% blocktranslate %}Deleting the selected {{ objects_name }} would result in deleting related objects, but your account doesn't have permission to delete the following types of objects:{% endblocktranslate %}</span><span class="s1">&lt;/p&gt;</span>
+    <span class="s1">&lt;ul&gt;</span><span class="s0">{{ perms_lacking|unordered_list }}</span><span class="s1">&lt;/ul&gt;</span>
+<span class="s0">{% elif protected %}</span>
+    <span class="s1">&lt;p&gt;</span><span class="s0">{% blocktranslate %}Deleting the selected {{ objects_name }} would require deleting the following protected related objects:{% endblocktranslate %}</span><span class="s1">&lt;/p&gt;</span>
+    <span class="s1">&lt;ul&gt;</span><span class="s0">{{ protected|unordered_list }}</span><span class="s1">&lt;/ul&gt;</span>
+<span class="s0">{% else %}</span>
+    <span class="s1">&lt;p&gt;</span><span class="s0">{% blocktranslate %}Are you sure you want to delete the selected {{ objects_name }}? All of the following objects and their related items will be deleted:{% endblocktranslate %}</span><span class="s1">&lt;/p&gt;</span>
+    <span class="s0">{% include &quot;admin/includes/object_delete_summary.html&quot; %}</span>
+    <span class="s1">&lt;h2&gt;</span><span class="s0">{% translate &quot;Objects&quot; %}</span><span class="s1">&lt;/h2&gt;</span>
+    <span class="s0">{% for deletable_object in deletable_objects %}</span>
+        <span class="s1">&lt;ul&gt;</span><span class="s0">{{ deletable_object|unordered_list }}</span><span class="s1">&lt;/ul&gt;</span>
+    <span class="s0">{% endfor %}</span>
+    <span class="s1">&lt;form </span><span class="s2">method</span><span class="s3">=&quot;post&quot;</span><span class="s1">&gt;</span><span class="s0">{% csrf_token %}</span>
+    <span class="s1">&lt;div&gt;</span>
+    <span class="s0">{% for obj in queryset %}</span>
+    <span class="s1">&lt;input </span><span class="s2">type</span><span class="s3">=&quot;hidden&quot; </span><span class="s2">name</span><span class="s3">=&quot;{{ action_checkbox_name }}&quot; </span><span class="s2">value</span><span class="s3">=&quot;{{ obj.pk|unlocalize }}&quot;</span><span class="s1">&gt;</span>
+    <span class="s0">{% endfor %}</span>
+    <span class="s1">&lt;input </span><span class="s2">type</span><span class="s3">=&quot;hidden&quot; </span><span class="s2">name</span><span class="s3">=&quot;action&quot; </span><span class="s2">value</span><span class="s3">=&quot;delete_selected&quot;</span><span class="s1">&gt;</span>
+    <span class="s1">&lt;input </span><span class="s2">type</span><span class="s3">=&quot;hidden&quot; </span><span class="s2">name</span><span class="s3">=&quot;post&quot; </span><span class="s2">value</span><span class="s3">=&quot;yes&quot;</span><span class="s1">&gt;</span>
+    <span class="s1">&lt;input </span><span class="s2">type</span><span class="s3">=&quot;submit&quot; </span><span class="s2">value</span><span class="s3">=&quot;{% translate 'Yes, I’m sure' %}&quot;</span><span class="s1">&gt;</span>
+    <span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;#&quot; </span><span class="s2">class</span><span class="s3">=&quot;button cancel-link&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate &quot;No, take me back&quot; %}</span><span class="s1">&lt;/a&gt;</span>
+    <span class="s1">&lt;/div&gt;</span>
+    <span class="s1">&lt;/form&gt;</span>
+<span class="s0">{% endif %}</span>
+<span class="s0">{% endblock %}</span>
+</pre>
+</body>
+</html>

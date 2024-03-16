@@ -1,0 +1,121 @@
+<html>
+<head>
+<title>cached.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+cached.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Wrapper class that takes a list of template loaders as an argument and attempts 
+to load templates from them in order, caching the result. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">hashlib</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">template </span><span class="s2">import </span><span class="s1">TemplateDoesNotExist</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">template</span><span class="s3">.</span><span class="s1">backends</span><span class="s3">.</span><span class="s1">django </span><span class="s2">import </span><span class="s1">copy_exception</span>
+
+<span class="s2">from </span><span class="s3">.</span><span class="s1">base </span><span class="s2">import </span><span class="s1">Loader </span><span class="s2">as </span><span class="s1">BaseLoader</span>
+
+
+<span class="s2">class </span><span class="s1">Loader</span><span class="s3">(</span><span class="s1">BaseLoader</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">engine</span><span class="s3">, </span><span class="s1">loaders</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">get_template_cache </span><span class="s3">= {}</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">loaders </span><span class="s3">= </span><span class="s1">engine</span><span class="s3">.</span><span class="s1">get_template_loaders</span><span class="s3">(</span><span class="s1">loaders</span><span class="s3">)</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">engine</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_dirs</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">loader </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">loaders</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">loader</span><span class="s3">, </span><span class="s4">&quot;get_dirs&quot;</span><span class="s3">):</span>
+                <span class="s2">yield from </span><span class="s1">loader</span><span class="s3">.</span><span class="s1">get_dirs</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">get_contents</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">origin</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">origin</span><span class="s3">.</span><span class="s1">loader</span><span class="s3">.</span><span class="s1">get_contents</span><span class="s3">(</span><span class="s1">origin</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_template</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">template_name</span><span class="s3">, </span><span class="s1">skip</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Perform the caching that gives this loader its name. Often many of the 
+        templates attempted will be missing, so memory use is of concern here. 
+        To keep it in check, caching behavior is a little complicated when a 
+        template is not found. See ticket #26306 for more details. 
+ 
+        With template debugging disabled, cache the TemplateDoesNotExist class 
+        for every missing template and raise a new instance of it after 
+        fetching it from the cache. 
+ 
+        With template debugging enabled, a unique TemplateDoesNotExist object 
+        is cached for each missing template to preserve debug data. When 
+        raising an exception, Python sets __traceback__, __context__, and 
+        __cause__ attributes on it. Those attributes can contain references to 
+        all sorts of objects up the call chain and caching them creates a 
+        memory leak. Thus, unraised copies of the exceptions are cached and 
+        copies of those copies are raised after they're fetched from the cache. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">cache_key</span><span class="s3">(</span><span class="s1">template_name</span><span class="s3">, </span><span class="s1">skip</span><span class="s3">)</span>
+        <span class="s1">cached </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_template_cache</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">key</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">cached</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">cached</span><span class="s3">, </span><span class="s1">type</span><span class="s3">) </span><span class="s2">and </span><span class="s1">issubclass</span><span class="s3">(</span><span class="s1">cached</span><span class="s3">, </span><span class="s1">TemplateDoesNotExist</span><span class="s3">):</span>
+                <span class="s2">raise </span><span class="s1">cached</span><span class="s3">(</span><span class="s1">template_name</span><span class="s3">)</span>
+            <span class="s2">elif </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">cached</span><span class="s3">, </span><span class="s1">TemplateDoesNotExist</span><span class="s3">):</span>
+                <span class="s2">raise </span><span class="s1">copy_exception</span><span class="s3">(</span><span class="s1">cached</span><span class="s3">)</span>
+            <span class="s2">return </span><span class="s1">cached</span>
+
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">template </span><span class="s3">= </span><span class="s1">super</span><span class="s3">().</span><span class="s1">get_template</span><span class="s3">(</span><span class="s1">template_name</span><span class="s3">, </span><span class="s1">skip</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">TemplateDoesNotExist </span><span class="s2">as </span><span class="s1">e</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">get_template_cache</span><span class="s3">[</span><span class="s1">key</span><span class="s3">] = (</span>
+                <span class="s1">copy_exception</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) </span><span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">engine</span><span class="s3">.</span><span class="s1">debug </span><span class="s2">else </span><span class="s1">TemplateDoesNotExist</span>
+            <span class="s3">)</span>
+            <span class="s2">raise</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">get_template_cache</span><span class="s3">[</span><span class="s1">key</span><span class="s3">] = </span><span class="s1">template</span>
+
+        <span class="s2">return </span><span class="s1">template</span>
+
+    <span class="s2">def </span><span class="s1">get_template_sources</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">template_name</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">loader </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">loaders</span><span class="s3">:</span>
+            <span class="s2">yield from </span><span class="s1">loader</span><span class="s3">.</span><span class="s1">get_template_sources</span><span class="s3">(</span><span class="s1">template_name</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">cache_key</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">template_name</span><span class="s3">, </span><span class="s1">skip</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Generate a cache key for the template name and skip. 
+ 
+        If skip is provided, only origins that match template_name are included 
+        in the cache key. This ensures each template is only parsed and cached 
+        once if contained in different extend chains like: 
+ 
+            x -&gt; a -&gt; a 
+            y -&gt; a -&gt; a 
+            z -&gt; a -&gt; a 
+        &quot;&quot;&quot;</span>
+        <span class="s1">skip_prefix </span><span class="s3">= </span><span class="s4">&quot;&quot;</span>
+
+        <span class="s2">if </span><span class="s1">skip</span><span class="s3">:</span>
+            <span class="s1">matching </span><span class="s3">= [</span>
+                <span class="s1">origin</span><span class="s3">.</span><span class="s1">name </span><span class="s2">for </span><span class="s1">origin </span><span class="s2">in </span><span class="s1">skip </span><span class="s2">if </span><span class="s1">origin</span><span class="s3">.</span><span class="s1">template_name </span><span class="s3">== </span><span class="s1">template_name</span>
+            <span class="s3">]</span>
+            <span class="s2">if </span><span class="s1">matching</span><span class="s3">:</span>
+                <span class="s1">skip_prefix </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">generate_hash</span><span class="s3">(</span><span class="s1">matching</span><span class="s3">)</span>
+
+        <span class="s2">return </span><span class="s4">&quot;-&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">s </span><span class="s2">for </span><span class="s1">s </span><span class="s2">in </span><span class="s3">(</span><span class="s1">str</span><span class="s3">(</span><span class="s1">template_name</span><span class="s3">), </span><span class="s1">skip_prefix</span><span class="s3">) </span><span class="s2">if </span><span class="s1">s</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">generate_hash</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">values</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">hashlib</span><span class="s3">.</span><span class="s1">sha1</span><span class="s3">(</span><span class="s4">&quot;|&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">values</span><span class="s3">).</span><span class="s1">encode</span><span class="s3">()).</span><span class="s1">hexdigest</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">reset</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Empty the template cache.&quot;</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">get_template_cache</span><span class="s3">.</span><span class="s1">clear</span><span class="s3">()</span>
+</pre>
+</body>
+</html>

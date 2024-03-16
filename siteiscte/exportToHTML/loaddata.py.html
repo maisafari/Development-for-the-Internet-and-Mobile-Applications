@@ -1,0 +1,455 @@
+<html>
+<head>
+<title>loaddata.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #5f826b; font-style: italic;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+loaddata.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">functools</span>
+<span class="s0">import </span><span class="s1">glob</span>
+<span class="s0">import </span><span class="s1">gzip</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+<span class="s0">import </span><span class="s1">zipfile</span>
+<span class="s0">from </span><span class="s1">itertools </span><span class="s0">import </span><span class="s1">product</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core </span><span class="s0">import </span><span class="s1">serializers</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span><span class="s2">, </span><span class="s1">CommandError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">color </span><span class="s0">import </span><span class="s1">no_style</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">parse_apps_and_model_labels</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">,</span>
+    <span class="s1">DatabaseError</span><span class="s2">,</span>
+    <span class="s1">IntegrityError</span><span class="s2">,</span>
+    <span class="s1">connections</span><span class="s2">,</span>
+    <span class="s1">router</span><span class="s2">,</span>
+    <span class="s1">transaction</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+
+<span class="s0">try</span><span class="s2">:</span>
+    <span class="s0">import </span><span class="s1">bz2</span>
+
+    <span class="s1">has_bz2 </span><span class="s2">= </span><span class="s0">True</span>
+<span class="s0">except </span><span class="s1">ImportError</span><span class="s2">:</span>
+    <span class="s1">has_bz2 </span><span class="s2">= </span><span class="s0">False</span>
+
+<span class="s0">try</span><span class="s2">:</span>
+    <span class="s0">import </span><span class="s1">lzma</span>
+
+    <span class="s1">has_lzma </span><span class="s2">= </span><span class="s0">True</span>
+<span class="s0">except </span><span class="s1">ImportError</span><span class="s2">:</span>
+    <span class="s1">has_lzma </span><span class="s2">= </span><span class="s0">False</span>
+
+<span class="s1">READ_STDIN </span><span class="s2">= </span><span class="s3">&quot;-&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= </span><span class="s3">&quot;Installs the named fixture(s) in the database.&quot;</span>
+    <span class="s1">missing_args_message </span><span class="s2">= (</span>
+        <span class="s3">&quot;No database fixture specified. Please provide the path of at least &quot;</span>
+        <span class="s3">&quot;one fixture in the command line.&quot;</span>
+    <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;args&quot;</span><span class="s2">, </span><span class="s1">metavar</span><span class="s2">=</span><span class="s3">&quot;fixture&quot;</span><span class="s2">, </span><span class="s1">nargs</span><span class="s2">=</span><span class="s3">&quot;+&quot;</span><span class="s2">, </span><span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Fixture labels.&quot;</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--database&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Nominates a specific database to load fixtures into. Defaults to the &quot;</span>
+                <span class="s3">'&quot;default&quot; database.'</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--app&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;app_label&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Only look for fixtures in the specified app.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--ignorenonexistent&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;-i&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;ignore&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Ignores entries in the serialized data for fields that do not &quot;</span>
+            <span class="s3">&quot;currently exist on the model.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;-e&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--exclude&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;append&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=[],</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;An app_label or app_label.ModelName to exclude. Can be used multiple &quot;</span>
+                <span class="s3">&quot;times.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--format&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Format of serialized data when reading from stdin.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">fixture_labels</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">ignore </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;ignore&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">using </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;database&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">app_label </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;app_label&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;verbosity&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">excluded_models</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">excluded_apps </span><span class="s2">= </span><span class="s1">parse_apps_and_model_labels</span><span class="s2">(</span>
+            <span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;exclude&quot;</span><span class="s2">]</span>
+        <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">format </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;format&quot;</span><span class="s2">]</span>
+
+        <span class="s0">with </span><span class="s1">transaction</span><span class="s2">.</span><span class="s1">atomic</span><span class="s2">(</span><span class="s1">using</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">using</span><span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">loaddata</span><span class="s2">(</span><span class="s1">fixture_labels</span><span class="s2">)</span>
+
+        <span class="s4"># Close the DB connection -- unless we're still in a transaction. This</span>
+        <span class="s4"># is required as a workaround for an edge case in MySQL: if the same</span>
+        <span class="s4"># connection is used to create tables, load data, and query, the query</span>
+        <span class="s4"># can return incorrect results. See Django #7572, MySQL #37735.</span>
+        <span class="s0">if </span><span class="s1">transaction</span><span class="s2">.</span><span class="s1">get_autocommit</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">using</span><span class="s2">):</span>
+            <span class="s1">connections</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">using</span><span class="s2">].</span><span class="s1">close</span><span class="s2">()</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">compression_formats</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot;A dict mapping format names to (open function, mode arg) tuples.&quot;&quot;&quot;</span>
+        <span class="s4"># Forcing binary mode may be revisited after dropping Python 2 support</span>
+        <span class="s4"># (see #22399).</span>
+        <span class="s1">compression_formats </span><span class="s2">= {</span>
+            <span class="s0">None</span><span class="s2">: (</span><span class="s1">open</span><span class="s2">, </span><span class="s3">&quot;rb&quot;</span><span class="s2">),</span>
+            <span class="s3">&quot;gz&quot;</span><span class="s2">: (</span><span class="s1">gzip</span><span class="s2">.</span><span class="s1">GzipFile</span><span class="s2">, </span><span class="s3">&quot;rb&quot;</span><span class="s2">),</span>
+            <span class="s3">&quot;zip&quot;</span><span class="s2">: (</span><span class="s1">SingleZipReader</span><span class="s2">, </span><span class="s3">&quot;r&quot;</span><span class="s2">),</span>
+            <span class="s3">&quot;stdin&quot;</span><span class="s2">: (</span><span class="s0">lambda </span><span class="s2">*</span><span class="s1">args</span><span class="s2">: </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">stdin</span><span class="s2">, </span><span class="s0">None</span><span class="s2">),</span>
+        <span class="s2">}</span>
+        <span class="s0">if </span><span class="s1">has_bz2</span><span class="s2">:</span>
+            <span class="s1">compression_formats</span><span class="s2">[</span><span class="s3">&quot;bz2&quot;</span><span class="s2">] = (</span><span class="s1">bz2</span><span class="s2">.</span><span class="s1">BZ2File</span><span class="s2">, </span><span class="s3">&quot;r&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">has_lzma</span><span class="s2">:</span>
+            <span class="s1">compression_formats</span><span class="s2">[</span><span class="s3">&quot;lzma&quot;</span><span class="s2">] = (</span><span class="s1">lzma</span><span class="s2">.</span><span class="s1">LZMAFile</span><span class="s2">, </span><span class="s3">&quot;r&quot;</span><span class="s2">)</span>
+            <span class="s1">compression_formats</span><span class="s2">[</span><span class="s3">&quot;xz&quot;</span><span class="s2">] = (</span><span class="s1">lzma</span><span class="s2">.</span><span class="s1">LZMAFile</span><span class="s2">, </span><span class="s3">&quot;r&quot;</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">compression_formats</span>
+
+    <span class="s0">def </span><span class="s1">reset_sequences</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">models</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot;Reset database sequences for the given connection and models.&quot;&quot;&quot;</span>
+        <span class="s1">sequence_sql </span><span class="s2">= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">sequence_reset_sql</span><span class="s2">(</span><span class="s1">no_style</span><span class="s2">(), </span><span class="s1">models</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">sequence_sql</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s6">2</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot;Resetting sequences&quot;</span><span class="s2">)</span>
+            <span class="s0">with </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">cursor</span><span class="s2">() </span><span class="s0">as </span><span class="s1">cursor</span><span class="s2">:</span>
+                <span class="s0">for </span><span class="s1">line </span><span class="s0">in </span><span class="s1">sequence_sql</span><span class="s2">:</span>
+                    <span class="s1">cursor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span><span class="s1">line</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">loaddata</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">fixture_labels</span><span class="s2">):</span>
+        <span class="s1">connection </span><span class="s2">= </span><span class="s1">connections</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">using</span><span class="s2">]</span>
+
+        <span class="s4"># Keep a count of the installed objects and fixtures</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">fixture_count </span><span class="s2">= </span><span class="s6">0</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">loaded_object_count </span><span class="s2">= </span><span class="s6">0</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">fixture_object_count </span><span class="s2">= </span><span class="s6">0</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">models </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">serialization_formats </span><span class="s2">= </span><span class="s1">serializers</span><span class="s2">.</span><span class="s1">get_public_serializer_formats</span><span class="s2">()</span>
+
+        <span class="s4"># Django's test suite repeatedly tries to load initial_data fixtures</span>
+        <span class="s4"># from apps that don't have any fixtures. Because disabling constraint</span>
+        <span class="s4"># checks can be expensive on some database (especially MSSQL), bail</span>
+        <span class="s4"># out early if no fixtures are found.</span>
+        <span class="s0">for </span><span class="s1">fixture_label </span><span class="s0">in </span><span class="s1">fixture_labels</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">find_fixtures</span><span class="s2">(</span><span class="s1">fixture_label</span><span class="s2">):</span>
+                <span class="s0">break</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">objs_with_deferred_fields </span><span class="s2">= []</span>
+        <span class="s0">with </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">constraint_checks_disabled</span><span class="s2">():</span>
+            <span class="s0">for </span><span class="s1">fixture_label </span><span class="s0">in </span><span class="s1">fixture_labels</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">load_label</span><span class="s2">(</span><span class="s1">fixture_label</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">objs_with_deferred_fields</span><span class="s2">:</span>
+                <span class="s1">obj</span><span class="s2">.</span><span class="s1">save_deferred_fields</span><span class="s2">(</span><span class="s1">using</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">using</span><span class="s2">)</span>
+
+        <span class="s4"># Since we disabled constraint checks, we must manually check for</span>
+        <span class="s4"># any invalid keys that might have been added</span>
+        <span class="s1">table_names </span><span class="s2">= [</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">db_table </span><span class="s0">for </span><span class="s1">model </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">]</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">connection</span><span class="s2">.</span><span class="s1">check_constraints</span><span class="s2">(</span><span class="s1">table_names</span><span class="s2">=</span><span class="s1">table_names</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s1">e</span><span class="s2">.</span><span class="s1">args </span><span class="s2">= (</span><span class="s3">&quot;Problem installing fixtures: %s&quot; </span><span class="s2">% </span><span class="s1">e</span><span class="s2">,)</span>
+            <span class="s0">raise</span>
+
+        <span class="s4"># If we found even one object in a fixture, we need to reset the</span>
+        <span class="s4"># database sequences.</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loaded_object_count </span><span class="s2">&gt; </span><span class="s6">0</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">reset_sequences</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s6">1</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fixture_object_count </span><span class="s2">== </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loaded_object_count</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                    <span class="s3">&quot;Installed %d object(s) from %d fixture(s)&quot;</span>
+                    <span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">loaded_object_count</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fixture_count</span><span class="s2">)</span>
+                <span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                    <span class="s3">&quot;Installed %d object(s) (of %d) from %d fixture(s)&quot;</span>
+                    <span class="s2">% (</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">loaded_object_count</span><span class="s2">,</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">fixture_object_count</span><span class="s2">,</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">fixture_count</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">save_obj</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot;Save an object if permitted.&quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s1">obj</span><span class="s2">.</span><span class="s1">object</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">app_config </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">excluded_apps</span>
+            <span class="s0">or </span><span class="s1">type</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">.</span><span class="s1">object</span><span class="s2">) </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">excluded_models</span>
+        <span class="s2">):</span>
+            <span class="s0">return False</span>
+        <span class="s1">saved </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s0">if </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">using</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">object</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">):</span>
+            <span class="s1">saved </span><span class="s2">= </span><span class="s0">True</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">.</span><span class="s1">object</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">)</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">obj</span><span class="s2">.</span><span class="s1">save</span><span class="s2">(</span><span class="s1">using</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">using</span><span class="s2">)</span>
+            <span class="s4"># psycopg raises ValueError if data contains NUL chars.</span>
+            <span class="s0">except </span><span class="s2">(</span><span class="s1">DatabaseError</span><span class="s2">, </span><span class="s1">IntegrityError</span><span class="s2">, </span><span class="s1">ValueError</span><span class="s2">) </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+                <span class="s1">e</span><span class="s2">.</span><span class="s1">args </span><span class="s2">= (</span>
+                    <span class="s3">&quot;Could not load %(object_label)s(pk=%(pk)s): %(error_msg)s&quot;</span>
+                    <span class="s2">% {</span>
+                        <span class="s3">&quot;object_label&quot;</span><span class="s2">: </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">object</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">label</span><span class="s2">,</span>
+                        <span class="s3">&quot;pk&quot;</span><span class="s2">: </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">object</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">,</span>
+                        <span class="s3">&quot;error_msg&quot;</span><span class="s2">: </span><span class="s1">e</span><span class="s2">,</span>
+                    <span class="s2">},</span>
+                <span class="s2">)</span>
+                <span class="s0">raise</span>
+        <span class="s0">if </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">deferred_fields</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">objs_with_deferred_fields</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">saved</span>
+
+    <span class="s0">def </span><span class="s1">load_label</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">fixture_label</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot;Load fixtures files for a given label.&quot;&quot;&quot;</span>
+        <span class="s1">show_progress </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s6">3</span>
+        <span class="s0">for </span><span class="s1">fixture_file</span><span class="s2">, </span><span class="s1">fixture_dir</span><span class="s2">, </span><span class="s1">fixture_name </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">find_fixtures</span><span class="s2">(</span>
+            <span class="s1">fixture_label</span>
+        <span class="s2">):</span>
+            <span class="s1">_</span><span class="s2">, </span><span class="s1">ser_fmt</span><span class="s2">, </span><span class="s1">cmp_fmt </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">parse_name</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">basename</span><span class="s2">(</span><span class="s1">fixture_file</span><span class="s2">))</span>
+            <span class="s1">open_method</span><span class="s2">, </span><span class="s1">mode </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">compression_formats</span><span class="s2">[</span><span class="s1">cmp_fmt</span><span class="s2">]</span>
+            <span class="s1">fixture </span><span class="s2">= </span><span class="s1">open_method</span><span class="s2">(</span><span class="s1">fixture_file</span><span class="s2">, </span><span class="s1">mode</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">fixture_count </span><span class="s2">+= </span><span class="s6">1</span>
+            <span class="s1">objects_in_fixture </span><span class="s2">= </span><span class="s6">0</span>
+            <span class="s1">loaded_objects_in_fixture </span><span class="s2">= </span><span class="s6">0</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s6">2</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                    <span class="s3">&quot;Installing %s fixture '%s' from %s.&quot;</span>
+                    <span class="s2">% (</span><span class="s1">ser_fmt</span><span class="s2">, </span><span class="s1">fixture_name</span><span class="s2">, </span><span class="s1">humanize</span><span class="s2">(</span><span class="s1">fixture_dir</span><span class="s2">))</span>
+                <span class="s2">)</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">objects </span><span class="s2">= </span><span class="s1">serializers</span><span class="s2">.</span><span class="s1">deserialize</span><span class="s2">(</span>
+                    <span class="s1">ser_fmt</span><span class="s2">,</span>
+                    <span class="s1">fixture</span><span class="s2">,</span>
+                    <span class="s1">using</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">using</span><span class="s2">,</span>
+                    <span class="s1">ignorenonexistent</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ignore</span><span class="s2">,</span>
+                    <span class="s1">handle_forward_references</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+                <span class="s2">)</span>
+
+                <span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">objects</span><span class="s2">:</span>
+                    <span class="s1">objects_in_fixture </span><span class="s2">+= </span><span class="s6">1</span>
+                    <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">save_obj</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">):</span>
+                        <span class="s1">loaded_objects_in_fixture </span><span class="s2">+= </span><span class="s6">1</span>
+                        <span class="s0">if </span><span class="s1">show_progress</span><span class="s2">:</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                                <span class="s3">&quot;</span><span class="s0">\r</span><span class="s3">Processed %i object(s).&quot; </span><span class="s2">% </span><span class="s1">loaded_objects_in_fixture</span><span class="s2">,</span>
+                                <span class="s1">ending</span><span class="s2">=</span><span class="s3">&quot;&quot;</span><span class="s2">,</span>
+                            <span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+                <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">e</span><span class="s2">, </span><span class="s1">CommandError</span><span class="s2">):</span>
+                    <span class="s1">e</span><span class="s2">.</span><span class="s1">args </span><span class="s2">= (</span>
+                        <span class="s3">&quot;Problem installing fixture '%s': %s&quot; </span><span class="s2">% (</span><span class="s1">fixture_file</span><span class="s2">, </span><span class="s1">e</span><span class="s2">),</span>
+                    <span class="s2">)</span>
+                <span class="s0">raise</span>
+            <span class="s0">finally</span><span class="s2">:</span>
+                <span class="s1">fixture</span><span class="s2">.</span><span class="s1">close</span><span class="s2">()</span>
+
+            <span class="s0">if </span><span class="s1">objects_in_fixture </span><span class="s0">and </span><span class="s1">show_progress</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">()  </span><span class="s4"># Add a newline after progress indicator.</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">loaded_object_count </span><span class="s2">+= </span><span class="s1">loaded_objects_in_fixture</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">fixture_object_count </span><span class="s2">+= </span><span class="s1">objects_in_fixture</span>
+            <span class="s4"># Warn if the fixture we loaded contains 0 objects.</span>
+            <span class="s0">if </span><span class="s1">objects_in_fixture </span><span class="s2">== </span><span class="s6">0</span><span class="s2">:</span>
+                <span class="s1">warnings</span><span class="s2">.</span><span class="s1">warn</span><span class="s2">(</span>
+                    <span class="s3">&quot;No fixture data found for '%s'. (File format may be &quot;</span>
+                    <span class="s3">&quot;invalid.)&quot; </span><span class="s2">% </span><span class="s1">fixture_name</span><span class="s2">,</span>
+                    <span class="s1">RuntimeWarning</span><span class="s2">,</span>
+                <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_fixture_name_and_dirs</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">fixture_name</span><span class="s2">):</span>
+        <span class="s1">dirname</span><span class="s2">, </span><span class="s1">basename </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s1">fixture_name</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">isabs</span><span class="s2">(</span><span class="s1">fixture_name</span><span class="s2">):</span>
+            <span class="s1">fixture_dirs </span><span class="s2">= [</span><span class="s1">dirname</span><span class="s2">]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">fixture_dirs </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fixture_dirs</span>
+            <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">sep </span><span class="s0">in </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">normpath</span><span class="s2">(</span><span class="s1">fixture_name</span><span class="s2">):</span>
+                <span class="s1">fixture_dirs </span><span class="s2">= [</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">dir_</span><span class="s2">, </span><span class="s1">dirname</span><span class="s2">) </span><span class="s0">for </span><span class="s1">dir_ </span><span class="s0">in </span><span class="s1">fixture_dirs</span><span class="s2">]</span>
+        <span class="s0">return </span><span class="s1">basename</span><span class="s2">, </span><span class="s1">fixture_dirs</span>
+
+    <span class="s0">def </span><span class="s1">get_targets</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">fixture_name</span><span class="s2">, </span><span class="s1">ser_fmt</span><span class="s2">, </span><span class="s1">cmp_fmt</span><span class="s2">):</span>
+        <span class="s1">databases </span><span class="s2">= [</span><span class="s1">self</span><span class="s2">.</span><span class="s1">using</span><span class="s2">, </span><span class="s0">None</span><span class="s2">]</span>
+        <span class="s1">cmp_fmts </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">compression_formats </span><span class="s0">if </span><span class="s1">cmp_fmt </span><span class="s0">is None else </span><span class="s2">[</span><span class="s1">cmp_fmt</span><span class="s2">]</span>
+        <span class="s1">ser_fmts </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">serialization_formats </span><span class="s0">if </span><span class="s1">ser_fmt </span><span class="s0">is None else </span><span class="s2">[</span><span class="s1">ser_fmt</span><span class="s2">]</span>
+        <span class="s0">return </span><span class="s2">{</span>
+            <span class="s3">&quot;%s.%s&quot;</span>
+            <span class="s2">% (</span>
+                <span class="s1">fixture_name</span><span class="s2">,</span>
+                <span class="s3">&quot;.&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">([</span><span class="s1">ext </span><span class="s0">for </span><span class="s1">ext </span><span class="s0">in </span><span class="s1">combo </span><span class="s0">if </span><span class="s1">ext</span><span class="s2">]),</span>
+            <span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">combo </span><span class="s0">in </span><span class="s1">product</span><span class="s2">(</span><span class="s1">databases</span><span class="s2">, </span><span class="s1">ser_fmts</span><span class="s2">, </span><span class="s1">cmp_fmts</span><span class="s2">)</span>
+        <span class="s2">}</span>
+
+    <span class="s0">def </span><span class="s1">find_fixture_files_in_dir</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">fixture_dir</span><span class="s2">, </span><span class="s1">fixture_name</span><span class="s2">, </span><span class="s1">targets</span><span class="s2">):</span>
+        <span class="s1">fixture_files_in_dir </span><span class="s2">= []</span>
+        <span class="s1">path </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">fixture_dir</span><span class="s2">, </span><span class="s1">fixture_name</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">candidate </span><span class="s0">in </span><span class="s1">glob</span><span class="s2">.</span><span class="s1">iglob</span><span class="s2">(</span><span class="s1">glob</span><span class="s2">.</span><span class="s1">escape</span><span class="s2">(</span><span class="s1">path</span><span class="s2">) + </span><span class="s3">&quot;*&quot;</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">basename</span><span class="s2">(</span><span class="s1">candidate</span><span class="s2">) </span><span class="s0">in </span><span class="s1">targets</span><span class="s2">:</span>
+                <span class="s4"># Save the fixture_dir and fixture_name for future error</span>
+                <span class="s4"># messages.</span>
+                <span class="s1">fixture_files_in_dir</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">candidate</span><span class="s2">, </span><span class="s1">fixture_dir</span><span class="s2">, </span><span class="s1">fixture_name</span><span class="s2">))</span>
+        <span class="s0">return </span><span class="s1">fixture_files_in_dir</span>
+
+    <span class="s2">@</span><span class="s1">functools</span><span class="s2">.</span><span class="s1">cache</span>
+    <span class="s0">def </span><span class="s1">find_fixtures</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">fixture_label</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot;Find fixture files for a given label.&quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">fixture_label </span><span class="s2">== </span><span class="s1">READ_STDIN</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s2">[(</span><span class="s1">READ_STDIN</span><span class="s2">, </span><span class="s0">None</span><span class="s2">, </span><span class="s1">READ_STDIN</span><span class="s2">)]</span>
+
+        <span class="s1">fixture_name</span><span class="s2">, </span><span class="s1">ser_fmt</span><span class="s2">, </span><span class="s1">cmp_fmt </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">parse_name</span><span class="s2">(</span><span class="s1">fixture_label</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s6">2</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot;Loading '%s' fixtures...&quot; </span><span class="s2">% </span><span class="s1">fixture_name</span><span class="s2">)</span>
+
+        <span class="s1">fixture_name</span><span class="s2">, </span><span class="s1">fixture_dirs </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_fixture_name_and_dirs</span><span class="s2">(</span><span class="s1">fixture_name</span><span class="s2">)</span>
+        <span class="s1">targets </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_targets</span><span class="s2">(</span><span class="s1">fixture_name</span><span class="s2">, </span><span class="s1">ser_fmt</span><span class="s2">, </span><span class="s1">cmp_fmt</span><span class="s2">)</span>
+        <span class="s1">fixture_files </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">fixture_dir </span><span class="s0">in </span><span class="s1">fixture_dirs</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s6">2</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot;Checking %s for fixtures...&quot; </span><span class="s2">% </span><span class="s1">humanize</span><span class="s2">(</span><span class="s1">fixture_dir</span><span class="s2">))</span>
+            <span class="s1">fixture_files_in_dir </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">find_fixture_files_in_dir</span><span class="s2">(</span>
+                <span class="s1">fixture_dir</span><span class="s2">,</span>
+                <span class="s1">fixture_name</span><span class="s2">,</span>
+                <span class="s1">targets</span><span class="s2">,</span>
+            <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s6">2 </span><span class="s0">and not </span><span class="s1">fixture_files_in_dir</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                    <span class="s3">&quot;No fixture '%s' in %s.&quot; </span><span class="s2">% (</span><span class="s1">fixture_name</span><span class="s2">, </span><span class="s1">humanize</span><span class="s2">(</span><span class="s1">fixture_dir</span><span class="s2">))</span>
+                <span class="s2">)</span>
+
+            <span class="s4"># Check kept for backwards-compatibility; it isn't clear why</span>
+            <span class="s4"># duplicates are only allowed in different directories.</span>
+            <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">fixture_files_in_dir</span><span class="s2">) &gt; </span><span class="s6">1</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                    <span class="s3">&quot;Multiple fixtures named '%s' in %s. Aborting.&quot;</span>
+                    <span class="s2">% (</span><span class="s1">fixture_name</span><span class="s2">, </span><span class="s1">humanize</span><span class="s2">(</span><span class="s1">fixture_dir</span><span class="s2">))</span>
+                <span class="s2">)</span>
+            <span class="s1">fixture_files</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">fixture_files_in_dir</span><span class="s2">)</span>
+
+        <span class="s0">if not </span><span class="s1">fixture_files</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s3">&quot;No fixture named '%s' found.&quot; </span><span class="s2">% </span><span class="s1">fixture_name</span><span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s1">fixture_files</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">fixture_dirs</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        Return a list of fixture directories. 
+ 
+        The list contains the 'fixtures' subdirectory of each installed 
+        application, if it exists, the directories in FIXTURE_DIRS, and the 
+        current directory. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">dirs </span><span class="s2">= []</span>
+        <span class="s1">fixture_dirs </span><span class="s2">= </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">FIXTURE_DIRS</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">fixture_dirs</span><span class="s2">) != </span><span class="s1">len</span><span class="s2">(</span><span class="s1">set</span><span class="s2">(</span><span class="s1">fixture_dirs</span><span class="s2">)):</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span><span class="s3">&quot;settings.FIXTURE_DIRS contains duplicates.&quot;</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">app_config </span><span class="s0">in </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_configs</span><span class="s2">():</span>
+            <span class="s1">app_label </span><span class="s2">= </span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">label</span>
+            <span class="s1">app_dir </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">path</span><span class="s2">, </span><span class="s3">&quot;fixtures&quot;</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">app_dir </span><span class="s0">in </span><span class="s2">[</span><span class="s1">str</span><span class="s2">(</span><span class="s1">d</span><span class="s2">) </span><span class="s0">for </span><span class="s1">d </span><span class="s0">in </span><span class="s1">fixture_dirs</span><span class="s2">]:</span>
+                <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                    <span class="s3">&quot;'%s' is a default fixture directory for the '%s' app &quot;</span>
+                    <span class="s3">&quot;and cannot be listed in settings.FIXTURE_DIRS.&quot;</span>
+                    <span class="s2">% (</span><span class="s1">app_dir</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">)</span>
+                <span class="s2">)</span>
+
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_label </span><span class="s0">and </span><span class="s1">app_label </span><span class="s2">!= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">:</span>
+                <span class="s0">continue</span>
+            <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">isdir</span><span class="s2">(</span><span class="s1">app_dir</span><span class="s2">):</span>
+                <span class="s1">dirs</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">app_dir</span><span class="s2">)</span>
+        <span class="s1">dirs</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">fixture_dirs</span><span class="s2">)</span>
+        <span class="s1">dirs</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;&quot;</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s2">[</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">realpath</span><span class="s2">(</span><span class="s1">d</span><span class="s2">) </span><span class="s0">for </span><span class="s1">d </span><span class="s0">in </span><span class="s1">dirs</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">parse_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">fixture_name</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        Split fixture name in name, serialization format, compression format. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">fixture_name </span><span class="s2">== </span><span class="s1">READ_STDIN</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">format</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                    <span class="s3">&quot;--format must be specified when reading from stdin.&quot;</span>
+                <span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">READ_STDIN</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">format</span><span class="s2">, </span><span class="s3">&quot;stdin&quot;</span>
+
+        <span class="s1">parts </span><span class="s2">= </span><span class="s1">fixture_name</span><span class="s2">.</span><span class="s1">rsplit</span><span class="s2">(</span><span class="s3">&quot;.&quot;</span><span class="s2">, </span><span class="s6">2</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">parts</span><span class="s2">) &gt; </span><span class="s6">1 </span><span class="s0">and </span><span class="s1">parts</span><span class="s2">[-</span><span class="s6">1</span><span class="s2">] </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">compression_formats</span><span class="s2">:</span>
+            <span class="s1">cmp_fmt </span><span class="s2">= </span><span class="s1">parts</span><span class="s2">[-</span><span class="s6">1</span><span class="s2">]</span>
+            <span class="s1">parts </span><span class="s2">= </span><span class="s1">parts</span><span class="s2">[:-</span><span class="s6">1</span><span class="s2">]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">cmp_fmt </span><span class="s2">= </span><span class="s0">None</span>
+
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">parts</span><span class="s2">) &gt; </span><span class="s6">1</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">parts</span><span class="s2">[-</span><span class="s6">1</span><span class="s2">] </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">serialization_formats</span><span class="s2">:</span>
+                <span class="s1">ser_fmt </span><span class="s2">= </span><span class="s1">parts</span><span class="s2">[-</span><span class="s6">1</span><span class="s2">]</span>
+                <span class="s1">parts </span><span class="s2">= </span><span class="s1">parts</span><span class="s2">[:-</span><span class="s6">1</span><span class="s2">]</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                    <span class="s3">&quot;Problem installing fixture '%s': %s is not a known &quot;</span>
+                    <span class="s3">&quot;serialization format.&quot; </span><span class="s2">% (</span><span class="s3">&quot;.&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">parts</span><span class="s2">[:-</span><span class="s6">1</span><span class="s2">]), </span><span class="s1">parts</span><span class="s2">[-</span><span class="s6">1</span><span class="s2">])</span>
+                <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">ser_fmt </span><span class="s2">= </span><span class="s0">None</span>
+
+        <span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;.&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">parts</span><span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s1">name</span><span class="s2">, </span><span class="s1">ser_fmt</span><span class="s2">, </span><span class="s1">cmp_fmt</span>
+
+
+<span class="s0">class </span><span class="s1">SingleZipReader</span><span class="s2">(</span><span class="s1">zipfile</span><span class="s2">.</span><span class="s1">ZipFile</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">namelist</span><span class="s2">()) != </span><span class="s6">1</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;Zip-compressed fixtures must contain one file.&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">read</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">zipfile</span><span class="s2">.</span><span class="s1">ZipFile</span><span class="s2">.</span><span class="s1">read</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">namelist</span><span class="s2">()[</span><span class="s6">0</span><span class="s2">])</span>
+
+
+<span class="s0">def </span><span class="s1">humanize</span><span class="s2">(</span><span class="s1">dirname</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s3">&quot;'%s'&quot; </span><span class="s2">% </span><span class="s1">dirname </span><span class="s0">if </span><span class="s1">dirname </span><span class="s0">else </span><span class="s3">&quot;absolute path&quot;</span>
+</pre>
+</body>
+</html>

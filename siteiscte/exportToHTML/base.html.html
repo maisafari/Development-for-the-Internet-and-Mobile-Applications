@@ -1,0 +1,147 @@
+<html>
+<head>
+<title>base.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #bcbec4;}
+.s1 { color: #d5b778;}
+.s2 { color: #bababa;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #56a8f5;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+base.html</font>
+</center></td></tr></table>
+<pre><span class="s0">{% load i18n static %}</span><span class="s1">&lt;!DOCTYPE </span><span class="s2">html</span><span class="s1">&gt;</span>
+<span class="s0">{% get_current_language as LANGUAGE_CODE %}{% get_current_language_bidi as LANGUAGE_BIDI %}</span>
+<span class="s1">&lt;html </span><span class="s2">lang</span><span class="s3">=&quot;{{ LANGUAGE_CODE|default:&quot;</span><span class="s2">en-us</span><span class="s0">&quot; }}&quot; dir=&quot;{{ LANGUAGE_BIDI|yesno:'rtl,ltr,auto' }}&quot;&gt;</span>
+<span class="s1">&lt;head&gt;</span>
+<span class="s1">&lt;title&gt;</span><span class="s0">{% block title %}{% endblock %}</span><span class="s1">&lt;/title&gt;</span>
+<span class="s1">&lt;link </span><span class="s2">rel</span><span class="s3">=&quot;stylesheet&quot; </span><span class="s2">href</span><span class="s3">=&quot;{% block stylesheet %}{% static &quot;</span><span class="s2">admin</span><span class="s0">/css/base.css&quot; %}{% endblock %}&quot;&gt;</span>
+<span class="s0">{% block dark-mode-vars %}</span>
+  <span class="s1">&lt;link </span><span class="s2">rel</span><span class="s3">=&quot;stylesheet&quot; </span><span class="s2">href</span><span class="s3">=&quot;{% static &quot;</span><span class="s2">admin</span><span class="s0">/css/dark_mode.css&quot; %}&quot;&gt;</span>
+  <span class="s1">&lt;script </span><span class="s2">src</span><span class="s3">=&quot;{% static &quot;</span><span class="s2">admin</span><span class="s0">/js/theme.js&quot; %}&quot; defer&gt;</span><span class="s1">&lt;/script&gt;</span>
+<span class="s0">{% endblock %}</span>
+<span class="s0">{% if not is_popup and is_nav_sidebar_enabled %}</span>
+  <span class="s1">&lt;link </span><span class="s2">rel</span><span class="s3">=&quot;stylesheet&quot; </span><span class="s2">href</span><span class="s3">=&quot;{% static &quot;</span><span class="s2">admin</span><span class="s0">/css/nav_sidebar.css&quot; %}&quot;&gt;</span>
+  <span class="s1">&lt;script </span><span class="s2">src</span><span class="s3">=&quot;{% static 'admin/js/nav_sidebar.js' %}&quot; </span><span class="s2">defer</span><span class="s1">&gt;&lt;/script&gt;</span>
+<span class="s0">{% endif %}</span>
+<span class="s0">{% block extrastyle %}{% endblock %}</span>
+<span class="s0">{% if LANGUAGE_BIDI %}</span><span class="s1">&lt;link </span><span class="s2">rel</span><span class="s3">=&quot;stylesheet&quot; </span><span class="s2">href</span><span class="s3">=&quot;{% block stylesheet_rtl %}{% static &quot;</span><span class="s2">admin</span><span class="s0">/css/rtl.css&quot; %}{% endblock %}&quot;&gt;{% endif %}</span>
+<span class="s0">{% block extrahead %}{% endblock %}</span>
+<span class="s0">{% block responsive %}</span>
+    <span class="s1">&lt;meta </span><span class="s2">name</span><span class="s3">=&quot;viewport&quot; </span><span class="s2">content</span><span class="s3">=&quot;width=device-width, initial-scale=1.0&quot;</span><span class="s1">&gt;</span>
+    <span class="s1">&lt;link </span><span class="s2">rel</span><span class="s3">=&quot;stylesheet&quot; </span><span class="s2">href</span><span class="s3">=&quot;{% static &quot;</span><span class="s2">admin</span><span class="s0">/css/responsive.css&quot; %}&quot;&gt;</span>
+    <span class="s0">{% if LANGUAGE_BIDI %}</span><span class="s1">&lt;link </span><span class="s2">rel</span><span class="s3">=&quot;stylesheet&quot; </span><span class="s2">href</span><span class="s3">=&quot;{% static &quot;</span><span class="s2">admin</span><span class="s0">/css/responsive_rtl.css&quot; %}&quot;&gt;{% endif %}</span>
+<span class="s0">{% endblock %}</span>
+<span class="s0">{% block blockbots %}</span><span class="s1">&lt;meta </span><span class="s2">name</span><span class="s3">=&quot;robots&quot; </span><span class="s2">content</span><span class="s3">=&quot;NONE,NOARCHIVE&quot;</span><span class="s1">&gt;</span><span class="s0">{% endblock %}</span>
+<span class="s1">&lt;/head&gt;</span>
+
+<span class="s1">&lt;body </span><span class="s2">class</span><span class="s3">=&quot;{% if is_popup %}popup {% endif %}{% block bodyclass %}{% endblock %}&quot;</span>
+  <span class="s2">data-admin-utc-offset</span><span class="s3">=&quot;{% now &quot;</span><span class="s2">Z</span><span class="s0">&quot; %}&quot;&gt;</span>
+<span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;#content-start&quot; </span><span class="s2">class</span><span class="s3">=&quot;skip-to-content-link&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'Skip to main content' %}</span><span class="s1">&lt;/a&gt;</span>
+<span class="s4">&lt;!-- Container --&gt;</span>
+<span class="s1">&lt;div </span><span class="s2">id</span><span class="s3">=&quot;container&quot;</span><span class="s1">&gt;</span>
+
+    <span class="s0">{% if not is_popup %}</span>
+    <span class="s4">&lt;!-- Header --&gt;</span>
+    <span class="s0">{% block header %}</span>
+      <span class="s1">&lt;header </span><span class="s2">id</span><span class="s3">=&quot;header&quot;</span><span class="s1">&gt;</span>
+        <span class="s1">&lt;div </span><span class="s2">id</span><span class="s3">=&quot;branding&quot;</span><span class="s1">&gt;</span>
+        <span class="s0">{% block branding %}{% endblock %}</span>
+        <span class="s1">&lt;/div&gt;</span>
+        <span class="s0">{% block usertools %}</span>
+        <span class="s0">{% if has_permission %}</span>
+        <span class="s1">&lt;div </span><span class="s2">id</span><span class="s3">=&quot;user-tools&quot;</span><span class="s1">&gt;</span>
+            <span class="s0">{% block welcome-msg %}</span>
+                <span class="s0">{% translate 'Welcome,' %}</span>
+                <span class="s1">&lt;strong&gt;</span><span class="s0">{% firstof user.get_short_name user.get_username %}</span><span class="s1">&lt;/strong&gt;</span><span class="s0">.</span>
+            <span class="s0">{% endblock %}</span>
+            <span class="s0">{% block userlinks %}</span>
+                <span class="s0">{% if site_url %}</span>
+                    <span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{{ site_url }}&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'View site' %}</span><span class="s1">&lt;/a&gt; </span><span class="s0">/</span>
+                <span class="s0">{% endif %}</span>
+                <span class="s0">{% if user.is_active and user.is_staff %}</span>
+                    <span class="s0">{% url 'django-admindocs-docroot' as docsroot %}</span>
+                    <span class="s0">{% if docsroot %}</span>
+                        <span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{{ docsroot }}&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'Documentation' %}</span><span class="s1">&lt;/a&gt; </span><span class="s0">/</span>
+                    <span class="s0">{% endif %}</span>
+                <span class="s0">{% endif %}</span>
+                <span class="s0">{% if user.has_usable_password %}</span>
+                <span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url 'admin:password_change' %}&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'Change password' %}</span><span class="s1">&lt;/a&gt; </span><span class="s0">/</span>
+                <span class="s0">{% endif %}</span>
+                <span class="s1">&lt;form </span><span class="s2">id</span><span class="s3">=&quot;logout-form&quot; </span><span class="s2">method</span><span class="s3">=&quot;post&quot; </span><span class="s2">action</span><span class="s3">=&quot;{% url 'admin:logout' %}&quot;</span><span class="s1">&gt;</span>
+                    <span class="s0">{% csrf_token %}</span>
+                    <span class="s1">&lt;button </span><span class="s2">type</span><span class="s3">=&quot;submit&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'Log out' %}</span><span class="s1">&lt;/button&gt;</span>
+                <span class="s1">&lt;/form&gt;</span>
+                <span class="s0">{% include &quot;admin/color_theme_toggle.html&quot; %}</span>
+            <span class="s0">{% endblock %}</span>
+        <span class="s1">&lt;/div&gt;</span>
+        <span class="s0">{% endif %}</span>
+        <span class="s0">{% endblock %}</span>
+        <span class="s0">{% block nav-global %}{% endblock %}</span>
+      <span class="s1">&lt;/header&gt;</span>
+    <span class="s0">{% endblock %}</span>
+    <span class="s4">&lt;!-- END Header --&gt;</span>
+    <span class="s0">{% block nav-breadcrumbs %}</span>
+      <span class="s1">&lt;nav </span><span class="s2">aria-label</span><span class="s3">=&quot;{% translate 'Breadcrumbs' %}&quot;</span><span class="s1">&gt;</span>
+        <span class="s0">{% block breadcrumbs %}</span>
+          <span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;breadcrumbs&quot;</span><span class="s1">&gt;</span>
+            <span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url 'admin:index' %}&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'Home' %}</span><span class="s1">&lt;/a&gt;</span>
+            <span class="s0">{% if title %} </span><span class="s5">&amp;rsaquo; </span><span class="s0">{{ title }}{% endif %}</span>
+          <span class="s1">&lt;/div&gt;</span>
+        <span class="s0">{% endblock %}</span>
+      <span class="s1">&lt;/nav&gt;</span>
+    <span class="s0">{% endblock %}</span>
+    <span class="s0">{% endif %}</span>
+
+    <span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;main&quot; </span><span class="s2">id</span><span class="s3">=&quot;main&quot;</span><span class="s1">&gt;</span>
+      <span class="s0">{% if not is_popup and is_nav_sidebar_enabled %}</span>
+        <span class="s0">{% block nav-sidebar %}</span>
+          <span class="s0">{% include &quot;admin/nav_sidebar.html&quot; %}</span>
+        <span class="s0">{% endblock %}</span>
+      <span class="s0">{% endif %}</span>
+      <span class="s1">&lt;main </span><span class="s2">id</span><span class="s3">=&quot;content-start&quot; </span><span class="s2">class</span><span class="s3">=&quot;content&quot; </span><span class="s2">tabindex</span><span class="s3">=&quot;-1&quot;</span><span class="s1">&gt;</span>
+        <span class="s0">{% block messages %}</span>
+          <span class="s0">{% if messages %}</span>
+            <span class="s1">&lt;ul </span><span class="s2">class</span><span class="s3">=&quot;messagelist&quot;</span><span class="s1">&gt;</span><span class="s0">{% for message in messages %}</span>
+              <span class="s1">&lt;li</span><span class="s0">{% if message.tags %} class=&quot;{{ message.tags }}&quot;{% endif %}&gt;{{ message|capfirst }}</span><span class="s1">&lt;/li&gt;</span>
+            <span class="s0">{% endfor %}</span><span class="s1">&lt;/ul&gt;</span>
+          <span class="s0">{% endif %}</span>
+        <span class="s0">{% endblock messages %}</span>
+        <span class="s4">&lt;!-- Content --&gt;</span>
+        <span class="s1">&lt;div </span><span class="s2">id</span><span class="s3">=&quot;content&quot; </span><span class="s2">class</span><span class="s3">=&quot;{% block coltype %}colM{% endblock %}&quot;</span><span class="s1">&gt;</span>
+          <span class="s0">{% block pretitle %}{% endblock %}</span>
+          <span class="s0">{% block content_title %}{% if title %}</span><span class="s1">&lt;h1&gt;</span><span class="s0">{{ title }}</span><span class="s1">&lt;/h1&gt;</span><span class="s0">{% endif %}{% endblock %}</span>
+          <span class="s0">{% block content_subtitle %}{% if subtitle %}</span><span class="s1">&lt;h2&gt;</span><span class="s0">{{ subtitle }}</span><span class="s1">&lt;/h2&gt;</span><span class="s0">{% endif %}{% endblock %}</span>
+          <span class="s0">{% block content %}</span>
+            <span class="s0">{% block object-tools %}{% endblock %}</span>
+            <span class="s0">{{ content }}</span>
+          <span class="s0">{% endblock %}</span>
+          <span class="s0">{% block sidebar %}{% endblock %}</span>
+          <span class="s1">&lt;br </span><span class="s2">class</span><span class="s3">=&quot;clear&quot;</span><span class="s1">&gt;</span>
+        <span class="s1">&lt;/div&gt;</span>
+        <span class="s4">&lt;!-- END Content --&gt;</span>
+        <span class="s0">{% block footer %}</span><span class="s1">&lt;div </span><span class="s2">id</span><span class="s3">=&quot;footer&quot;</span><span class="s1">&gt;&lt;/div&gt;</span><span class="s0">{% endblock %}</span>
+      <span class="s1">&lt;/main&gt;</span>
+    <span class="s1">&lt;/div&gt;</span>
+<span class="s1">&lt;/div&gt;</span>
+<span class="s4">&lt;!-- END Container --&gt;</span>
+
+<span class="s4">&lt;!-- SVGs --&gt;</span>
+<span class="s1">&lt;svg </span><span class="s2">xmlns</span><span class="s3">=&quot;http://www.w3.org/2000/svg&quot; </span><span class="s2">class</span><span class="s3">=&quot;base-svgs&quot;</span><span class="s1">&gt;</span>
+  <span class="s1">&lt;symbol </span><span class="s2">viewBox</span><span class="s3">=&quot;0 0 24 24&quot; </span><span class="s2">width</span><span class="s3">=&quot;1rem&quot; </span><span class="s2">height</span><span class="s3">=&quot;1rem&quot; </span><span class="s2">id</span><span class="s3">=&quot;icon-auto&quot;</span><span class="s1">&gt;&lt;path </span><span class="s2">d</span><span class="s3">=&quot;M0 0h24v24H0z&quot; </span><span class="s2">fill</span><span class="s3">=&quot;currentColor&quot;</span><span class="s1">/&gt;&lt;path </span><span class="s2">d</span><span class="s3">=&quot;M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2V4a8 8 0 1 0 0 16z&quot;</span><span class="s1">/&gt;&lt;/symbol&gt;</span>
+  <span class="s1">&lt;symbol </span><span class="s2">viewBox</span><span class="s3">=&quot;0 0 24 24&quot; </span><span class="s2">width</span><span class="s3">=&quot;1rem&quot; </span><span class="s2">height</span><span class="s3">=&quot;1rem&quot; </span><span class="s2">id</span><span class="s3">=&quot;icon-moon&quot;</span><span class="s1">&gt;&lt;path </span><span class="s2">d</span><span class="s3">=&quot;M0 0h24v24H0z&quot; </span><span class="s2">fill</span><span class="s3">=&quot;currentColor&quot;</span><span class="s1">/&gt;&lt;path </span><span class="s2">d</span><span class="s3">=&quot;M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z&quot;</span><span class="s1">/&gt;&lt;/symbol&gt;</span>
+  <span class="s1">&lt;symbol </span><span class="s2">viewBox</span><span class="s3">=&quot;0 0 24 24&quot; </span><span class="s2">width</span><span class="s3">=&quot;1rem&quot; </span><span class="s2">height</span><span class="s3">=&quot;1rem&quot; </span><span class="s2">id</span><span class="s3">=&quot;icon-sun&quot;</span><span class="s1">&gt;&lt;path </span><span class="s2">d</span><span class="s3">=&quot;M0 0h24v24H0z&quot; </span><span class="s2">fill</span><span class="s3">=&quot;currentColor&quot;</span><span class="s1">/&gt;&lt;path </span><span class="s2">d</span><span class="s3">=&quot;M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z&quot;</span><span class="s1">/&gt;&lt;/symbol&gt;</span>
+<span class="s1">&lt;/svg&gt;</span>
+<span class="s4">&lt;!-- END SVGs --&gt;</span>
+<span class="s1">&lt;/body&gt;</span>
+<span class="s1">&lt;/html&gt;</span>
+</pre>
+</body>
+</html>

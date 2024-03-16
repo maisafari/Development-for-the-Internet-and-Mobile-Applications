@@ -1,0 +1,64 @@
+<html>
+<head>
+<title>modwsgi.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+modwsgi.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django </span><span class="s0">import </span><span class="s1">db</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib </span><span class="s0">import </span><span class="s1">auth</span>
+
+<span class="s1">UserModel </span><span class="s2">= </span><span class="s1">auth</span><span class="s2">.</span><span class="s1">get_user_model</span><span class="s2">()</span>
+
+
+<span class="s0">def </span><span class="s1">check_password</span><span class="s2">(</span><span class="s1">environ</span><span class="s2">, </span><span class="s1">username</span><span class="s2">, </span><span class="s1">password</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Authenticate against Django's auth database. 
+ 
+    mod_wsgi docs specify None, True, False as return value depending 
+    on whether the user exists and authenticates. 
+    &quot;&quot;&quot;</span>
+    <span class="s4"># db connection state is managed similarly to the wsgi handler</span>
+    <span class="s4"># as mod_wsgi may call these functions outside of a request/response cycle</span>
+    <span class="s1">db</span><span class="s2">.</span><span class="s1">reset_queries</span><span class="s2">()</span>
+    <span class="s0">try</span><span class="s2">:</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">user </span><span class="s2">= </span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">.</span><span class="s1">get_by_natural_key</span><span class="s2">(</span><span class="s1">username</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">DoesNotExist</span><span class="s2">:</span>
+            <span class="s0">return None</span>
+        <span class="s0">if not </span><span class="s1">user</span><span class="s2">.</span><span class="s1">is_active</span><span class="s2">:</span>
+            <span class="s0">return None</span>
+        <span class="s0">return </span><span class="s1">user</span><span class="s2">.</span><span class="s1">check_password</span><span class="s2">(</span><span class="s1">password</span><span class="s2">)</span>
+    <span class="s0">finally</span><span class="s2">:</span>
+        <span class="s1">db</span><span class="s2">.</span><span class="s1">close_old_connections</span><span class="s2">()</span>
+
+
+<span class="s0">def </span><span class="s1">groups_for_user</span><span class="s2">(</span><span class="s1">environ</span><span class="s2">, </span><span class="s1">username</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Authorize a user based on groups 
+    &quot;&quot;&quot;</span>
+    <span class="s1">db</span><span class="s2">.</span><span class="s1">reset_queries</span><span class="s2">()</span>
+    <span class="s0">try</span><span class="s2">:</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">user </span><span class="s2">= </span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">.</span><span class="s1">get_by_natural_key</span><span class="s2">(</span><span class="s1">username</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">DoesNotExist</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s2">[]</span>
+        <span class="s0">if not </span><span class="s1">user</span><span class="s2">.</span><span class="s1">is_active</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s2">[]</span>
+        <span class="s0">return </span><span class="s2">[</span><span class="s1">group</span><span class="s2">.</span><span class="s1">name</span><span class="s2">.</span><span class="s1">encode</span><span class="s2">() </span><span class="s0">for </span><span class="s1">group </span><span class="s0">in </span><span class="s1">user</span><span class="s2">.</span><span class="s1">groups</span><span class="s2">.</span><span class="s1">all</span><span class="s2">()]</span>
+    <span class="s0">finally</span><span class="s2">:</span>
+        <span class="s1">db</span><span class="s2">.</span><span class="s1">close_old_connections</span><span class="s2">()</span>
+</pre>
+</body>
+</html>

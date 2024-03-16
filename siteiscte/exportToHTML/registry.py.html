@@ -1,0 +1,138 @@
+<html>
+<head>
+<title>registry.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+registry.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">itertools </span><span class="s0">import </span><span class="s1">chain</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">inspect </span><span class="s0">import </span><span class="s1">func_accepts_kwargs</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">itercompat </span><span class="s0">import </span><span class="s1">is_iterable</span>
+
+
+<span class="s0">class </span><span class="s1">Tags</span><span class="s2">:</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Built-in tags for internal checks. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">admin </span><span class="s2">= </span><span class="s4">&quot;admin&quot;</span>
+    <span class="s1">async_support </span><span class="s2">= </span><span class="s4">&quot;async_support&quot;</span>
+    <span class="s1">caches </span><span class="s2">= </span><span class="s4">&quot;caches&quot;</span>
+    <span class="s1">compatibility </span><span class="s2">= </span><span class="s4">&quot;compatibility&quot;</span>
+    <span class="s1">database </span><span class="s2">= </span><span class="s4">&quot;database&quot;</span>
+    <span class="s1">files </span><span class="s2">= </span><span class="s4">&quot;files&quot;</span>
+    <span class="s1">models </span><span class="s2">= </span><span class="s4">&quot;models&quot;</span>
+    <span class="s1">security </span><span class="s2">= </span><span class="s4">&quot;security&quot;</span>
+    <span class="s1">signals </span><span class="s2">= </span><span class="s4">&quot;signals&quot;</span>
+    <span class="s1">sites </span><span class="s2">= </span><span class="s4">&quot;sites&quot;</span>
+    <span class="s1">staticfiles </span><span class="s2">= </span><span class="s4">&quot;staticfiles&quot;</span>
+    <span class="s1">templates </span><span class="s2">= </span><span class="s4">&quot;templates&quot;</span>
+    <span class="s1">translation </span><span class="s2">= </span><span class="s4">&quot;translation&quot;</span>
+    <span class="s1">urls </span><span class="s2">= </span><span class="s4">&quot;urls&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">CheckRegistry</span><span class="s2">:</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">registered_checks </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">deployment_checks </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">register</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">check</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, *</span><span class="s1">tags</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Can be used as a function or a decorator. Register given function 
+        `f` labeled with given `tags`. The function should receive **kwargs 
+        and return list of Errors and Warnings. 
+ 
+        Example:: 
+ 
+            registry = CheckRegistry() 
+            @registry.register('mytag', 'anothertag') 
+            def my_check(app_configs, **kwargs): 
+                # ... perform checks and collect `errors` ... 
+                return errors 
+            # or 
+            registry.register(my_check, 'mytag', 'anothertag') 
+        &quot;&quot;&quot;</span>
+
+        <span class="s0">def </span><span class="s1">inner</span><span class="s2">(</span><span class="s1">check</span><span class="s2">):</span>
+            <span class="s0">if not </span><span class="s1">func_accepts_kwargs</span><span class="s2">(</span><span class="s1">check</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                    <span class="s4">&quot;Check functions must accept keyword arguments (**kwargs).&quot;</span>
+                <span class="s2">)</span>
+            <span class="s1">check</span><span class="s2">.</span><span class="s1">tags </span><span class="s2">= </span><span class="s1">tags</span>
+            <span class="s1">checks </span><span class="s2">= (</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">deployment_checks</span>
+                <span class="s0">if </span><span class="s1">kwargs</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s4">&quot;deploy&quot;</span><span class="s2">)</span>
+                <span class="s0">else </span><span class="s1">self</span><span class="s2">.</span><span class="s1">registered_checks</span>
+            <span class="s2">)</span>
+            <span class="s1">checks</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s1">check</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">check</span>
+
+        <span class="s0">if </span><span class="s1">callable</span><span class="s2">(</span><span class="s1">check</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">inner</span><span class="s2">(</span><span class="s1">check</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">check</span><span class="s2">:</span>
+                <span class="s1">tags </span><span class="s2">+= (</span><span class="s1">check</span><span class="s2">,)</span>
+            <span class="s0">return </span><span class="s1">inner</span>
+
+    <span class="s0">def </span><span class="s1">run_checks</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">app_configs</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">tags</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">include_deployment_checks</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">databases</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Run all registered checks and return list of Errors and Warnings. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">errors </span><span class="s2">= []</span>
+        <span class="s1">checks </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_checks</span><span class="s2">(</span><span class="s1">include_deployment_checks</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">tags </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">checks </span><span class="s2">= [</span><span class="s1">check </span><span class="s0">for </span><span class="s1">check </span><span class="s0">in </span><span class="s1">checks </span><span class="s0">if not </span><span class="s1">set</span><span class="s2">(</span><span class="s1">check</span><span class="s2">.</span><span class="s1">tags</span><span class="s2">).</span><span class="s1">isdisjoint</span><span class="s2">(</span><span class="s1">tags</span><span class="s2">)]</span>
+
+        <span class="s0">for </span><span class="s1">check </span><span class="s0">in </span><span class="s1">checks</span><span class="s2">:</span>
+            <span class="s1">new_errors </span><span class="s2">= </span><span class="s1">check</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">=</span><span class="s1">app_configs</span><span class="s2">, </span><span class="s1">databases</span><span class="s2">=</span><span class="s1">databases</span><span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">is_iterable</span><span class="s2">(</span><span class="s1">new_errors</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                    <span class="s4">&quot;The function %r did not return a list. All functions &quot;</span>
+                    <span class="s4">&quot;registered with the checks registry must return a list.&quot; </span><span class="s2">% </span><span class="s1">check</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s1">errors</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">new_errors</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">errors</span>
+
+    <span class="s0">def </span><span class="s1">tag_exists</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">tag</span><span class="s2">, </span><span class="s1">include_deployment_checks</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">tag </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">tags_available</span><span class="s2">(</span><span class="s1">include_deployment_checks</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">tags_available</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">deployment_checks</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">set</span><span class="s2">(</span>
+            <span class="s1">chain</span><span class="s2">.</span><span class="s1">from_iterable</span><span class="s2">(</span>
+                <span class="s1">check</span><span class="s2">.</span><span class="s1">tags </span><span class="s0">for </span><span class="s1">check </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_checks</span><span class="s2">(</span><span class="s1">deployment_checks</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_checks</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">include_deployment_checks</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s1">checks </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">registered_checks</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">include_deployment_checks</span><span class="s2">:</span>
+            <span class="s1">checks</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">deployment_checks</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">checks</span>
+
+
+<span class="s1">registry </span><span class="s2">= </span><span class="s1">CheckRegistry</span><span class="s2">()</span>
+<span class="s1">register </span><span class="s2">= </span><span class="s1">registry</span><span class="s2">.</span><span class="s1">register</span>
+<span class="s1">run_checks </span><span class="s2">= </span><span class="s1">registry</span><span class="s2">.</span><span class="s1">run_checks</span>
+<span class="s1">tag_exists </span><span class="s2">= </span><span class="s1">registry</span><span class="s2">.</span><span class="s1">tag_exists</span>
+</pre>
+</body>
+</html>

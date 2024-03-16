@@ -1,0 +1,517 @@
+<html>
+<head>
+<title>dispatcher.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #5f826b; font-style: italic;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+dispatcher.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">asyncio</span>
+<span class="s0">import </span><span class="s1">logging</span>
+<span class="s0">import </span><span class="s1">threading</span>
+<span class="s0">import </span><span class="s1">weakref</span>
+
+<span class="s0">from </span><span class="s1">asgiref</span><span class="s2">.</span><span class="s1">sync </span><span class="s0">import </span><span class="s1">async_to_sync</span><span class="s2">, </span><span class="s1">iscoroutinefunction</span><span class="s2">, </span><span class="s1">sync_to_async</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">inspect </span><span class="s0">import </span><span class="s1">func_accepts_kwargs</span>
+
+<span class="s1">logger </span><span class="s2">= </span><span class="s1">logging</span><span class="s2">.</span><span class="s1">getLogger</span><span class="s2">(</span><span class="s3">&quot;django.dispatch&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">_make_id</span><span class="s2">(</span><span class="s1">target</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">target</span><span class="s2">, </span><span class="s3">&quot;__func__&quot;</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">(</span><span class="s1">id</span><span class="s2">(</span><span class="s1">target</span><span class="s2">.</span><span class="s1">__self__</span><span class="s2">), </span><span class="s1">id</span><span class="s2">(</span><span class="s1">target</span><span class="s2">.</span><span class="s1">__func__</span><span class="s2">))</span>
+    <span class="s0">return </span><span class="s1">id</span><span class="s2">(</span><span class="s1">target</span><span class="s2">)</span>
+
+
+<span class="s1">NONE_ID </span><span class="s2">= </span><span class="s1">_make_id</span><span class="s2">(</span><span class="s0">None</span><span class="s2">)</span>
+
+<span class="s4"># A marker for caching</span>
+<span class="s1">NO_RECEIVERS </span><span class="s2">= </span><span class="s1">object</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">Signal</span><span class="s2">:</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Base class for all signals 
+ 
+    Internal attributes: 
+ 
+        receivers 
+            { receiverkey (id) : weakref(receiver) } 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">use_caching</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        Create a new signal. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">receivers </span><span class="s2">= []</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">lock </span><span class="s2">= </span><span class="s1">threading</span><span class="s2">.</span><span class="s1">Lock</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">use_caching </span><span class="s2">= </span><span class="s1">use_caching</span>
+        <span class="s4"># For convenience we create empty caches even if they are not used.</span>
+        <span class="s4"># A note about caching: if use_caching is defined, then for each</span>
+        <span class="s4"># distinct sender we cache the receivers that sender has in</span>
+        <span class="s4"># 'sender_receivers_cache'. The cache is cleaned when .connect() or</span>
+        <span class="s4"># .disconnect() is called and populated on send().</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">sender_receivers_cache </span><span class="s2">= </span><span class="s1">weakref</span><span class="s2">.</span><span class="s1">WeakKeyDictionary</span><span class="s2">() </span><span class="s0">if </span><span class="s1">use_caching </span><span class="s0">else </span><span class="s2">{}</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_dead_receivers </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s0">def </span><span class="s1">connect</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">weak</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">dispatch_uid</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        Connect receiver to sender for signal. 
+ 
+        Arguments: 
+ 
+            receiver 
+                A function or an instance method which is to receive signals. 
+                Receivers must be hashable objects. Receivers can be 
+                asynchronous. 
+ 
+                If weak is True, then receiver must be weak referenceable. 
+ 
+                Receivers must be able to accept keyword arguments. 
+ 
+                If a receiver is connected with a dispatch_uid argument, it 
+                will not be added if another receiver was already connected 
+                with that dispatch_uid. 
+ 
+            sender 
+                The sender to which the receiver should respond. Must either be 
+                a Python object, or None to receive events from any sender. 
+ 
+            weak 
+                Whether to use weak references to the receiver. By default, the 
+                module will attempt to use weak references to the receiver 
+                objects. If this parameter is false, then strong references will 
+                be used. 
+ 
+            dispatch_uid 
+                An identifier used to uniquely identify a particular instance of 
+                a receiver. This will usually be a string, though it may be 
+                anything hashable. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+
+        <span class="s4"># If DEBUG is on, check that we got a good receiver</span>
+        <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">configured </span><span class="s0">and </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DEBUG</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">callable</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span><span class="s3">&quot;Signal receivers must be callable.&quot;</span><span class="s2">)</span>
+            <span class="s4"># Check for **kwargs</span>
+            <span class="s0">if not </span><span class="s1">func_accepts_kwargs</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s3">&quot;Signal receivers must accept keyword arguments (**kwargs).&quot;</span>
+                <span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">dispatch_uid</span><span class="s2">:</span>
+            <span class="s1">lookup_key </span><span class="s2">= (</span><span class="s1">dispatch_uid</span><span class="s2">, </span><span class="s1">_make_id</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">))</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">lookup_key </span><span class="s2">= (</span><span class="s1">_make_id</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">), </span><span class="s1">_make_id</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">))</span>
+
+        <span class="s1">is_async </span><span class="s2">= </span><span class="s1">iscoroutinefunction</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">weak</span><span class="s2">:</span>
+            <span class="s1">ref </span><span class="s2">= </span><span class="s1">weakref</span><span class="s2">.</span><span class="s1">ref</span>
+            <span class="s1">receiver_object </span><span class="s2">= </span><span class="s1">receiver</span>
+            <span class="s4"># Check for bound methods</span>
+            <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">, </span><span class="s3">&quot;__self__&quot;</span><span class="s2">) </span><span class="s0">and </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">, </span><span class="s3">&quot;__func__&quot;</span><span class="s2">):</span>
+                <span class="s1">ref </span><span class="s2">= </span><span class="s1">weakref</span><span class="s2">.</span><span class="s1">WeakMethod</span>
+                <span class="s1">receiver_object </span><span class="s2">= </span><span class="s1">receiver</span><span class="s2">.</span><span class="s1">__self__</span>
+            <span class="s1">receiver </span><span class="s2">= </span><span class="s1">ref</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">)</span>
+            <span class="s1">weakref</span><span class="s2">.</span><span class="s1">finalize</span><span class="s2">(</span><span class="s1">receiver_object</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_remove_receiver</span><span class="s2">)</span>
+
+        <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lock</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_clear_dead_receivers</span><span class="s2">()</span>
+            <span class="s0">if not </span><span class="s1">any</span><span class="s2">(</span><span class="s1">r_key </span><span class="s2">== </span><span class="s1">lookup_key </span><span class="s0">for </span><span class="s1">r_key</span><span class="s2">, </span><span class="s1">_</span><span class="s2">, </span><span class="s1">_ </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">receivers</span><span class="s2">):</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">receivers</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">lookup_key</span><span class="s2">, </span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">is_async</span><span class="s2">))</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">sender_receivers_cache</span><span class="s2">.</span><span class="s1">clear</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">disconnect</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">receiver</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">dispatch_uid</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        Disconnect receiver from sender for signal. 
+ 
+        If weak references are used, disconnect need not be called. The receiver 
+        will be removed from dispatch automatically. 
+ 
+        Arguments: 
+ 
+            receiver 
+                The registered receiver to disconnect. May be none if 
+                dispatch_uid is specified. 
+ 
+            sender 
+                The registered sender to disconnect 
+ 
+            dispatch_uid 
+                the unique identifier of the receiver to disconnect 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">dispatch_uid</span><span class="s2">:</span>
+            <span class="s1">lookup_key </span><span class="s2">= (</span><span class="s1">dispatch_uid</span><span class="s2">, </span><span class="s1">_make_id</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">))</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">lookup_key </span><span class="s2">= (</span><span class="s1">_make_id</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">), </span><span class="s1">_make_id</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">))</span>
+
+        <span class="s1">disconnected </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lock</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_clear_dead_receivers</span><span class="s2">()</span>
+            <span class="s0">for </span><span class="s1">index </span><span class="s0">in </span><span class="s1">range</span><span class="s2">(</span><span class="s1">len</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">receivers</span><span class="s2">)):</span>
+                <span class="s1">r_key</span><span class="s2">, *</span><span class="s1">_ </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">receivers</span><span class="s2">[</span><span class="s1">index</span><span class="s2">]</span>
+                <span class="s0">if </span><span class="s1">r_key </span><span class="s2">== </span><span class="s1">lookup_key</span><span class="s2">:</span>
+                    <span class="s1">disconnected </span><span class="s2">= </span><span class="s0">True</span>
+                    <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">receivers</span><span class="s2">[</span><span class="s1">index</span><span class="s2">]</span>
+                    <span class="s0">break</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">sender_receivers_cache</span><span class="s2">.</span><span class="s1">clear</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">disconnected</span>
+
+    <span class="s0">def </span><span class="s1">has_listeners</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">sync_receivers</span><span class="s2">, </span><span class="s1">async_receivers </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_live_receivers</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">bool</span><span class="s2">(</span><span class="s1">sync_receivers</span><span class="s2">) </span><span class="s0">or </span><span class="s1">bool</span><span class="s2">(</span><span class="s1">async_receivers</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">send</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">named</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        Send signal from sender to all connected receivers. 
+ 
+        If any receiver raises an error, the error propagates back through send, 
+        terminating the dispatch loop. So it's possible that all receivers 
+        won't be called if an error is raised. 
+ 
+        If any receivers are asynchronous, they are called after all the 
+        synchronous receivers via a single call to async_to_sync(). They are 
+        also executed concurrently with asyncio.gather(). 
+ 
+        Arguments: 
+ 
+            sender 
+                The sender of the signal. Either a specific object or None. 
+ 
+            named 
+                Named arguments which will be passed to receivers. 
+ 
+        Return a list of tuple pairs [(receiver, response), ... ]. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s0">not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">receivers</span>
+            <span class="s0">or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">sender_receivers_cache</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">) </span><span class="s0">is </span><span class="s1">NO_RECEIVERS</span>
+        <span class="s2">):</span>
+            <span class="s0">return </span><span class="s2">[]</span>
+        <span class="s1">responses </span><span class="s2">= []</span>
+        <span class="s1">sync_receivers</span><span class="s2">, </span><span class="s1">async_receivers </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_live_receivers</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">receiver </span><span class="s0">in </span><span class="s1">sync_receivers</span><span class="s2">:</span>
+            <span class="s1">response </span><span class="s2">= </span><span class="s1">receiver</span><span class="s2">(</span><span class="s1">signal</span><span class="s2">=</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">=</span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">named</span><span class="s2">)</span>
+            <span class="s1">responses</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">response</span><span class="s2">))</span>
+        <span class="s0">if </span><span class="s1">async_receivers</span><span class="s2">:</span>
+
+            <span class="s0">async def </span><span class="s1">asend</span><span class="s2">():</span>
+                <span class="s1">async_responses </span><span class="s2">= </span><span class="s0">await </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">gather</span><span class="s2">(</span>
+                    <span class="s2">*(</span>
+                        <span class="s1">receiver</span><span class="s2">(</span><span class="s1">signal</span><span class="s2">=</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">=</span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">named</span><span class="s2">)</span>
+                        <span class="s0">for </span><span class="s1">receiver </span><span class="s0">in </span><span class="s1">async_receivers</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+                <span class="s0">return </span><span class="s1">zip</span><span class="s2">(</span><span class="s1">async_receivers</span><span class="s2">, </span><span class="s1">async_responses</span><span class="s2">)</span>
+
+            <span class="s1">responses</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">async_to_sync</span><span class="s2">(</span><span class="s1">asend</span><span class="s2">)())</span>
+        <span class="s0">return </span><span class="s1">responses</span>
+
+    <span class="s0">async def </span><span class="s1">asend</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">named</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        Send signal from sender to all connected receivers in async mode. 
+ 
+        All sync receivers will be wrapped by sync_to_async() 
+        If any receiver raises an error, the error propagates back through 
+        send, terminating the dispatch loop. So it's possible that all 
+        receivers won't be called if an error is raised. 
+ 
+        If any receivers are synchronous, they are grouped and called behind a 
+        sync_to_async() adaption before executing any asynchronous receivers. 
+ 
+        If any receivers are asynchronous, they are grouped and executed 
+        concurrently with asyncio.gather(). 
+ 
+        Arguments: 
+ 
+            sender 
+                The sender of the signal. Either a specific object or None. 
+ 
+            named 
+                Named arguments which will be passed to receivers. 
+ 
+        Return a list of tuple pairs [(receiver, response), ...]. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s0">not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">receivers</span>
+            <span class="s0">or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">sender_receivers_cache</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">) </span><span class="s0">is </span><span class="s1">NO_RECEIVERS</span>
+        <span class="s2">):</span>
+            <span class="s0">return </span><span class="s2">[]</span>
+        <span class="s1">sync_receivers</span><span class="s2">, </span><span class="s1">async_receivers </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_live_receivers</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">sync_receivers</span><span class="s2">:</span>
+
+            <span class="s2">@</span><span class="s1">sync_to_async</span>
+            <span class="s0">def </span><span class="s1">sync_send</span><span class="s2">():</span>
+                <span class="s1">responses </span><span class="s2">= []</span>
+                <span class="s0">for </span><span class="s1">receiver </span><span class="s0">in </span><span class="s1">sync_receivers</span><span class="s2">:</span>
+                    <span class="s1">response </span><span class="s2">= </span><span class="s1">receiver</span><span class="s2">(</span><span class="s1">signal</span><span class="s2">=</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">=</span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">named</span><span class="s2">)</span>
+                    <span class="s1">responses</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">response</span><span class="s2">))</span>
+                <span class="s0">return </span><span class="s1">responses</span>
+
+        <span class="s0">else</span><span class="s2">:</span>
+
+            <span class="s0">async def </span><span class="s1">sync_send</span><span class="s2">():</span>
+                <span class="s0">return </span><span class="s2">[]</span>
+
+        <span class="s1">responses</span><span class="s2">, </span><span class="s1">async_responses </span><span class="s2">= </span><span class="s0">await </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">gather</span><span class="s2">(</span>
+            <span class="s1">sync_send</span><span class="s2">(),</span>
+            <span class="s1">asyncio</span><span class="s2">.</span><span class="s1">gather</span><span class="s2">(</span>
+                <span class="s2">*(</span>
+                    <span class="s1">receiver</span><span class="s2">(</span><span class="s1">signal</span><span class="s2">=</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">=</span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">named</span><span class="s2">)</span>
+                    <span class="s0">for </span><span class="s1">receiver </span><span class="s0">in </span><span class="s1">async_receivers</span>
+                <span class="s2">)</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">responses</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">zip</span><span class="s2">(</span><span class="s1">async_receivers</span><span class="s2">, </span><span class="s1">async_responses</span><span class="s2">))</span>
+        <span class="s0">return </span><span class="s1">responses</span>
+
+    <span class="s0">def </span><span class="s1">_log_robust_failure</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">err</span><span class="s2">):</span>
+        <span class="s1">logger</span><span class="s2">.</span><span class="s1">error</span><span class="s2">(</span>
+            <span class="s3">&quot;Error calling %s in Signal.send_robust() (%s)&quot;</span><span class="s2">,</span>
+            <span class="s1">receiver</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s2">,</span>
+            <span class="s1">err</span><span class="s2">,</span>
+            <span class="s1">exc_info</span><span class="s2">=</span><span class="s1">err</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">send_robust</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">named</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        Send signal from sender to all connected receivers catching errors. 
+ 
+        If any receivers are asynchronous, they are called after all the 
+        synchronous receivers via a single call to async_to_sync(). They are 
+        also executed concurrently with asyncio.gather(). 
+ 
+        Arguments: 
+ 
+            sender 
+                The sender of the signal. Can be any Python object (normally one 
+                registered with a connect if you actually want something to 
+                occur). 
+ 
+            named 
+                Named arguments which will be passed to receivers. 
+ 
+        Return a list of tuple pairs [(receiver, response), ... ]. 
+ 
+        If any receiver raises an error (specifically any subclass of 
+        Exception), return the error instance as the result for that receiver. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s0">not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">receivers</span>
+            <span class="s0">or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">sender_receivers_cache</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">) </span><span class="s0">is </span><span class="s1">NO_RECEIVERS</span>
+        <span class="s2">):</span>
+            <span class="s0">return </span><span class="s2">[]</span>
+
+        <span class="s4"># Call each receiver with whatever arguments it can accept.</span>
+        <span class="s4"># Return a list of tuple pairs [(receiver, response), ... ].</span>
+        <span class="s1">responses </span><span class="s2">= []</span>
+        <span class="s1">sync_receivers</span><span class="s2">, </span><span class="s1">async_receivers </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_live_receivers</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">receiver </span><span class="s0">in </span><span class="s1">sync_receivers</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">response </span><span class="s2">= </span><span class="s1">receiver</span><span class="s2">(</span><span class="s1">signal</span><span class="s2">=</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">=</span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">named</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">err</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">_log_robust_failure</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+                <span class="s1">responses</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">err</span><span class="s2">))</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">responses</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">response</span><span class="s2">))</span>
+        <span class="s0">if </span><span class="s1">async_receivers</span><span class="s2">:</span>
+
+            <span class="s0">async def </span><span class="s1">asend_and_wrap_exception</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">):</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">response </span><span class="s2">= </span><span class="s0">await </span><span class="s1">receiver</span><span class="s2">(</span><span class="s1">signal</span><span class="s2">=</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">=</span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">named</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">err</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">_log_robust_failure</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+                    <span class="s0">return </span><span class="s1">err</span>
+                <span class="s0">return </span><span class="s1">response</span>
+
+            <span class="s0">async def </span><span class="s1">asend</span><span class="s2">():</span>
+                <span class="s1">async_responses </span><span class="s2">= </span><span class="s0">await </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">gather</span><span class="s2">(</span>
+                    <span class="s2">*(</span>
+                        <span class="s1">asend_and_wrap_exception</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">)</span>
+                        <span class="s0">for </span><span class="s1">receiver </span><span class="s0">in </span><span class="s1">async_receivers</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+                <span class="s0">return </span><span class="s1">zip</span><span class="s2">(</span><span class="s1">async_receivers</span><span class="s2">, </span><span class="s1">async_responses</span><span class="s2">)</span>
+
+            <span class="s1">responses</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">async_to_sync</span><span class="s2">(</span><span class="s1">asend</span><span class="s2">)())</span>
+        <span class="s0">return </span><span class="s1">responses</span>
+
+    <span class="s0">async def </span><span class="s1">asend_robust</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">named</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        Send signal from sender to all connected receivers catching errors. 
+ 
+        If any receivers are synchronous, they are grouped and called behind a 
+        sync_to_async() adaption before executing any asynchronous receivers. 
+ 
+        If any receivers are asynchronous, they are grouped and executed 
+        concurrently with asyncio.gather. 
+ 
+        Arguments: 
+ 
+            sender 
+                The sender of the signal. Can be any Python object (normally one 
+                registered with a connect if you actually want something to 
+                occur). 
+ 
+            named 
+                Named arguments which will be passed to receivers. 
+ 
+        Return a list of tuple pairs [(receiver, response), ... ]. 
+ 
+        If any receiver raises an error (specifically any subclass of 
+        Exception), return the error instance as the result for that receiver. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s0">not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">receivers</span>
+            <span class="s0">or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">sender_receivers_cache</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">) </span><span class="s0">is </span><span class="s1">NO_RECEIVERS</span>
+        <span class="s2">):</span>
+            <span class="s0">return </span><span class="s2">[]</span>
+
+        <span class="s4"># Call each receiver with whatever arguments it can accept.</span>
+        <span class="s4"># Return a list of tuple pairs [(receiver, response), ... ].</span>
+        <span class="s1">sync_receivers</span><span class="s2">, </span><span class="s1">async_receivers </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_live_receivers</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">sync_receivers</span><span class="s2">:</span>
+
+            <span class="s2">@</span><span class="s1">sync_to_async</span>
+            <span class="s0">def </span><span class="s1">sync_send</span><span class="s2">():</span>
+                <span class="s1">responses </span><span class="s2">= []</span>
+                <span class="s0">for </span><span class="s1">receiver </span><span class="s0">in </span><span class="s1">sync_receivers</span><span class="s2">:</span>
+                    <span class="s0">try</span><span class="s2">:</span>
+                        <span class="s1">response </span><span class="s2">= </span><span class="s1">receiver</span><span class="s2">(</span><span class="s1">signal</span><span class="s2">=</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">=</span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">named</span><span class="s2">)</span>
+                    <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">err</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">_log_robust_failure</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+                        <span class="s1">responses</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">err</span><span class="s2">))</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s1">responses</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">response</span><span class="s2">))</span>
+                <span class="s0">return </span><span class="s1">responses</span>
+
+        <span class="s0">else</span><span class="s2">:</span>
+
+            <span class="s0">async def </span><span class="s1">sync_send</span><span class="s2">():</span>
+                <span class="s0">return </span><span class="s2">[]</span>
+
+        <span class="s0">async def </span><span class="s1">asend_and_wrap_exception</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">):</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">response </span><span class="s2">= </span><span class="s0">await </span><span class="s1">receiver</span><span class="s2">(</span><span class="s1">signal</span><span class="s2">=</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">=</span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">named</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">err</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">_log_robust_failure</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+                <span class="s0">return </span><span class="s1">err</span>
+            <span class="s0">return </span><span class="s1">response</span>
+
+        <span class="s1">responses</span><span class="s2">, </span><span class="s1">async_responses </span><span class="s2">= </span><span class="s0">await </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">gather</span><span class="s2">(</span>
+            <span class="s1">sync_send</span><span class="s2">(),</span>
+            <span class="s1">asyncio</span><span class="s2">.</span><span class="s1">gather</span><span class="s2">(</span>
+                <span class="s2">*(</span><span class="s1">asend_and_wrap_exception</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">) </span><span class="s0">for </span><span class="s1">receiver </span><span class="s0">in </span><span class="s1">async_receivers</span><span class="s2">),</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">responses</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">zip</span><span class="s2">(</span><span class="s1">async_receivers</span><span class="s2">, </span><span class="s1">async_responses</span><span class="s2">))</span>
+        <span class="s0">return </span><span class="s1">responses</span>
+
+    <span class="s0">def </span><span class="s1">_clear_dead_receivers</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4"># Note: caller is assumed to hold self.lock.</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_dead_receivers</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_dead_receivers </span><span class="s2">= </span><span class="s0">False</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">receivers </span><span class="s2">= [</span>
+                <span class="s1">r</span>
+                <span class="s0">for </span><span class="s1">r </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">receivers</span>
+                <span class="s0">if not </span><span class="s2">(</span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">r</span><span class="s2">[</span><span class="s6">1</span><span class="s2">], </span><span class="s1">weakref</span><span class="s2">.</span><span class="s1">ReferenceType</span><span class="s2">) </span><span class="s0">and </span><span class="s1">r</span><span class="s2">[</span><span class="s6">1</span><span class="s2">]() </span><span class="s0">is None</span><span class="s2">)</span>
+            <span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">_live_receivers</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">sender</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        Filter sequence of receivers to get resolved, live receivers. 
+ 
+        This checks for weak references and resolves them, then returning only 
+        live receivers. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">receivers </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">use_caching </span><span class="s0">and not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_dead_receivers</span><span class="s2">:</span>
+            <span class="s1">receivers </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">sender_receivers_cache</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">)</span>
+            <span class="s4"># We could end up here with NO_RECEIVERS even if we do check this case in</span>
+            <span class="s4"># .send() prior to calling _live_receivers() due to concurrent .send() call.</span>
+            <span class="s0">if </span><span class="s1">receivers </span><span class="s0">is </span><span class="s1">NO_RECEIVERS</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s2">[], []</span>
+        <span class="s0">if </span><span class="s1">receivers </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lock</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">_clear_dead_receivers</span><span class="s2">()</span>
+                <span class="s1">senderkey </span><span class="s2">= </span><span class="s1">_make_id</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">)</span>
+                <span class="s1">receivers </span><span class="s2">= []</span>
+                <span class="s0">for </span><span class="s2">(</span><span class="s1">_receiverkey</span><span class="s2">, </span><span class="s1">r_senderkey</span><span class="s2">), </span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">is_async </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">receivers</span><span class="s2">:</span>
+                    <span class="s0">if </span><span class="s1">r_senderkey </span><span class="s2">== </span><span class="s1">NONE_ID </span><span class="s0">or </span><span class="s1">r_senderkey </span><span class="s2">== </span><span class="s1">senderkey</span><span class="s2">:</span>
+                        <span class="s1">receivers</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">is_async</span><span class="s2">))</span>
+                <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">use_caching</span><span class="s2">:</span>
+                    <span class="s0">if not </span><span class="s1">receivers</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">sender_receivers_cache</span><span class="s2">[</span><span class="s1">sender</span><span class="s2">] = </span><span class="s1">NO_RECEIVERS</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s4"># Note, we must cache the weakref versions.</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">sender_receivers_cache</span><span class="s2">[</span><span class="s1">sender</span><span class="s2">] = </span><span class="s1">receivers</span>
+        <span class="s1">non_weak_sync_receivers </span><span class="s2">= []</span>
+        <span class="s1">non_weak_async_receivers </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">is_async </span><span class="s0">in </span><span class="s1">receivers</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">, </span><span class="s1">weakref</span><span class="s2">.</span><span class="s1">ReferenceType</span><span class="s2">):</span>
+                <span class="s4"># Dereference the weak reference.</span>
+                <span class="s1">receiver </span><span class="s2">= </span><span class="s1">receiver</span><span class="s2">()</span>
+                <span class="s0">if </span><span class="s1">receiver </span><span class="s0">is not None</span><span class="s2">:</span>
+                    <span class="s0">if </span><span class="s1">is_async</span><span class="s2">:</span>
+                        <span class="s1">non_weak_async_receivers</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">)</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s1">non_weak_sync_receivers</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">is_async</span><span class="s2">:</span>
+                    <span class="s1">non_weak_async_receivers</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">non_weak_sync_receivers</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">receiver</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">non_weak_sync_receivers</span><span class="s2">, </span><span class="s1">non_weak_async_receivers</span>
+
+    <span class="s0">def </span><span class="s1">_remove_receiver</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">receiver</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s4"># Mark that the self.receivers list has dead weakrefs. If so, we will</span>
+        <span class="s4"># clean those up in connect, disconnect and _live_receivers while</span>
+        <span class="s4"># holding self.lock. Note that doing the cleanup here isn't a good</span>
+        <span class="s4"># idea, _remove_receiver() will be called as side effect of garbage</span>
+        <span class="s4"># collection, and so the call can happen while we are already holding</span>
+        <span class="s4"># self.lock.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_dead_receivers </span><span class="s2">= </span><span class="s0">True</span>
+
+
+<span class="s0">def </span><span class="s1">receiver</span><span class="s2">(</span><span class="s1">signal</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    A decorator for connecting receivers to signals. Used by passing in the 
+    signal (or list of signals) and keyword arguments to connect:: 
+ 
+        @receiver(post_save, sender=MyModel) 
+        def signal_receiver(sender, **kwargs): 
+            ... 
+ 
+        @receiver([post_save, post_delete], sender=MyModel) 
+        def signals_receiver(sender, **kwargs): 
+            ... 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">_decorator</span><span class="s2">(</span><span class="s1">func</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">signal</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+            <span class="s0">for </span><span class="s1">s </span><span class="s0">in </span><span class="s1">signal</span><span class="s2">:</span>
+                <span class="s1">s</span><span class="s2">.</span><span class="s1">connect</span><span class="s2">(</span><span class="s1">func</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">signal</span><span class="s2">.</span><span class="s1">connect</span><span class="s2">(</span><span class="s1">func</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">func</span>
+
+    <span class="s0">return </span><span class="s1">_decorator</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<html>
+<head>
+<title>management.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #2aacb8;}
+.s5 { color: #6aab73;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+management.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Creates the default Site object. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">apps </span><span class="s2">import </span><span class="s1">apps </span><span class="s2">as </span><span class="s1">global_apps</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf </span><span class="s2">import </span><span class="s1">settings</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">management</span><span class="s3">.</span><span class="s1">color </span><span class="s2">import </span><span class="s1">no_style</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db </span><span class="s2">import </span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s3">, </span><span class="s1">connections</span><span class="s3">, </span><span class="s1">router</span>
+
+
+<span class="s2">def </span><span class="s1">create_default_site</span><span class="s3">(</span>
+    <span class="s1">app_config</span><span class="s3">,</span>
+    <span class="s1">verbosity</span><span class="s3">=</span><span class="s4">2</span><span class="s3">,</span>
+    <span class="s1">interactive</span><span class="s3">=</span><span class="s2">True</span><span class="s3">,</span>
+    <span class="s1">using</span><span class="s3">=</span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s3">,</span>
+    <span class="s1">apps</span><span class="s3">=</span><span class="s1">global_apps</span><span class="s3">,</span>
+    <span class="s3">**</span><span class="s1">kwargs</span><span class="s3">,</span>
+<span class="s3">):</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">Site </span><span class="s3">= </span><span class="s1">apps</span><span class="s3">.</span><span class="s1">get_model</span><span class="s3">(</span><span class="s5">&quot;sites&quot;</span><span class="s3">, </span><span class="s5">&quot;Site&quot;</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">LookupError</span><span class="s3">:</span>
+        <span class="s2">return</span>
+
+    <span class="s2">if not </span><span class="s1">router</span><span class="s3">.</span><span class="s1">allow_migrate_model</span><span class="s3">(</span><span class="s1">using</span><span class="s3">, </span><span class="s1">Site</span><span class="s3">):</span>
+        <span class="s2">return</span>
+
+    <span class="s2">if not </span><span class="s1">Site</span><span class="s3">.</span><span class="s1">objects</span><span class="s3">.</span><span class="s1">using</span><span class="s3">(</span><span class="s1">using</span><span class="s3">).</span><span class="s1">exists</span><span class="s3">():</span>
+        <span class="s6"># The default settings set SITE_ID = 1, and some tests in Django's test</span>
+        <span class="s6"># suite rely on this value. However, if database sequences are reused</span>
+        <span class="s6"># (e.g. in the test suite after flush/syncdb), it isn't guaranteed that</span>
+        <span class="s6"># the next id will be 1, so we coerce it. See #15573 and #16353. This</span>
+        <span class="s6"># can also crop up outside of tests - see #15346.</span>
+        <span class="s2">if </span><span class="s1">verbosity </span><span class="s3">&gt;= </span><span class="s4">2</span><span class="s3">:</span>
+            <span class="s1">print</span><span class="s3">(</span><span class="s5">&quot;Creating example.com Site object&quot;</span><span class="s3">)</span>
+        <span class="s1">Site</span><span class="s3">(</span>
+            <span class="s1">pk</span><span class="s3">=</span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">settings</span><span class="s3">, </span><span class="s5">&quot;SITE_ID&quot;</span><span class="s3">, </span><span class="s4">1</span><span class="s3">), </span><span class="s1">domain</span><span class="s3">=</span><span class="s5">&quot;example.com&quot;</span><span class="s3">, </span><span class="s1">name</span><span class="s3">=</span><span class="s5">&quot;example.com&quot;</span>
+        <span class="s3">).</span><span class="s1">save</span><span class="s3">(</span><span class="s1">using</span><span class="s3">=</span><span class="s1">using</span><span class="s3">)</span>
+
+        <span class="s6"># We set an explicit pk instead of relying on auto-incrementation,</span>
+        <span class="s6"># so we need to reset the database sequence. See #17415.</span>
+        <span class="s1">sequence_sql </span><span class="s3">= </span><span class="s1">connections</span><span class="s3">[</span><span class="s1">using</span><span class="s3">].</span><span class="s1">ops</span><span class="s3">.</span><span class="s1">sequence_reset_sql</span><span class="s3">(</span><span class="s1">no_style</span><span class="s3">(), [</span><span class="s1">Site</span><span class="s3">])</span>
+        <span class="s2">if </span><span class="s1">sequence_sql</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">verbosity </span><span class="s3">&gt;= </span><span class="s4">2</span><span class="s3">:</span>
+                <span class="s1">print</span><span class="s3">(</span><span class="s5">&quot;Resetting sequence&quot;</span><span class="s3">)</span>
+            <span class="s2">with </span><span class="s1">connections</span><span class="s3">[</span><span class="s1">using</span><span class="s3">].</span><span class="s1">cursor</span><span class="s3">() </span><span class="s2">as </span><span class="s1">cursor</span><span class="s3">:</span>
+                <span class="s2">for </span><span class="s1">command </span><span class="s2">in </span><span class="s1">sequence_sql</span><span class="s3">:</span>
+                    <span class="s1">cursor</span><span class="s3">.</span><span class="s1">execute</span><span class="s3">(</span><span class="s1">command</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

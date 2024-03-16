@@ -1,0 +1,97 @@
+<html>
+<head>
+<title>gzip.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+gzip.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">cache </span><span class="s0">import </span><span class="s1">patch_vary_headers</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">deprecation </span><span class="s0">import </span><span class="s1">MiddlewareMixin</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">regex_helper </span><span class="s0">import </span><span class="s1">_lazy_re_compile</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">text </span><span class="s0">import </span><span class="s1">compress_sequence</span><span class="s2">, </span><span class="s1">compress_string</span>
+
+<span class="s1">re_accepts_gzip </span><span class="s2">= </span><span class="s1">_lazy_re_compile</span><span class="s2">(</span><span class="s3">r&quot;\bgzip\b&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">GZipMiddleware</span><span class="s2">(</span><span class="s1">MiddlewareMixin</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Compress content if the browser allows gzip compression. 
+    Set the Vary header accordingly, so that caches will base their storage 
+    on the Accept-Encoding header. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">max_random_bytes </span><span class="s2">= </span><span class="s5">100</span>
+
+    <span class="s0">def </span><span class="s1">process_response</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">response</span><span class="s2">):</span>
+        <span class="s6"># It's not worth attempting to compress really short responses.</span>
+        <span class="s0">if not </span><span class="s1">response</span><span class="s2">.</span><span class="s1">streaming </span><span class="s0">and </span><span class="s1">len</span><span class="s2">(</span><span class="s1">response</span><span class="s2">.</span><span class="s1">content</span><span class="s2">) &lt; </span><span class="s5">200</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">response</span>
+
+        <span class="s6"># Avoid gzipping if we've already got a content-encoding.</span>
+        <span class="s0">if </span><span class="s1">response</span><span class="s2">.</span><span class="s1">has_header</span><span class="s2">(</span><span class="s3">&quot;Content-Encoding&quot;</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">response</span>
+
+        <span class="s1">patch_vary_headers</span><span class="s2">(</span><span class="s1">response</span><span class="s2">, (</span><span class="s3">&quot;Accept-Encoding&quot;</span><span class="s2">,))</span>
+
+        <span class="s1">ae </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">META</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;HTTP_ACCEPT_ENCODING&quot;</span><span class="s2">, </span><span class="s3">&quot;&quot;</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">re_accepts_gzip</span><span class="s2">.</span><span class="s1">search</span><span class="s2">(</span><span class="s1">ae</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">response</span>
+
+        <span class="s0">if </span><span class="s1">response</span><span class="s2">.</span><span class="s1">streaming</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">response</span><span class="s2">.</span><span class="s1">is_async</span><span class="s2">:</span>
+                <span class="s6"># pull to lexical scope to capture fixed reference in case</span>
+                <span class="s6"># streaming_content is set again later.</span>
+                <span class="s1">orignal_iterator </span><span class="s2">= </span><span class="s1">response</span><span class="s2">.</span><span class="s1">streaming_content</span>
+
+                <span class="s0">async def </span><span class="s1">gzip_wrapper</span><span class="s2">():</span>
+                    <span class="s0">async for </span><span class="s1">chunk </span><span class="s0">in </span><span class="s1">orignal_iterator</span><span class="s2">:</span>
+                        <span class="s0">yield </span><span class="s1">compress_string</span><span class="s2">(</span>
+                            <span class="s1">chunk</span><span class="s2">,</span>
+                            <span class="s1">max_random_bytes</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">max_random_bytes</span><span class="s2">,</span>
+                        <span class="s2">)</span>
+
+                <span class="s1">response</span><span class="s2">.</span><span class="s1">streaming_content </span><span class="s2">= </span><span class="s1">gzip_wrapper</span><span class="s2">()</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">response</span><span class="s2">.</span><span class="s1">streaming_content </span><span class="s2">= </span><span class="s1">compress_sequence</span><span class="s2">(</span>
+                    <span class="s1">response</span><span class="s2">.</span><span class="s1">streaming_content</span><span class="s2">,</span>
+                    <span class="s1">max_random_bytes</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">max_random_bytes</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s6"># Delete the `Content-Length` header for streaming content, because</span>
+            <span class="s6"># we won't know the compressed size until we stream it.</span>
+            <span class="s0">del </span><span class="s1">response</span><span class="s2">.</span><span class="s1">headers</span><span class="s2">[</span><span class="s3">&quot;Content-Length&quot;</span><span class="s2">]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s6"># Return the compressed content only if it's actually shorter.</span>
+            <span class="s1">compressed_content </span><span class="s2">= </span><span class="s1">compress_string</span><span class="s2">(</span>
+                <span class="s1">response</span><span class="s2">.</span><span class="s1">content</span><span class="s2">,</span>
+                <span class="s1">max_random_bytes</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">max_random_bytes</span><span class="s2">,</span>
+            <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">compressed_content</span><span class="s2">) &gt;= </span><span class="s1">len</span><span class="s2">(</span><span class="s1">response</span><span class="s2">.</span><span class="s1">content</span><span class="s2">):</span>
+                <span class="s0">return </span><span class="s1">response</span>
+            <span class="s1">response</span><span class="s2">.</span><span class="s1">content </span><span class="s2">= </span><span class="s1">compressed_content</span>
+            <span class="s1">response</span><span class="s2">.</span><span class="s1">headers</span><span class="s2">[</span><span class="s3">&quot;Content-Length&quot;</span><span class="s2">] = </span><span class="s1">str</span><span class="s2">(</span><span class="s1">len</span><span class="s2">(</span><span class="s1">response</span><span class="s2">.</span><span class="s1">content</span><span class="s2">))</span>
+
+        <span class="s6"># If there is a strong ETag, make it weak to fulfill the requirements</span>
+        <span class="s6"># of RFC 9110 Section 8.8.1 while also allowing conditional request</span>
+        <span class="s6"># matches on ETags.</span>
+        <span class="s1">etag </span><span class="s2">= </span><span class="s1">response</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;ETag&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">etag </span><span class="s0">and </span><span class="s1">etag</span><span class="s2">.</span><span class="s1">startswith</span><span class="s2">(</span><span class="s3">'&quot;'</span><span class="s2">):</span>
+            <span class="s1">response</span><span class="s2">.</span><span class="s1">headers</span><span class="s2">[</span><span class="s3">&quot;ETag&quot;</span><span class="s2">] = </span><span class="s3">&quot;W/&quot; </span><span class="s2">+ </span><span class="s1">etag</span>
+        <span class="s1">response</span><span class="s2">.</span><span class="s1">headers</span><span class="s2">[</span><span class="s3">&quot;Content-Encoding&quot;</span><span class="s2">] = </span><span class="s3">&quot;gzip&quot;</span>
+
+        <span class="s0">return </span><span class="s1">response</span>
+</pre>
+</body>
+</html>

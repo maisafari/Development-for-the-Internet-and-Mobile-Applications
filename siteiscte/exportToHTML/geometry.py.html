@@ -1,0 +1,804 @@
+<html>
+<head>
+<title>geometry.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+.s6 { color: #6aab73;}
+.s7 { color: #a5c261;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+geometry.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+ This module contains the 'base' GEOSGeometry object -- all GEOS Geometries 
+ inherit from this object. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">re</span>
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">addressof</span><span class="s3">, </span><span class="s1">byref</span><span class="s3">, </span><span class="s1">c_double</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis </span><span class="s2">import </span><span class="s1">gdal</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geometry </span><span class="s2">import </span><span class="s1">hex_regex</span><span class="s3">, </span><span class="s1">json_regex</span><span class="s3">, </span><span class="s1">wkt_regex</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos </span><span class="s2">import </span><span class="s1">prototypes </span><span class="s2">as </span><span class="s1">capi</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">base </span><span class="s2">import </span><span class="s1">GEOSBase</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">coordseq </span><span class="s2">import </span><span class="s1">GEOSCoordSeq</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">error </span><span class="s2">import </span><span class="s1">GEOSException</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">libgeos </span><span class="s2">import </span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">geos_version_tuple</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">mutable_list </span><span class="s2">import </span><span class="s1">ListMixin</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">prepared </span><span class="s2">import </span><span class="s1">PreparedGeometry</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">prototypes</span><span class="s3">.</span><span class="s1">io </span><span class="s2">import </span><span class="s1">ewkb_w</span><span class="s3">, </span><span class="s1">wkb_r</span><span class="s3">, </span><span class="s1">wkb_w</span><span class="s3">, </span><span class="s1">wkt_r</span><span class="s3">, </span><span class="s1">wkt_w</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">deconstruct </span><span class="s2">import </span><span class="s1">deconstructible</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">encoding </span><span class="s2">import </span><span class="s1">force_bytes</span><span class="s3">, </span><span class="s1">force_str</span>
+
+
+<span class="s2">class </span><span class="s1">GEOSGeometryBase</span><span class="s3">(</span><span class="s1">GEOSBase</span><span class="s3">):</span>
+    <span class="s1">_GEOS_CLASSES </span><span class="s3">= </span><span class="s2">None</span>
+
+    <span class="s1">ptr_type </span><span class="s3">= </span><span class="s1">GEOM_PTR</span>
+    <span class="s1">destructor </span><span class="s3">= </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">destroy_geom</span>
+    <span class="s1">has_cs </span><span class="s3">= </span><span class="s2">False  </span><span class="s4"># Only Point, LineString, LinearRing have coordinate sequences</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">cls</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_ptr </span><span class="s3">= </span><span class="s1">ptr</span>
+
+        <span class="s4"># Setting the class type (e.g., Point, Polygon, etc.)</span>
+        <span class="s2">if </span><span class="s1">type</span><span class="s3">(</span><span class="s1">self</span><span class="s3">) </span><span class="s2">in </span><span class="s3">(</span><span class="s1">GEOSGeometryBase</span><span class="s3">, </span><span class="s1">GEOSGeometry</span><span class="s3">):</span>
+            <span class="s2">if </span><span class="s1">cls </span><span class="s2">is None</span><span class="s3">:</span>
+                <span class="s2">if </span><span class="s1">GEOSGeometryBase</span><span class="s3">.</span><span class="s1">_GEOS_CLASSES </span><span class="s2">is None</span><span class="s3">:</span>
+                    <span class="s4"># Inner imports avoid import conflicts with GEOSGeometry.</span>
+                    <span class="s2">from </span><span class="s3">.</span><span class="s1">collections </span><span class="s2">import </span><span class="s3">(</span>
+                        <span class="s1">GeometryCollection</span><span class="s3">,</span>
+                        <span class="s1">MultiLineString</span><span class="s3">,</span>
+                        <span class="s1">MultiPoint</span><span class="s3">,</span>
+                        <span class="s1">MultiPolygon</span><span class="s3">,</span>
+                    <span class="s3">)</span>
+                    <span class="s2">from </span><span class="s3">.</span><span class="s1">linestring </span><span class="s2">import </span><span class="s1">LinearRing</span><span class="s3">, </span><span class="s1">LineString</span>
+                    <span class="s2">from </span><span class="s3">.</span><span class="s1">point </span><span class="s2">import </span><span class="s1">Point</span>
+                    <span class="s2">from </span><span class="s3">.</span><span class="s1">polygon </span><span class="s2">import </span><span class="s1">Polygon</span>
+
+                    <span class="s1">GEOSGeometryBase</span><span class="s3">.</span><span class="s1">_GEOS_CLASSES </span><span class="s3">= {</span>
+                        <span class="s5">0</span><span class="s3">: </span><span class="s1">Point</span><span class="s3">,</span>
+                        <span class="s5">1</span><span class="s3">: </span><span class="s1">LineString</span><span class="s3">,</span>
+                        <span class="s5">2</span><span class="s3">: </span><span class="s1">LinearRing</span><span class="s3">,</span>
+                        <span class="s5">3</span><span class="s3">: </span><span class="s1">Polygon</span><span class="s3">,</span>
+                        <span class="s5">4</span><span class="s3">: </span><span class="s1">MultiPoint</span><span class="s3">,</span>
+                        <span class="s5">5</span><span class="s3">: </span><span class="s1">MultiLineString</span><span class="s3">,</span>
+                        <span class="s5">6</span><span class="s3">: </span><span class="s1">MultiPolygon</span><span class="s3">,</span>
+                        <span class="s5">7</span><span class="s3">: </span><span class="s1">GeometryCollection</span><span class="s3">,</span>
+                    <span class="s3">}</span>
+                <span class="s1">cls </span><span class="s3">= </span><span class="s1">GEOSGeometryBase</span><span class="s3">.</span><span class="s1">_GEOS_CLASSES</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">geom_typeid</span><span class="s3">]</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">__class__ </span><span class="s3">= </span><span class="s1">cls</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_post_init</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">_post_init</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Perform post-initialization setup.&quot;</span>
+        <span class="s4"># Setting the coordinate sequence for the geometry (will be None on</span>
+        <span class="s4"># geometries that do not have coordinate sequences)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cs </span><span class="s3">= (</span>
+            <span class="s1">GEOSCoordSeq</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">get_cs</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">), </span><span class="s1">self</span><span class="s3">.</span><span class="s1">hasz</span><span class="s3">) </span><span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">has_cs </span><span class="s2">else None</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">__copy__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return a clone because the copy of a GEOSGeometry may contain an 
+        invalid pointer location if the original is garbage collected. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">clone</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">__deepcopy__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">memodict</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        The `deepcopy` routine is used by the `Node` class of django.utils.tree; 
+        thus, the protocol routine needs to be implemented to return correct 
+        copies (clones) of these GEOS objects, which use C pointers. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">clone</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">__str__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;EWKT is used for the string representation.&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">ewkt</span>
+
+    <span class="s2">def </span><span class="s1">__repr__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Short-hand representation because WKT may be very large.&quot;</span>
+        <span class="s2">return </span><span class="s6">&quot;&lt;%s object at %s&gt;&quot; </span><span class="s3">% (</span><span class="s1">self</span><span class="s3">.</span><span class="s1">geom_type</span><span class="s3">, </span><span class="s1">hex</span><span class="s3">(</span><span class="s1">addressof</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)))</span>
+
+    <span class="s4"># Pickling support</span>
+    <span class="s2">def </span><span class="s1">_to_pickle_wkb</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">bytes</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">wkb</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_from_pickle_wkb</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">wkb</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">wkb_r</span><span class="s3">().</span><span class="s1">read</span><span class="s3">(</span><span class="s1">memoryview</span><span class="s3">(</span><span class="s1">wkb</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">__getstate__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s4"># The pickled state is simply a tuple of the WKB (in string form)</span>
+        <span class="s4"># and the SRID.</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_to_pickle_wkb</span><span class="s3">(), </span><span class="s1">self</span><span class="s3">.</span><span class="s1">srid</span>
+
+    <span class="s2">def </span><span class="s1">__setstate__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">state</span><span class="s3">):</span>
+        <span class="s4"># Instantiating from the tuple state that was pickled.</span>
+        <span class="s1">wkb</span><span class="s3">, </span><span class="s1">srid </span><span class="s3">= </span><span class="s1">state</span>
+        <span class="s1">ptr </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_from_pickle_wkb</span><span class="s3">(</span><span class="s1">wkb</span><span class="s3">)</span>
+        <span class="s2">if not </span><span class="s1">ptr</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">GEOSException</span><span class="s3">(</span><span class="s6">&quot;Invalid Geometry loaded from pickled state.&quot;</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">ptr </span><span class="s3">= </span><span class="s1">ptr</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_post_init</span><span class="s3">()</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">srid </span><span class="s3">= </span><span class="s1">srid</span>
+
+    <span class="s3">@</span><span class="s1">classmethod</span>
+    <span class="s2">def </span><span class="s1">_from_wkb</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">, </span><span class="s1">wkb</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">wkb_r</span><span class="s3">().</span><span class="s1">read</span><span class="s3">(</span><span class="s1">wkb</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">staticmethod</span>
+    <span class="s2">def </span><span class="s1">from_ewkt</span><span class="s3">(</span><span class="s1">ewkt</span><span class="s3">):</span>
+        <span class="s1">ewkt </span><span class="s3">= </span><span class="s1">force_bytes</span><span class="s3">(</span><span class="s1">ewkt</span><span class="s3">)</span>
+        <span class="s1">srid </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s1">parts </span><span class="s3">= </span><span class="s1">ewkt</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s7">b&quot;;&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">parts</span><span class="s3">) == </span><span class="s5">2</span><span class="s3">:</span>
+            <span class="s1">srid_part</span><span class="s3">, </span><span class="s1">wkt </span><span class="s3">= </span><span class="s1">parts</span>
+            <span class="s1">match </span><span class="s3">= </span><span class="s1">re</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(</span><span class="s7">rb&quot;SRID=(?P&lt;srid&gt;\-?\d+)&quot;</span><span class="s3">, </span><span class="s1">srid_part</span><span class="s3">)</span>
+            <span class="s2">if not </span><span class="s1">match</span><span class="s3">:</span>
+                <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span><span class="s6">&quot;EWKT has invalid SRID part.&quot;</span><span class="s3">)</span>
+            <span class="s1">srid </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">match</span><span class="s3">[</span><span class="s6">&quot;srid&quot;</span><span class="s3">])</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">wkt </span><span class="s3">= </span><span class="s1">ewkt</span>
+        <span class="s2">if not </span><span class="s1">wkt</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span><span class="s6">&quot;Expected WKT but got an empty string.&quot;</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">GEOSGeometry</span><span class="s3">(</span><span class="s1">GEOSGeometry</span><span class="s3">.</span><span class="s1">_from_wkt</span><span class="s3">(</span><span class="s1">wkt</span><span class="s3">), </span><span class="s1">srid</span><span class="s3">=</span><span class="s1">srid</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">staticmethod</span>
+    <span class="s2">def </span><span class="s1">_from_wkt</span><span class="s3">(</span><span class="s1">wkt</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">wkt_r</span><span class="s3">().</span><span class="s1">read</span><span class="s3">(</span><span class="s1">wkt</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">classmethod</span>
+    <span class="s2">def </span><span class="s1">from_gml</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">, </span><span class="s1">gml_string</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">OGRGeometry</span><span class="s3">.</span><span class="s1">from_gml</span><span class="s3">(</span><span class="s1">gml_string</span><span class="s3">).</span><span class="s1">geos</span>
+
+    <span class="s4"># Comparison operators</span>
+    <span class="s2">def </span><span class="s1">__eq__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Equivalence testing, a Geometry may be compared with another Geometry 
+        or an EWKT representation. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">other</span><span class="s3">, </span><span class="s1">str</span><span class="s3">):</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s1">other </span><span class="s3">= </span><span class="s1">GEOSGeometry</span><span class="s3">.</span><span class="s1">from_ewkt</span><span class="s3">(</span><span class="s1">other</span><span class="s3">)</span>
+            <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">GEOSException</span><span class="s3">):</span>
+                <span class="s2">return False</span>
+        <span class="s2">return </span><span class="s3">(</span>
+            <span class="s1">isinstance</span><span class="s3">(</span><span class="s1">other</span><span class="s3">, </span><span class="s1">GEOSGeometry</span><span class="s3">)</span>
+            <span class="s2">and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">srid </span><span class="s3">== </span><span class="s1">other</span><span class="s3">.</span><span class="s1">srid</span>
+            <span class="s2">and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">equals_exact</span><span class="s3">(</span><span class="s1">other</span><span class="s3">)</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">__hash__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">hash</span><span class="s3">((</span><span class="s1">self</span><span class="s3">.</span><span class="s1">srid</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">wkt</span><span class="s3">))</span>
+
+    <span class="s4"># ### Geometry set-like operations ###</span>
+    <span class="s4"># Thanks to Sean Gillies for inspiration:</span>
+    <span class="s4">#  http://lists.gispython.org/pipermail/community/2007-July/001034.html</span>
+    <span class="s4"># g = g1 | g2</span>
+    <span class="s2">def </span><span class="s1">__or__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the union of this Geometry and the other.&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">union</span><span class="s3">(</span><span class="s1">other</span><span class="s3">)</span>
+
+    <span class="s4"># g = g1 &amp; g2</span>
+    <span class="s2">def </span><span class="s1">__and__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the intersection of this Geometry and the other.&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">intersection</span><span class="s3">(</span><span class="s1">other</span><span class="s3">)</span>
+
+    <span class="s4"># g = g1 - g2</span>
+    <span class="s2">def </span><span class="s1">__sub__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the difference this Geometry and the other.&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">difference</span><span class="s3">(</span><span class="s1">other</span><span class="s3">)</span>
+
+    <span class="s4"># g = g1 ^ g2</span>
+    <span class="s2">def </span><span class="s1">__xor__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the symmetric difference of this Geometry and the other.&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">sym_difference</span><span class="s3">(</span><span class="s1">other</span><span class="s3">)</span>
+
+    <span class="s4"># #### Coordinate Sequence Routines ####</span>
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">coord_seq</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return a clone of the coordinate sequence for this Geometry.&quot;</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">has_cs</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cs</span><span class="s3">.</span><span class="s1">clone</span><span class="s3">()</span>
+
+    <span class="s4"># #### Geometry Info ####</span>
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">geom_type</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return a string representing the Geometry type, e.g. 'Polygon'&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_type</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">).</span><span class="s1">decode</span><span class="s3">()</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">geom_typeid</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return an integer representing the Geometry type.&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_typeid</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">num_geom</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the number of geometries in the Geometry.&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">get_num_geoms</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">num_coords</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the number of coordinates in the Geometry.&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">get_num_coords</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">num_points</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the number points, or coordinates, in the Geometry.&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">num_coords</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">dims</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the dimension of this Geometry (0=point, 1=line, 2=surface).&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">get_dims</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">normalize</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">clone</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Convert this Geometry to normal form (or canonical form). 
+        If the `clone` keyword is set, then the geometry is not modified and a 
+        normalized clone of the geometry is returned instead. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">clone</span><span class="s3">:</span>
+            <span class="s1">clone </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">clone</span><span class="s3">()</span>
+            <span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_normalize</span><span class="s3">(</span><span class="s1">clone</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+            <span class="s2">return </span><span class="s1">clone</span>
+        <span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_normalize</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">make_valid</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Attempt to create a valid representation of a given invalid geometry 
+        without losing any of the input vertices. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">GEOSGeometry</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_makevalid</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">), </span><span class="s1">srid</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">srid</span><span class="s3">)</span>
+
+    <span class="s4"># #### Unary predicates ####</span>
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">empty</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return a boolean indicating whether the set of points in this Geometry 
+        are empty. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_isempty</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">hasz</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return whether the geometry has a 3D dimension.&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_hasz</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">ring</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return whether or not the geometry is a ring.&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_isring</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">simple</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return false if the Geometry isn't simple.&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_issimple</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">valid</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Test the validity of this Geometry.&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_isvalid</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">valid_reason</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return a string containing the reason for any invalidity. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_isvalidreason</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">).</span><span class="s1">decode</span><span class="s3">()</span>
+
+    <span class="s4"># #### Binary predicates. ####</span>
+    <span class="s2">def </span><span class="s1">contains</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;Return true if other.within(this) returns true.&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_contains</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">covers</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return True if the DE-9IM Intersection Matrix for the two geometries is 
+        T*****FF*, *T****FF*, ***T**FF*, or ****T*FF*. If either geometry is 
+        empty, return False. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_covers</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">crosses</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return true if the DE-9IM intersection matrix for the two Geometries 
+        is T*T****** (for a point and a curve,a point and an area or a line and 
+        an area) 0******** (for two curves). 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_crosses</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">disjoint</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return true if the DE-9IM intersection matrix for the two Geometries 
+        is FF*FF****. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_disjoint</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">equals</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return true if the DE-9IM intersection matrix for the two Geometries 
+        is T*F**FFF*. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_equals</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">equals_exact</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">, </span><span class="s1">tolerance</span><span class="s3">=</span><span class="s5">0</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return true if the two Geometries are exactly equal, up to a 
+        specified tolerance. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_equalsexact</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">float</span><span class="s3">(</span><span class="s1">tolerance</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">equals_identical</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return true if the two Geometries are point-wise equivalent. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">geos_version_tuple</span><span class="s3">() &lt; (</span><span class="s5">3</span><span class="s3">, </span><span class="s5">12</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">GEOSException</span><span class="s3">(</span>
+                <span class="s6">&quot;GEOSGeometry.equals_identical() requires GEOS &gt;= 3.12.0.&quot;</span>
+            <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_equalsidentical</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">intersects</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;Return true if disjoint return false.&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_intersects</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">overlaps</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return true if the DE-9IM intersection matrix for the two Geometries 
+        is T*T***T** (for two points or two surfaces) 1*T***T** (for two curves). 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_overlaps</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">relate_pattern</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">, </span><span class="s1">pattern</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return true if the elements in the DE-9IM intersection matrix for the 
+        two Geometries match the elements in pattern. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">pattern</span><span class="s3">, </span><span class="s1">str</span><span class="s3">) </span><span class="s2">or </span><span class="s1">len</span><span class="s3">(</span><span class="s1">pattern</span><span class="s3">) &gt; </span><span class="s5">9</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">GEOSException</span><span class="s3">(</span><span class="s6">&quot;invalid intersection matrix pattern&quot;</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_relatepattern</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">force_bytes</span><span class="s3">(</span><span class="s1">pattern</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">touches</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return true if the DE-9IM intersection matrix for the two Geometries 
+        is FT*******, F**T***** or F***T****. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_touches</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">within</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return true if the DE-9IM intersection matrix for the two Geometries 
+        is T*F**F***. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_within</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s4"># #### SRID Routines ####</span>
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">srid</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Get the SRID for the geometry. Return None if no SRID is set.&quot;</span>
+        <span class="s1">s </span><span class="s3">= </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_get_srid</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">s </span><span class="s3">== </span><span class="s5">0</span><span class="s3">:</span>
+            <span class="s2">return None</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">s</span>
+
+    <span class="s3">@</span><span class="s1">srid</span><span class="s3">.</span><span class="s1">setter</span>
+    <span class="s2">def </span><span class="s1">srid</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">srid</span><span class="s3">):</span>
+        <span class="s0">&quot;Set the SRID for the geometry.&quot;</span>
+        <span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_set_srid</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s5">0 </span><span class="s2">if </span><span class="s1">srid </span><span class="s2">is None else </span><span class="s1">srid</span><span class="s3">)</span>
+
+    <span class="s4"># #### Output Routines ####</span>
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">ewkt</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the EWKT (SRID + WKT) of the Geometry. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">srid </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">srid</span>
+        <span class="s2">return </span><span class="s6">&quot;SRID=%s;%s&quot; </span><span class="s3">% (</span><span class="s1">srid</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">wkt</span><span class="s3">) </span><span class="s2">if </span><span class="s1">srid </span><span class="s2">else </span><span class="s1">self</span><span class="s3">.</span><span class="s1">wkt</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">wkt</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the WKT (Well-Known Text) representation of this Geometry.&quot;</span>
+        <span class="s2">return </span><span class="s1">wkt_w</span><span class="s3">(</span><span class="s1">dim</span><span class="s3">=</span><span class="s5">3 </span><span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">hasz </span><span class="s2">else </span><span class="s5">2</span><span class="s3">, </span><span class="s1">trim</span><span class="s3">=</span><span class="s2">True</span><span class="s3">).</span><span class="s1">write</span><span class="s3">(</span><span class="s1">self</span><span class="s3">).</span><span class="s1">decode</span><span class="s3">()</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">hex</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the WKB of this Geometry in hexadecimal form. Please note 
+        that the SRID is not included in this representation because it is not 
+        a part of the OGC specification (use the `hexewkb` property instead). 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># A possible faster, all-python, implementation:</span>
+        <span class="s4">#  str(self.wkb).encode('hex')</span>
+        <span class="s2">return </span><span class="s1">wkb_w</span><span class="s3">(</span><span class="s1">dim</span><span class="s3">=</span><span class="s5">3 </span><span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">hasz </span><span class="s2">else </span><span class="s5">2</span><span class="s3">).</span><span class="s1">write_hex</span><span class="s3">(</span><span class="s1">self</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">hexewkb</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the EWKB of this Geometry in hexadecimal form. This is an 
+        extension of the WKB specification that includes SRID value that are 
+        a part of this geometry. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">ewkb_w</span><span class="s3">(</span><span class="s1">dim</span><span class="s3">=</span><span class="s5">3 </span><span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">hasz </span><span class="s2">else </span><span class="s5">2</span><span class="s3">).</span><span class="s1">write_hex</span><span class="s3">(</span><span class="s1">self</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">json</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return GeoJSON representation of this Geometry. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">ogr</span><span class="s3">.</span><span class="s1">json</span>
+
+    <span class="s1">geojson </span><span class="s3">= </span><span class="s1">json</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">wkb</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the WKB (Well-Known Binary) representation of this Geometry 
+        as a Python memoryview. SRID and Z values are not included, use the 
+        `ewkb` property instead. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">wkb_w</span><span class="s3">(</span><span class="s5">3 </span><span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">hasz </span><span class="s2">else </span><span class="s5">2</span><span class="s3">).</span><span class="s1">write</span><span class="s3">(</span><span class="s1">self</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">ewkb</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the EWKB representation of this Geometry as a Python memoryview. 
+        This is an extension of the WKB specification that includes any SRID 
+        value that are a part of this geometry. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">ewkb_w</span><span class="s3">(</span><span class="s5">3 </span><span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">hasz </span><span class="s2">else </span><span class="s5">2</span><span class="s3">).</span><span class="s1">write</span><span class="s3">(</span><span class="s1">self</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">kml</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the KML representation of this Geometry.&quot;</span>
+        <span class="s1">gtype </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">geom_type</span>
+        <span class="s2">return </span><span class="s6">&quot;&lt;%s&gt;%s&lt;/%s&gt;&quot; </span><span class="s3">% (</span><span class="s1">gtype</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">coord_seq</span><span class="s3">.</span><span class="s1">kml</span><span class="s3">, </span><span class="s1">gtype</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">prepared</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return a PreparedGeometry corresponding to this geometry -- it is 
+        optimized for the contains, intersects, and covers operations. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">PreparedGeometry</span><span class="s3">(</span><span class="s1">self</span><span class="s3">)</span>
+
+    <span class="s4"># #### GDAL-specific output routines ####</span>
+    <span class="s2">def </span><span class="s1">_ogr_ptr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">OGRGeometry</span><span class="s3">.</span><span class="s1">_from_wkb</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">wkb</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">ogr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the OGR Geometry for this Geometry.&quot;</span>
+        <span class="s2">return </span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">OGRGeometry</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_ogr_ptr</span><span class="s3">(), </span><span class="s1">self</span><span class="s3">.</span><span class="s1">srs</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">srs</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the OSR SpatialReference for SRID of this Geometry.&quot;</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">srid</span><span class="s3">:</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">SpatialReference</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">srid</span><span class="s3">)</span>
+            <span class="s2">except </span><span class="s3">(</span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">GDALException</span><span class="s3">, </span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">SRSException</span><span class="s3">):</span>
+                <span class="s2">pass</span>
+        <span class="s2">return None</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">crs</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Alias for `srs` property.&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">srs</span>
+
+    <span class="s2">def </span><span class="s1">transform</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">ct</span><span class="s3">, </span><span class="s1">clone</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Requires GDAL. Transform the geometry according to the given 
+        transformation object, which may be an integer SRID, and WKT or 
+        PROJ string. By default, transform the geometry in-place and return 
+        nothing. However if the `clone` keyword is set, don't modify the 
+        geometry and return a transformed clone instead. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">srid </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">srid</span>
+
+        <span class="s2">if </span><span class="s1">ct </span><span class="s3">== </span><span class="s1">srid</span><span class="s3">:</span>
+            <span class="s4"># short-circuit where source &amp; dest SRIDs match</span>
+            <span class="s2">if </span><span class="s1">clone</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">clone</span><span class="s3">()</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s2">return</span>
+
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">ct</span><span class="s3">, </span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">CoordTransform</span><span class="s3">):</span>
+            <span class="s4"># We don't care about SRID because CoordTransform presupposes</span>
+            <span class="s4"># source SRS.</span>
+            <span class="s1">srid </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s2">elif </span><span class="s1">srid </span><span class="s2">is None or </span><span class="s1">srid </span><span class="s3">&lt; </span><span class="s5">0</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">GEOSException</span><span class="s3">(</span><span class="s6">&quot;Calling transform() with no SRID set is not supported&quot;</span><span class="s3">)</span>
+
+        <span class="s4"># Creating an OGR Geometry, which is then transformed.</span>
+        <span class="s1">g </span><span class="s3">= </span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">OGRGeometry</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_ogr_ptr</span><span class="s3">(), </span><span class="s1">srid</span><span class="s3">)</span>
+        <span class="s1">g</span><span class="s3">.</span><span class="s1">transform</span><span class="s3">(</span><span class="s1">ct</span><span class="s3">)</span>
+        <span class="s4"># Getting a new GEOS pointer</span>
+        <span class="s1">ptr </span><span class="s3">= </span><span class="s1">g</span><span class="s3">.</span><span class="s1">_geos_ptr</span><span class="s3">()</span>
+        <span class="s2">if </span><span class="s1">clone</span><span class="s3">:</span>
+            <span class="s4"># User wants a cloned transformed geometry returned.</span>
+            <span class="s2">return </span><span class="s1">GEOSGeometry</span><span class="s3">(</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">srid</span><span class="s3">=</span><span class="s1">g</span><span class="s3">.</span><span class="s1">srid</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">ptr</span><span class="s3">:</span>
+            <span class="s4"># Reassigning pointer, and performing post-initialization setup</span>
+            <span class="s4"># again due to the reassignment.</span>
+            <span class="s1">capi</span><span class="s3">.</span><span class="s1">destroy_geom</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">ptr </span><span class="s3">= </span><span class="s1">ptr</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_post_init</span><span class="s3">()</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">srid </span><span class="s3">= </span><span class="s1">g</span><span class="s3">.</span><span class="s1">srid</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">GEOSException</span><span class="s3">(</span><span class="s6">&quot;Transformed WKB was invalid.&quot;</span><span class="s3">)</span>
+
+    <span class="s4"># #### Topology Routines ####</span>
+    <span class="s2">def </span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">gptr</span><span class="s3">):</span>
+        <span class="s0">&quot;Return Geometry from the given pointer.&quot;</span>
+        <span class="s2">return </span><span class="s1">GEOSGeometry</span><span class="s3">(</span><span class="s1">gptr</span><span class="s3">, </span><span class="s1">srid</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">srid</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">boundary</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the boundary as a newly allocated Geometry object.&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_boundary</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">buffer</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">width</span><span class="s3">, </span><span class="s1">quadsegs</span><span class="s3">=</span><span class="s5">8</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return a geometry that represents all points whose distance from this 
+        Geometry is less than or equal to distance. Calculations are in the 
+        Spatial Reference System of this Geometry. The optional third parameter sets 
+        the number of segment used to approximate a quarter circle (defaults to 8). 
+        (Text from PostGIS documentation at ch. 6.1.3) 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_buffer</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">width</span><span class="s3">, </span><span class="s1">quadsegs</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">buffer_with_style</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">, </span><span class="s1">width</span><span class="s3">, </span><span class="s1">quadsegs</span><span class="s3">=</span><span class="s5">8</span><span class="s3">, </span><span class="s1">end_cap_style</span><span class="s3">=</span><span class="s5">1</span><span class="s3">, </span><span class="s1">join_style</span><span class="s3">=</span><span class="s5">1</span><span class="s3">, </span><span class="s1">mitre_limit</span><span class="s3">=</span><span class="s5">5.0</span>
+    <span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Same as buffer() but allows customizing the style of the memoryview. 
+ 
+        End cap style can be round (1), flat (2), or square (3). 
+        Join style can be round (1), mitre (2), or bevel (3). 
+        Mitre ratio limit only affects mitered join style. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span>
+            <span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_bufferwithstyle</span><span class="s3">(</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">width</span><span class="s3">, </span><span class="s1">quadsegs</span><span class="s3">, </span><span class="s1">end_cap_style</span><span class="s3">, </span><span class="s1">join_style</span><span class="s3">, </span><span class="s1">mitre_limit</span>
+            <span class="s3">),</span>
+        <span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">centroid</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        The centroid is equal to the centroid of the set of component Geometries 
+        of highest dimension (since the lower-dimension geometries contribute zero 
+        &quot;weight&quot; to the centroid). 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_centroid</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">))</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">convex_hull</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the smallest convex Polygon that contains all the points 
+        in the Geometry. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_convexhull</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">difference</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return a Geometry representing the points making up this Geometry 
+        that do not make up other. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_difference</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">))</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">envelope</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the envelope for this geometry (a polygon).&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_envelope</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">intersection</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;Return a Geometry representing the points shared by this Geometry and other.&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_intersection</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">))</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">point_on_surface</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Compute an interior point of this Geometry.&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_pointonsurface</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">relate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the DE-9IM intersection matrix for this Geometry and the other.&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_relate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">).</span><span class="s1">decode</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">simplify</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">tolerance</span><span class="s3">=</span><span class="s5">0.0</span><span class="s3">, </span><span class="s1">preserve_topology</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the Geometry, simplified using the Douglas-Peucker algorithm 
+        to the specified tolerance (higher tolerance =&gt; less points).  If no 
+        tolerance provided, defaults to 0. 
+ 
+        By default, don't preserve topology - e.g. polygons can be split, 
+        collapse to lines or disappear holes can be created or disappear, and 
+        lines can cross. By specifying preserve_topology=True, the result will 
+        have the same dimension and number of components as the input. This is 
+        significantly slower. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">preserve_topology</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_preservesimplify</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">tolerance</span><span class="s3">))</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_simplify</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">tolerance</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">sym_difference</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return a set combining the points in this Geometry not in other, 
+        and the points in other not in this Geometry. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_symdifference</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">))</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">unary_union</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the union of all the elements of this geometry.&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_unary_union</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">union</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;Return a Geometry representing all the points in this Geometry and other.&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_union</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">))</span>
+
+    <span class="s4"># #### Other Routines ####</span>
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">area</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Return the area of the Geometry.&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_area</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">byref</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">()))</span>
+
+    <span class="s2">def </span><span class="s1">distance</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the distance between the closest points on this Geometry 
+        and the other. Units will be in those of the coordinate system of 
+        the Geometry. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">other</span><span class="s3">, </span><span class="s1">GEOSGeometry</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">TypeError</span><span class="s3">(</span><span class="s6">&quot;distance() works only on other GEOS Geometries.&quot;</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_distance</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">other</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">byref</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">()))</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">extent</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the extent of this geometry as a 4-tuple, consisting of 
+        (xmin, ymin, xmax, ymax). 
+        &quot;&quot;&quot;</span>
+        <span class="s2">from </span><span class="s3">.</span><span class="s1">point </span><span class="s2">import </span><span class="s1">Point</span>
+
+        <span class="s1">env </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">envelope</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">env</span><span class="s3">, </span><span class="s1">Point</span><span class="s3">):</span>
+            <span class="s1">xmin</span><span class="s3">, </span><span class="s1">ymin </span><span class="s3">= </span><span class="s1">env</span><span class="s3">.</span><span class="s1">tuple</span>
+            <span class="s1">xmax</span><span class="s3">, </span><span class="s1">ymax </span><span class="s3">= </span><span class="s1">xmin</span><span class="s3">, </span><span class="s1">ymin</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">xmin</span><span class="s3">, </span><span class="s1">ymin </span><span class="s3">= </span><span class="s1">env</span><span class="s3">[</span><span class="s5">0</span><span class="s3">][</span><span class="s5">0</span><span class="s3">]</span>
+            <span class="s1">xmax</span><span class="s3">, </span><span class="s1">ymax </span><span class="s3">= </span><span class="s1">env</span><span class="s3">[</span><span class="s5">0</span><span class="s3">][</span><span class="s5">2</span><span class="s3">]</span>
+        <span class="s2">return </span><span class="s3">(</span><span class="s1">xmin</span><span class="s3">, </span><span class="s1">ymin</span><span class="s3">, </span><span class="s1">xmax</span><span class="s3">, </span><span class="s1">ymax</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">length</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the length of this Geometry (e.g., 0 for point, or the 
+        circumference of a Polygon). 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_length</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">byref</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">()))</span>
+
+    <span class="s2">def </span><span class="s1">clone</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;Clone this Geometry.&quot;</span>
+        <span class="s2">return </span><span class="s1">GEOSGeometry</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geom_clone</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">))</span>
+
+
+<span class="s2">class </span><span class="s1">LinearGeometryMixin</span><span class="s3">:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Used for LineString and MultiLineString. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">interpolate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">distance</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_interpolate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">distance</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">interpolate_normalized</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">distance</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_interpolate_normalized</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">distance</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">project</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">point</span><span class="s3">):</span>
+        <span class="s2">from </span><span class="s3">.</span><span class="s1">point </span><span class="s2">import </span><span class="s1">Point</span>
+
+        <span class="s2">if not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">point</span><span class="s3">, </span><span class="s1">Point</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">TypeError</span><span class="s3">(</span><span class="s6">&quot;locate_point argument must be a Point&quot;</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_project</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">point</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">project_normalized</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">point</span><span class="s3">):</span>
+        <span class="s2">from </span><span class="s3">.</span><span class="s1">point </span><span class="s2">import </span><span class="s1">Point</span>
+
+        <span class="s2">if not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">point</span><span class="s3">, </span><span class="s1">Point</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">TypeError</span><span class="s3">(</span><span class="s6">&quot;locate_point argument must be a Point&quot;</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_project_normalized</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">, </span><span class="s1">point</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">merged</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the line merge of this Geometry. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_topology</span><span class="s3">(</span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_linemerge</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">))</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">closed</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return whether or not this Geometry is closed. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_isclosed</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">deconstructible</span>
+<span class="s2">class </span><span class="s1">GEOSGeometry</span><span class="s3">(</span><span class="s1">GEOSGeometryBase</span><span class="s3">, </span><span class="s1">ListMixin</span><span class="s3">):</span>
+    <span class="s0">&quot;A class that, generally, encapsulates a GEOS geometry.&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">geo_input</span><span class="s3">, </span><span class="s1">srid</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        The base constructor for GEOS geometry objects. It may take the 
+        following inputs: 
+ 
+         * strings: 
+            - WKT 
+            - HEXEWKB (a PostGIS-specific canonical form) 
+            - GeoJSON (requires GDAL) 
+         * memoryview: 
+            - WKB 
+ 
+        The `srid` keyword specifies the Source Reference Identifier (SRID) 
+        number for this Geometry. If not provided, it defaults to None. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">input_srid </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">, </span><span class="s1">bytes</span><span class="s3">):</span>
+            <span class="s1">geo_input </span><span class="s3">= </span><span class="s1">force_str</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">, </span><span class="s1">str</span><span class="s3">):</span>
+            <span class="s1">wkt_m </span><span class="s3">= </span><span class="s1">wkt_regex</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">wkt_m</span><span class="s3">:</span>
+                <span class="s4"># Handle WKT input.</span>
+                <span class="s2">if </span><span class="s1">wkt_m</span><span class="s3">[</span><span class="s6">&quot;srid&quot;</span><span class="s3">]:</span>
+                    <span class="s1">input_srid </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">wkt_m</span><span class="s3">[</span><span class="s6">&quot;srid&quot;</span><span class="s3">])</span>
+                <span class="s1">g </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_from_wkt</span><span class="s3">(</span><span class="s1">force_bytes</span><span class="s3">(</span><span class="s1">wkt_m</span><span class="s3">[</span><span class="s6">&quot;wkt&quot;</span><span class="s3">]))</span>
+            <span class="s2">elif </span><span class="s1">hex_regex</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">):</span>
+                <span class="s4"># Handle HEXEWKB input.</span>
+                <span class="s1">g </span><span class="s3">= </span><span class="s1">wkb_r</span><span class="s3">().</span><span class="s1">read</span><span class="s3">(</span><span class="s1">force_bytes</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">))</span>
+            <span class="s2">elif </span><span class="s1">json_regex</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">):</span>
+                <span class="s4"># Handle GeoJSON input.</span>
+                <span class="s1">ogr </span><span class="s3">= </span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">OGRGeometry</span><span class="s3">.</span><span class="s1">from_json</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">)</span>
+                <span class="s1">g </span><span class="s3">= </span><span class="s1">ogr</span><span class="s3">.</span><span class="s1">_geos_ptr</span><span class="s3">()</span>
+                <span class="s1">input_srid </span><span class="s3">= </span><span class="s1">ogr</span><span class="s3">.</span><span class="s1">srid</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span><span class="s6">&quot;String input unrecognized as WKT EWKT, and HEXEWKB.&quot;</span><span class="s3">)</span>
+        <span class="s2">elif </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">, </span><span class="s1">GEOM_PTR</span><span class="s3">):</span>
+            <span class="s4"># When the input is a pointer to a geometry (GEOM_PTR).</span>
+            <span class="s1">g </span><span class="s3">= </span><span class="s1">geo_input</span>
+        <span class="s2">elif </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">, </span><span class="s1">memoryview</span><span class="s3">):</span>
+            <span class="s4"># When the input is a memoryview (WKB).</span>
+            <span class="s1">g </span><span class="s3">= </span><span class="s1">wkb_r</span><span class="s3">().</span><span class="s1">read</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">)</span>
+        <span class="s2">elif </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">, </span><span class="s1">GEOSGeometry</span><span class="s3">):</span>
+            <span class="s1">g </span><span class="s3">= </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geom_clone</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">.</span><span class="s1">ptr</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">TypeError</span><span class="s3">(</span><span class="s6">&quot;Improper geometry input type: %s&quot; </span><span class="s3">% </span><span class="s1">type</span><span class="s3">(</span><span class="s1">geo_input</span><span class="s3">))</span>
+
+        <span class="s2">if not </span><span class="s1">g</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">GEOSException</span><span class="s3">(</span><span class="s6">&quot;Could not initialize GEOS Geometry with given input.&quot;</span><span class="s3">)</span>
+
+        <span class="s1">input_srid </span><span class="s3">= </span><span class="s1">input_srid </span><span class="s2">or </span><span class="s1">capi</span><span class="s3">.</span><span class="s1">geos_get_srid</span><span class="s3">(</span><span class="s1">g</span><span class="s3">) </span><span class="s2">or None</span>
+        <span class="s2">if </span><span class="s1">input_srid </span><span class="s2">and </span><span class="s1">srid </span><span class="s2">and </span><span class="s1">input_srid </span><span class="s3">!= </span><span class="s1">srid</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span><span class="s6">&quot;Input geometry already has SRID: %d.&quot; </span><span class="s3">% </span><span class="s1">input_srid</span><span class="s3">)</span>
+
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">g</span><span class="s3">, </span><span class="s2">None</span><span class="s3">)</span>
+        <span class="s4"># Set the SRID, if given.</span>
+        <span class="s1">srid </span><span class="s3">= </span><span class="s1">input_srid </span><span class="s2">or </span><span class="s1">srid</span>
+        <span class="s2">if </span><span class="s1">srid </span><span class="s2">and </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">srid</span><span class="s3">, </span><span class="s1">int</span><span class="s3">):</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">srid </span><span class="s3">= </span><span class="s1">srid</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<html>
+<head>
+<title>base_session.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+base_session.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+This module allows importing AbstractBaseSession even 
+when django.contrib.sessions is not in INSTALLED_APPS. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db </span><span class="s2">import </span><span class="s1">models</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">translation </span><span class="s2">import </span><span class="s1">gettext_lazy </span><span class="s2">as </span><span class="s1">_</span>
+
+
+<span class="s2">class </span><span class="s1">BaseSessionManager</span><span class="s3">(</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Manager</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">encode</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">session_dict</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the given session dictionary serialized and encoded as a string. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">session_store_class </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">model</span><span class="s3">.</span><span class="s1">get_session_store_class</span><span class="s3">()</span>
+        <span class="s2">return </span><span class="s1">session_store_class</span><span class="s3">().</span><span class="s1">encode</span><span class="s3">(</span><span class="s1">session_dict</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">save</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">session_key</span><span class="s3">, </span><span class="s1">session_dict</span><span class="s3">, </span><span class="s1">expire_date</span><span class="s3">):</span>
+        <span class="s1">s </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">model</span><span class="s3">(</span><span class="s1">session_key</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">encode</span><span class="s3">(</span><span class="s1">session_dict</span><span class="s3">), </span><span class="s1">expire_date</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">session_dict</span><span class="s3">:</span>
+            <span class="s1">s</span><span class="s3">.</span><span class="s1">save</span><span class="s3">()</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">s</span><span class="s3">.</span><span class="s1">delete</span><span class="s3">()  </span><span class="s4"># Clear sessions with no data.</span>
+        <span class="s2">return </span><span class="s1">s</span>
+
+
+<span class="s2">class </span><span class="s1">AbstractBaseSession</span><span class="s3">(</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Model</span><span class="s3">):</span>
+    <span class="s1">session_key </span><span class="s3">= </span><span class="s1">models</span><span class="s3">.</span><span class="s1">CharField</span><span class="s3">(</span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;session key&quot;</span><span class="s3">), </span><span class="s1">max_length</span><span class="s3">=</span><span class="s6">40</span><span class="s3">, </span><span class="s1">primary_key</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+    <span class="s1">session_data </span><span class="s3">= </span><span class="s1">models</span><span class="s3">.</span><span class="s1">TextField</span><span class="s3">(</span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;session data&quot;</span><span class="s3">))</span>
+    <span class="s1">expire_date </span><span class="s3">= </span><span class="s1">models</span><span class="s3">.</span><span class="s1">DateTimeField</span><span class="s3">(</span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;expire date&quot;</span><span class="s3">), </span><span class="s1">db_index</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+
+    <span class="s1">objects </span><span class="s3">= </span><span class="s1">BaseSessionManager</span><span class="s3">()</span>
+
+    <span class="s2">class </span><span class="s1">Meta</span><span class="s3">:</span>
+        <span class="s1">abstract </span><span class="s3">= </span><span class="s2">True</span>
+        <span class="s1">verbose_name </span><span class="s3">= </span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;session&quot;</span><span class="s3">)</span>
+        <span class="s1">verbose_name_plural </span><span class="s3">= </span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;sessions&quot;</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">__str__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">session_key</span>
+
+    <span class="s3">@</span><span class="s1">classmethod</span>
+    <span class="s2">def </span><span class="s1">get_session_store_class</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">):</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError</span>
+
+    <span class="s2">def </span><span class="s1">get_decoded</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">session_store_class </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_session_store_class</span><span class="s3">()</span>
+        <span class="s2">return </span><span class="s1">session_store_class</span><span class="s3">().</span><span class="s1">decode</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">session_data</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,355 @@
+<html>
+<head>
+<title>operations.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+operations.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">postgres</span><span class="s2">.</span><span class="s1">signals </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">get_citext_oids</span><span class="s2">,</span>
+    <span class="s1">get_hstore_oids</span><span class="s2">,</span>
+    <span class="s1">register_type_handlers</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">NotSupportedError</span><span class="s2">, </span><span class="s1">router</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations </span><span class="s0">import </span><span class="s1">AddConstraint</span><span class="s2">, </span><span class="s1">AddIndex</span><span class="s2">, </span><span class="s1">RemoveIndex</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">operations</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">Operation</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">constraints </span><span class="s0">import </span><span class="s1">CheckConstraint</span>
+
+
+<span class="s0">class </span><span class="s1">CreateExtension</span><span class="s2">(</span><span class="s1">Operation</span><span class="s2">):</span>
+    <span class="s1">reversible </span><span class="s2">= </span><span class="s0">True</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">name</span>
+
+    <span class="s0">def </span><span class="s1">state_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">state</span><span class="s2">):</span>
+        <span class="s0">pass</span>
+
+    <span class="s0">def </span><span class="s1">database_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">vendor </span><span class="s2">!= </span><span class="s3">&quot;postgresql&quot; </span><span class="s0">or not </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate</span><span class="s2">(</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">app_label</span>
+        <span class="s2">):</span>
+            <span class="s0">return</span>
+        <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">extension_exists</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">):</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+                <span class="s3">&quot;CREATE EXTENSION IF NOT EXISTS %s&quot;</span>
+                <span class="s2">% </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s4"># Clear cached, stale oids.</span>
+        <span class="s1">get_hstore_oids</span><span class="s2">.</span><span class="s1">cache_clear</span><span class="s2">()</span>
+        <span class="s1">get_citext_oids</span><span class="s2">.</span><span class="s1">cache_clear</span><span class="s2">()</span>
+        <span class="s4"># Registering new type handlers cannot be done before the extension is</span>
+        <span class="s4"># installed, otherwise a subsequent data migration would use the same</span>
+        <span class="s4"># connection.</span>
+        <span class="s1">register_type_handlers</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">, </span><span class="s3">&quot;register_geometry_adapters&quot;</span><span class="s2">):</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">register_geometry_adapters</span><span class="s2">(</span>
+                <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">, </span><span class="s0">True</span>
+            <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_backwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">):</span>
+            <span class="s0">return</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">extension_exists</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">):</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+                <span class="s3">&quot;DROP EXTENSION IF EXISTS %s&quot; </span><span class="s2">% </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s4"># Clear cached, stale oids.</span>
+        <span class="s1">get_hstore_oids</span><span class="s2">.</span><span class="s1">cache_clear</span><span class="s2">()</span>
+        <span class="s1">get_citext_oids</span><span class="s2">.</span><span class="s1">cache_clear</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">extension_exists</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">extension</span><span class="s2">):</span>
+        <span class="s0">with </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">cursor</span><span class="s2">() </span><span class="s0">as </span><span class="s1">cursor</span><span class="s2">:</span>
+            <span class="s1">cursor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+                <span class="s3">&quot;SELECT 1 FROM pg_extension WHERE extname = %s&quot;</span><span class="s2">,</span>
+                <span class="s2">[</span><span class="s1">extension</span><span class="s2">],</span>
+            <span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">bool</span><span class="s2">(</span><span class="s1">cursor</span><span class="s2">.</span><span class="s1">fetchone</span><span class="s2">())</span>
+
+    <span class="s0">def </span><span class="s1">describe</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;Creates extension %s&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">migration_name_fragment</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;create_extension_%s&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+
+
+<span class="s0">class </span><span class="s1">BloomExtension</span><span class="s2">(</span><span class="s1">CreateExtension</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;bloom&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">BtreeGinExtension</span><span class="s2">(</span><span class="s1">CreateExtension</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;btree_gin&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">BtreeGistExtension</span><span class="s2">(</span><span class="s1">CreateExtension</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;btree_gist&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">CITextExtension</span><span class="s2">(</span><span class="s1">CreateExtension</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;citext&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">CryptoExtension</span><span class="s2">(</span><span class="s1">CreateExtension</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;pgcrypto&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">HStoreExtension</span><span class="s2">(</span><span class="s1">CreateExtension</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;hstore&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TrigramExtension</span><span class="s2">(</span><span class="s1">CreateExtension</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;pg_trgm&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">UnaccentExtension</span><span class="s2">(</span><span class="s1">CreateExtension</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;unaccent&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">NotInTransactionMixin</span><span class="s2">:</span>
+    <span class="s0">def </span><span class="s1">_ensure_not_in_transaction</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">in_atomic_block</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">NotSupportedError</span><span class="s2">(</span>
+                <span class="s3">&quot;The %s operation cannot be executed inside a transaction &quot;</span>
+                <span class="s3">&quot;(set atomic = False on the migration).&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span>
+            <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">AddIndexConcurrently</span><span class="s2">(</span><span class="s1">NotInTransactionMixin</span><span class="s2">, </span><span class="s1">AddIndex</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Create an index using PostgreSQL's CREATE INDEX CONCURRENTLY syntax.&quot;&quot;&quot;</span>
+
+    <span class="s1">atomic </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s0">def </span><span class="s1">describe</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;Concurrently create index %s on field(s) %s of model %s&quot; </span><span class="s2">% (</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">index</span><span class="s2">.</span><span class="s1">name</span><span class="s2">,</span>
+            <span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">index</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">),</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_ensure_not_in_transaction</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">)</span>
+        <span class="s1">model </span><span class="s2">= </span><span class="s1">to_state</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">allow_migrate_model</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">add_index</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">index</span><span class="s2">, </span><span class="s1">concurrently</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_backwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_ensure_not_in_transaction</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">)</span>
+        <span class="s1">model </span><span class="s2">= </span><span class="s1">from_state</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">allow_migrate_model</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">remove_index</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">index</span><span class="s2">, </span><span class="s1">concurrently</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">RemoveIndexConcurrently</span><span class="s2">(</span><span class="s1">NotInTransactionMixin</span><span class="s2">, </span><span class="s1">RemoveIndex</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Remove an index using PostgreSQL's DROP INDEX CONCURRENTLY syntax.&quot;&quot;&quot;</span>
+
+    <span class="s1">atomic </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s0">def </span><span class="s1">describe</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;Concurrently remove index %s from %s&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_ensure_not_in_transaction</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">)</span>
+        <span class="s1">model </span><span class="s2">= </span><span class="s1">from_state</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">allow_migrate_model</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+            <span class="s1">from_model_state </span><span class="s2">= </span><span class="s1">from_state</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_name_lower</span><span class="s2">]</span>
+            <span class="s1">index </span><span class="s2">= </span><span class="s1">from_model_state</span><span class="s2">.</span><span class="s1">get_index_by_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">remove_index</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">index</span><span class="s2">, </span><span class="s1">concurrently</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_backwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_ensure_not_in_transaction</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">)</span>
+        <span class="s1">model </span><span class="s2">= </span><span class="s1">to_state</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">allow_migrate_model</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+            <span class="s1">to_model_state </span><span class="s2">= </span><span class="s1">to_state</span><span class="s2">.</span><span class="s1">models</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_name_lower</span><span class="s2">]</span>
+            <span class="s1">index </span><span class="s2">= </span><span class="s1">to_model_state</span><span class="s2">.</span><span class="s1">get_index_by_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">add_index</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">index</span><span class="s2">, </span><span class="s1">concurrently</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">CollationOperation</span><span class="s2">(</span><span class="s1">Operation</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">locale</span><span class="s2">, *, </span><span class="s1">provider</span><span class="s2">=</span><span class="s3">&quot;libc&quot;</span><span class="s2">, </span><span class="s1">deterministic</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">name</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">locale </span><span class="s2">= </span><span class="s1">locale</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">provider </span><span class="s2">= </span><span class="s1">provider</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">deterministic </span><span class="s2">= </span><span class="s1">deterministic</span>
+
+    <span class="s0">def </span><span class="s1">state_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">state</span><span class="s2">):</span>
+        <span class="s0">pass</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">kwargs </span><span class="s2">= {</span><span class="s3">&quot;name&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">, </span><span class="s3">&quot;locale&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">locale</span><span class="s2">}</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">provider </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">provider </span><span class="s2">!= </span><span class="s3">&quot;libc&quot;</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;provider&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">provider</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">deterministic </span><span class="s0">is False</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;deterministic&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">deterministic</span>
+        <span class="s0">return </span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s2">,</span>
+            <span class="s2">[],</span>
+            <span class="s1">kwargs</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">create_collation</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">):</span>
+        <span class="s1">args </span><span class="s2">= {</span><span class="s3">&quot;locale&quot;</span><span class="s2">: </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">locale</span><span class="s2">)}</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">provider </span><span class="s2">!= </span><span class="s3">&quot;libc&quot;</span><span class="s2">:</span>
+            <span class="s1">args</span><span class="s2">[</span><span class="s3">&quot;provider&quot;</span><span class="s2">] = </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">provider</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">deterministic </span><span class="s0">is False</span><span class="s2">:</span>
+            <span class="s1">args</span><span class="s2">[</span><span class="s3">&quot;deterministic&quot;</span><span class="s2">] = </span><span class="s3">&quot;false&quot;</span>
+        <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+            <span class="s3">&quot;CREATE COLLATION %(name)s (%(args)s)&quot;</span>
+            <span class="s2">% {</span>
+                <span class="s3">&quot;name&quot;</span><span class="s2">: </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">),</span>
+                <span class="s3">&quot;args&quot;</span><span class="s2">: </span><span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span>
+                    <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">option</span><span class="s0">}</span><span class="s3">=</span><span class="s0">{</span><span class="s1">value</span><span class="s0">}</span><span class="s3">&quot; </span><span class="s0">for </span><span class="s1">option</span><span class="s2">, </span><span class="s1">value </span><span class="s0">in </span><span class="s1">args</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()</span>
+                <span class="s2">),</span>
+            <span class="s2">}</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">remove_collation</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">):</span>
+        <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+            <span class="s3">&quot;DROP COLLATION %s&quot; </span><span class="s2">% </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">),</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">CreateCollation</span><span class="s2">(</span><span class="s1">CollationOperation</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Create a collation.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">database_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">vendor </span><span class="s2">!= </span><span class="s3">&quot;postgresql&quot; </span><span class="s0">or not </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate</span><span class="s2">(</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">app_label</span>
+        <span class="s2">):</span>
+            <span class="s0">return</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">create_collation</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_backwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">):</span>
+            <span class="s0">return</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">remove_collation</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">describe</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">f&quot;Create collation </span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s0">}</span><span class="s3">&quot;</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">migration_name_fragment</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;create_collation_%s&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">RemoveCollation</span><span class="s2">(</span><span class="s1">CollationOperation</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Remove a collation.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">database_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">vendor </span><span class="s2">!= </span><span class="s3">&quot;postgresql&quot; </span><span class="s0">or not </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate</span><span class="s2">(</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">app_label</span>
+        <span class="s2">):</span>
+            <span class="s0">return</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">remove_collation</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_backwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">):</span>
+            <span class="s0">return</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">create_collation</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">describe</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">f&quot;Remove collation </span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s0">}</span><span class="s3">&quot;</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">migration_name_fragment</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;remove_collation_%s&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">AddConstraintNotValid</span><span class="s2">(</span><span class="s1">AddConstraint</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Add a table constraint without enforcing validation, using PostgreSQL's 
+    NOT VALID syntax. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">constraint</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">constraint</span><span class="s2">, </span><span class="s1">CheckConstraint</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                <span class="s3">&quot;AddConstraintNotValid.constraint must be a check constraint.&quot;</span>
+            <span class="s2">)</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">constraint</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">describe</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;Create not valid constraint %s on model %s&quot; </span><span class="s2">% (</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">constraint</span><span class="s2">.</span><span class="s1">name</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s1">model </span><span class="s2">= </span><span class="s1">from_state</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">allow_migrate_model</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+            <span class="s1">constraint_sql </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">constraint</span><span class="s2">.</span><span class="s1">create_sql</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">constraint_sql</span><span class="s2">:</span>
+                <span class="s4"># Constraint.create_sql returns interpolated SQL which makes</span>
+                <span class="s4"># params=None a necessity to avoid escaping attempts on</span>
+                <span class="s4"># execution.</span>
+                <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span><span class="s1">str</span><span class="s2">(</span><span class="s1">constraint_sql</span><span class="s2">) + </span><span class="s3">&quot; NOT VALID&quot;</span><span class="s2">, </span><span class="s1">params</span><span class="s2">=</span><span class="s0">None</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">migration_name_fragment</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">migration_name_fragment </span><span class="s2">+ </span><span class="s3">&quot;_not_valid&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ValidateConstraint</span><span class="s2">(</span><span class="s1">Operation</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Validate a table NOT VALID constraint.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">model_name </span><span class="s2">= </span><span class="s1">model_name</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">name</span>
+
+    <span class="s0">def </span><span class="s1">describe</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;Validate constraint %s on model %s&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s1">model </span><span class="s2">= </span><span class="s1">from_state</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">allow_migrate_model</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+                <span class="s3">&quot;ALTER TABLE %s VALIDATE CONSTRAINT %s&quot;</span>
+                <span class="s2">% (</span>
+                    <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">db_table</span><span class="s2">),</span>
+                    <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">),</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_backwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s4"># PostgreSQL does not provide a way to make a constraint invalid.</span>
+        <span class="s0">pass</span>
+
+    <span class="s0">def </span><span class="s1">state_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">state</span><span class="s2">):</span>
+        <span class="s0">pass</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">migration_name_fragment</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;%s_validate_%s&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">(), </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">())</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">,</span>
+            <span class="s2">[],</span>
+            <span class="s2">{</span>
+                <span class="s3">&quot;model_name&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">,</span>
+                <span class="s3">&quot;name&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">,</span>
+            <span class="s2">},</span>
+        <span class="s2">)</span>
+</pre>
+</body>
+</html>

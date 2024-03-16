@@ -1,0 +1,141 @@
+<html>
+<head>
+<title>timeout.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+timeout.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># This code is originally sourced from the aio-libs project &quot;async_timeout&quot;,</span>
+<span class="s0"># under the Apache 2.0 license. You may see the original project at</span>
+<span class="s0"># https://github.com/aio-libs/async-timeout</span>
+
+<span class="s0"># It is vendored here to reduce chain-dependencies on this library, and</span>
+<span class="s0"># modified slightly to remove some features we don't use.</span>
+
+
+<span class="s2">import </span><span class="s1">asyncio</span>
+<span class="s2">import </span><span class="s1">warnings</span>
+<span class="s2">from </span><span class="s1">types </span><span class="s2">import </span><span class="s1">TracebackType</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Any  </span><span class="s0"># noqa</span>
+<span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">Optional</span><span class="s3">, </span><span class="s1">Type</span>
+
+
+<span class="s2">class </span><span class="s1">timeout</span><span class="s3">:</span>
+    <span class="s4">&quot;&quot;&quot;timeout context manager. 
+ 
+    Useful in cases when you want to apply timeout logic around block 
+    of code or in cases when asyncio.wait_for is not suitable. For example: 
+ 
+    &gt;&gt;&gt; with timeout(0.001): 
+    ...     async with aiohttp.get('https://github.com') as r: 
+    ...         await r.text() 
+ 
+ 
+    timeout - value in seconds or None to disable timeout logic 
+    loop - asyncio compatible event loop 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">timeout</span><span class="s3">: </span><span class="s1">Optional</span><span class="s3">[</span><span class="s1">float</span><span class="s3">],</span>
+        <span class="s3">*,</span>
+        <span class="s1">loop</span><span class="s3">: </span><span class="s1">Optional</span><span class="s3">[</span><span class="s1">asyncio</span><span class="s3">.</span><span class="s1">AbstractEventLoop</span><span class="s3">] = </span><span class="s2">None</span><span class="s3">,</span>
+    <span class="s3">) </span><span class="s1">-&gt; </span><span class="s2">None</span><span class="s3">:</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_timeout </span><span class="s3">= </span><span class="s1">timeout</span>
+        <span class="s2">if </span><span class="s1">loop </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s1">loop </span><span class="s3">= </span><span class="s1">asyncio</span><span class="s3">.</span><span class="s1">get_running_loop</span><span class="s3">()</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">warnings</span><span class="s3">.</span><span class="s1">warn</span><span class="s3">(</span>
+                <span class="s5">&quot;&quot;&quot;The loop argument to timeout() is deprecated.&quot;&quot;&quot;</span><span class="s3">, </span><span class="s1">DeprecationWarning</span>
+            <span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_loop </span><span class="s3">= </span><span class="s1">loop</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_task </span><span class="s3">= </span><span class="s2">None  </span><span class="s0"># type: Optional[asyncio.Task[Any]]</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cancelled </span><span class="s3">= </span><span class="s2">False</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cancel_handler </span><span class="s3">= </span><span class="s2">None  </span><span class="s0"># type: Optional[asyncio.Handle]</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cancel_at </span><span class="s3">= </span><span class="s2">None  </span><span class="s0"># type: Optional[float]</span>
+
+    <span class="s2">def </span><span class="s1">__enter__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">) </span><span class="s1">-&gt; </span><span class="s5">&quot;timeout&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_do_enter</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">__exit__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">exc_type</span><span class="s3">: </span><span class="s1">Type</span><span class="s3">[</span><span class="s1">BaseException</span><span class="s3">],</span>
+        <span class="s1">exc_val</span><span class="s3">: </span><span class="s1">BaseException</span><span class="s3">,</span>
+        <span class="s1">exc_tb</span><span class="s3">: </span><span class="s1">TracebackType</span><span class="s3">,</span>
+    <span class="s3">) </span><span class="s1">-&gt; Optional</span><span class="s3">[</span><span class="s1">bool</span><span class="s3">]:</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_do_exit</span><span class="s3">(</span><span class="s1">exc_type</span><span class="s3">)</span>
+        <span class="s2">return None</span>
+
+    <span class="s2">async def </span><span class="s1">__aenter__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">) </span><span class="s1">-&gt; </span><span class="s5">&quot;timeout&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_do_enter</span><span class="s3">()</span>
+
+    <span class="s2">async def </span><span class="s1">__aexit__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">exc_type</span><span class="s3">: </span><span class="s1">Type</span><span class="s3">[</span><span class="s1">BaseException</span><span class="s3">],</span>
+        <span class="s1">exc_val</span><span class="s3">: </span><span class="s1">BaseException</span><span class="s3">,</span>
+        <span class="s1">exc_tb</span><span class="s3">: </span><span class="s1">TracebackType</span><span class="s3">,</span>
+    <span class="s3">) </span><span class="s1">-&gt; </span><span class="s2">None</span><span class="s3">:</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_do_exit</span><span class="s3">(</span><span class="s1">exc_type</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">expired</span><span class="s3">(</span><span class="s1">self</span><span class="s3">) </span><span class="s1">-&gt; bool</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cancelled</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">remaining</span><span class="s3">(</span><span class="s1">self</span><span class="s3">) </span><span class="s1">-&gt; Optional</span><span class="s3">[</span><span class="s1">float</span><span class="s3">]:</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cancel_at </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">max</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cancel_at </span><span class="s3">- </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_loop</span><span class="s3">.</span><span class="s1">time</span><span class="s3">(), </span><span class="s6">0.0</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return None</span>
+
+    <span class="s2">def </span><span class="s1">_do_enter</span><span class="s3">(</span><span class="s1">self</span><span class="s3">) </span><span class="s1">-&gt; </span><span class="s5">&quot;timeout&quot;</span><span class="s3">:</span>
+        <span class="s0"># Support Tornado 5- without timeout</span>
+        <span class="s0"># Details: https://github.com/python/asyncio/issues/392</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_timeout </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">self</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_task </span><span class="s3">= </span><span class="s1">asyncio</span><span class="s3">.</span><span class="s1">current_task</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_loop</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_task </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">RuntimeError</span><span class="s3">(</span>
+                <span class="s5">&quot;Timeout context manager should be used &quot; &quot;inside a task&quot;</span>
+            <span class="s3">)</span>
+
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_timeout </span><span class="s3">&lt;= </span><span class="s6">0</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_loop</span><span class="s3">.</span><span class="s1">call_soon</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cancel_task</span><span class="s3">)</span>
+            <span class="s2">return </span><span class="s1">self</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cancel_at </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_loop</span><span class="s3">.</span><span class="s1">time</span><span class="s3">() + </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_timeout</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cancel_handler </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_loop</span><span class="s3">.</span><span class="s1">call_at</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cancel_at</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cancel_task</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+    <span class="s2">def </span><span class="s1">_do_exit</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">exc_type</span><span class="s3">: </span><span class="s1">Type</span><span class="s3">[</span><span class="s1">BaseException</span><span class="s3">]) </span><span class="s1">-&gt; </span><span class="s2">None</span><span class="s3">:</span>
+        <span class="s2">if </span><span class="s1">exc_type </span><span class="s2">is </span><span class="s1">asyncio</span><span class="s3">.</span><span class="s1">CancelledError </span><span class="s2">and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cancelled</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_cancel_handler </span><span class="s3">= </span><span class="s2">None</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_task </span><span class="s3">= </span><span class="s2">None</span>
+            <span class="s2">raise </span><span class="s1">asyncio</span><span class="s3">.</span><span class="s1">TimeoutError</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_timeout </span><span class="s2">is not None and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cancel_handler </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_cancel_handler</span><span class="s3">.</span><span class="s1">cancel</span><span class="s3">()</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_cancel_handler </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_task </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s2">return None</span>
+
+    <span class="s2">def </span><span class="s1">_cancel_task</span><span class="s3">(</span><span class="s1">self</span><span class="s3">) </span><span class="s1">-&gt; </span><span class="s2">None</span><span class="s3">:</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_task </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_task</span><span class="s3">.</span><span class="s1">cancel</span><span class="s3">()</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_cancelled </span><span class="s3">= </span><span class="s2">True</span>
+</pre>
+</body>
+</html>

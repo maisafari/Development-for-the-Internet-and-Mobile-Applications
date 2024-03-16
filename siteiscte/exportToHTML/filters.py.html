@@ -1,0 +1,739 @@
+<html>
+<head>
+<title>filters.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+filters.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+This encapsulates the logic for displaying filters in the Django admin. 
+Filters are specified in models with the &quot;list_filter&quot; option. 
+ 
+Each filter subclass knows how to display a filter for a field that passes a 
+certain test -- e.g. being a DateField or ForeignKey. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">datetime</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">admin</span><span class="s3">.</span><span class="s1">exceptions </span><span class="s2">import </span><span class="s1">NotRegistered</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">admin</span><span class="s3">.</span><span class="s1">options </span><span class="s2">import </span><span class="s1">IncorrectLookupParameters</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">admin</span><span class="s3">.</span><span class="s1">utils </span><span class="s2">import </span><span class="s3">(</span>
+    <span class="s1">build_q_object_from_lookup_parameters</span><span class="s3">,</span>
+    <span class="s1">get_last_value_from_parameters</span><span class="s3">,</span>
+    <span class="s1">get_model_from_relation</span><span class="s3">,</span>
+    <span class="s1">prepare_lookup_value</span><span class="s3">,</span>
+    <span class="s1">reverse_field_path</span><span class="s3">,</span>
+<span class="s3">)</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">exceptions </span><span class="s2">import </span><span class="s1">ImproperlyConfigured</span><span class="s3">, </span><span class="s1">ValidationError</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db </span><span class="s2">import </span><span class="s1">models</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils </span><span class="s2">import </span><span class="s1">timezone</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">translation </span><span class="s2">import </span><span class="s1">gettext_lazy </span><span class="s2">as </span><span class="s1">_</span>
+
+
+<span class="s2">class </span><span class="s1">ListFilter</span><span class="s3">:</span>
+    <span class="s1">title </span><span class="s3">= </span><span class="s2">None  </span><span class="s4"># Human-readable title to appear in the right sidebar.</span>
+    <span class="s1">template </span><span class="s3">= </span><span class="s5">&quot;admin/filter.html&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">request </span><span class="s3">= </span><span class="s1">request</span>
+        <span class="s4"># This dictionary will eventually contain the request's query string</span>
+        <span class="s4"># parameters actually used by this filter.</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters </span><span class="s3">= {}</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">title </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">ImproperlyConfigured</span><span class="s3">(</span>
+                <span class="s5">&quot;The list filter '%s' does not specify a 'title'.&quot;</span>
+                <span class="s3">% </span><span class="s1">self</span><span class="s3">.</span><span class="s1">__class__</span><span class="s3">.</span><span class="s1">__name__</span>
+            <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">has_output</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return True if some choices would be output for this filter. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError</span><span class="s3">(</span>
+            <span class="s5">&quot;subclasses of ListFilter must provide a has_output() method&quot;</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">choices</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">changelist</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return choices ready to be output in the template. 
+ 
+        `changelist` is the ChangeList to be displayed. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError</span><span class="s3">(</span>
+            <span class="s5">&quot;subclasses of ListFilter must provide a choices() method&quot;</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">queryset</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">queryset</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the filtered queryset. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError</span><span class="s3">(</span>
+            <span class="s5">&quot;subclasses of ListFilter must provide a queryset() method&quot;</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">expected_parameters</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the list of parameter names that are expected from the 
+        request's query string and that will be used by this filter. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError</span><span class="s3">(</span>
+            <span class="s5">&quot;subclasses of ListFilter must provide an expected_parameters() method&quot;</span>
+        <span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">FacetsMixin</span><span class="s3">:</span>
+    <span class="s2">def </span><span class="s1">get_facet_counts</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filtered_qs</span><span class="s3">):</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError</span><span class="s3">(</span>
+            <span class="s5">&quot;subclasses of FacetsMixin must provide a get_facet_counts() method.&quot;</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_facet_queryset</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">changelist</span><span class="s3">):</span>
+        <span class="s1">filtered_qs </span><span class="s3">= </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_queryset</span><span class="s3">(</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">request</span><span class="s3">, </span><span class="s1">exclude_parameters</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">expected_parameters</span><span class="s3">()</span>
+        <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">filtered_qs</span><span class="s3">.</span><span class="s1">aggregate</span><span class="s3">(</span>
+            <span class="s3">**</span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_facet_counts</span><span class="s3">(</span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filtered_qs</span><span class="s3">)</span>
+        <span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">SimpleListFilter</span><span class="s3">(</span><span class="s1">FacetsMixin</span><span class="s3">, </span><span class="s1">ListFilter</span><span class="s3">):</span>
+    <span class="s4"># The parameter that should be used in the query string for that filter.</span>
+    <span class="s1">parameter_name </span><span class="s3">= </span><span class="s2">None</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">parameter_name </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">ImproperlyConfigured</span><span class="s3">(</span>
+                <span class="s5">&quot;The list filter '%s' does not specify a 'parameter_name'.&quot;</span>
+                <span class="s3">% </span><span class="s1">self</span><span class="s3">.</span><span class="s1">__class__</span><span class="s3">.</span><span class="s1">__name__</span>
+            <span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">parameter_name </span><span class="s2">in </span><span class="s1">params</span><span class="s3">:</span>
+            <span class="s1">value </span><span class="s3">= </span><span class="s1">params</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">parameter_name</span><span class="s3">)</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">parameter_name</span><span class="s3">] = </span><span class="s1">value</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">]</span>
+        <span class="s1">lookup_choices </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookups</span><span class="s3">(</span><span class="s1">request</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">lookup_choices </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s1">lookup_choices </span><span class="s3">= ()</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_choices </span><span class="s3">= </span><span class="s1">list</span><span class="s3">(</span><span class="s1">lookup_choices</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">has_output</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_choices</span><span class="s3">) &gt; </span><span class="s6">0</span>
+
+    <span class="s2">def </span><span class="s1">value</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the value (in string format) provided in the request's 
+        query string for this filter, if any, or None if the value wasn't 
+        provided. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">parameter_name</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">lookups</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Must be overridden to return a list of tuples (value, verbose value) 
+        &quot;&quot;&quot;</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError</span><span class="s3">(</span>
+            <span class="s5">&quot;The SimpleListFilter.lookups() method must be overridden to &quot;</span>
+            <span class="s5">&quot;return a list of tuples (value, verbose value).&quot;</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">expected_parameters</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">parameter_name</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">get_facet_counts</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filtered_qs</span><span class="s3">):</span>
+        <span class="s1">original_value </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">parameter_name</span><span class="s3">)</span>
+        <span class="s1">counts </span><span class="s3">= {}</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s3">, </span><span class="s1">choice </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_choices</span><span class="s3">):</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">parameter_name</span><span class="s3">] = </span><span class="s1">choice</span><span class="s3">[</span><span class="s6">0</span><span class="s3">]</span>
+            <span class="s1">lookup_qs </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">queryset</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">request</span><span class="s3">, </span><span class="s1">filtered_qs</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">lookup_qs </span><span class="s2">is not None</span><span class="s3">:</span>
+                <span class="s1">counts</span><span class="s3">[</span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">i</span><span class="s2">}</span><span class="s5">__c&quot;</span><span class="s3">] = </span><span class="s1">models</span><span class="s3">.</span><span class="s1">Count</span><span class="s3">(</span>
+                    <span class="s1">pk_attname</span><span class="s3">,</span>
+                    <span class="s1">filter</span><span class="s3">=</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Q</span><span class="s3">(</span><span class="s1">pk__in</span><span class="s3">=</span><span class="s1">lookup_qs</span><span class="s3">),</span>
+                <span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">parameter_name</span><span class="s3">] = </span><span class="s1">original_value</span>
+        <span class="s2">return </span><span class="s1">counts</span>
+
+    <span class="s2">def </span><span class="s1">choices</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">changelist</span><span class="s3">):</span>
+        <span class="s1">add_facets </span><span class="s3">= </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">add_facets</span>
+        <span class="s1">facet_counts </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_facet_queryset</span><span class="s3">(</span><span class="s1">changelist</span><span class="s3">) </span><span class="s2">if </span><span class="s1">add_facets </span><span class="s2">else None</span>
+        <span class="s2">yield </span><span class="s3">{</span>
+            <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">value</span><span class="s3">() </span><span class="s2">is None</span><span class="s3">,</span>
+            <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span><span class="s1">remove</span><span class="s3">=[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">parameter_name</span><span class="s3">]),</span>
+            <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;All&quot;</span><span class="s3">),</span>
+        <span class="s3">}</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s3">, (</span><span class="s1">lookup</span><span class="s3">, </span><span class="s1">title</span><span class="s3">) </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_choices</span><span class="s3">):</span>
+            <span class="s2">if </span><span class="s1">add_facets</span><span class="s3">:</span>
+                <span class="s2">if </span><span class="s3">(</span><span class="s1">count </span><span class="s3">:= </span><span class="s1">facet_counts</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">i</span><span class="s2">}</span><span class="s5">__c&quot;</span><span class="s3">, -</span><span class="s6">1</span><span class="s3">)) != -</span><span class="s6">1</span><span class="s3">:</span>
+                    <span class="s1">title </span><span class="s3">= </span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">title</span><span class="s2">} </span><span class="s5">(</span><span class="s2">{</span><span class="s1">count</span><span class="s2">}</span><span class="s5">)&quot;</span>
+                <span class="s2">else</span><span class="s3">:</span>
+                    <span class="s1">title </span><span class="s3">= </span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">title</span><span class="s2">} </span><span class="s5">(-)&quot;</span>
+            <span class="s2">yield </span><span class="s3">{</span>
+                <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">value</span><span class="s3">() == </span><span class="s1">str</span><span class="s3">(</span><span class="s1">lookup</span><span class="s3">),</span>
+                <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                    <span class="s3">{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">parameter_name</span><span class="s3">: </span><span class="s1">lookup</span><span class="s3">}</span>
+                <span class="s3">),</span>
+                <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">title</span><span class="s3">,</span>
+            <span class="s3">}</span>
+
+
+<span class="s2">class </span><span class="s1">FieldListFilter</span><span class="s3">(</span><span class="s1">FacetsMixin</span><span class="s3">, </span><span class="s1">ListFilter</span><span class="s3">):</span>
+    <span class="s1">_field_list_filters </span><span class="s3">= []</span>
+    <span class="s1">_take_priority_index </span><span class="s3">= </span><span class="s6">0</span>
+    <span class="s1">list_separator </span><span class="s3">= </span><span class="s5">&quot;,&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">field </span><span class="s3">= </span><span class="s1">field</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">field_path </span><span class="s3">= </span><span class="s1">field_path</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">title </span><span class="s3">= </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s5">&quot;verbose_name&quot;</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">)</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">)</span>
+        <span class="s2">for </span><span class="s1">p </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">expected_parameters</span><span class="s3">():</span>
+            <span class="s2">if </span><span class="s1">p </span><span class="s2">in </span><span class="s1">params</span><span class="s3">:</span>
+                <span class="s1">value </span><span class="s3">= </span><span class="s1">params</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">(</span><span class="s1">p</span><span class="s3">)</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters</span><span class="s3">[</span><span class="s1">p</span><span class="s3">] = </span><span class="s1">prepare_lookup_value</span><span class="s3">(</span>
+                    <span class="s1">p</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">list_separator</span>
+                <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">has_output</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return True</span>
+
+    <span class="s2">def </span><span class="s1">queryset</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">queryset</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">q_object </span><span class="s3">= </span><span class="s1">build_q_object_from_lookup_parameters</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters</span><span class="s3">)</span>
+            <span class="s2">return </span><span class="s1">queryset</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">q_object</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">ValidationError</span><span class="s3">) </span><span class="s2">as </span><span class="s1">e</span><span class="s3">:</span>
+            <span class="s4"># Fields may raise a ValueError or ValidationError when converting</span>
+            <span class="s4"># the parameters to the correct type.</span>
+            <span class="s2">raise </span><span class="s1">IncorrectLookupParameters</span><span class="s3">(</span><span class="s1">e</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">classmethod</span>
+    <span class="s2">def </span><span class="s1">register</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">, </span><span class="s1">test</span><span class="s3">, </span><span class="s1">list_filter_class</span><span class="s3">, </span><span class="s1">take_priority</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">take_priority</span><span class="s3">:</span>
+            <span class="s4"># This is to allow overriding the default filters for certain types</span>
+            <span class="s4"># of fields with some custom filters. The first found in the list</span>
+            <span class="s4"># is used in priority.</span>
+            <span class="s1">cls</span><span class="s3">.</span><span class="s1">_field_list_filters</span><span class="s3">.</span><span class="s1">insert</span><span class="s3">(</span>
+                <span class="s1">cls</span><span class="s3">.</span><span class="s1">_take_priority_index</span><span class="s3">, (</span><span class="s1">test</span><span class="s3">, </span><span class="s1">list_filter_class</span><span class="s3">)</span>
+            <span class="s3">)</span>
+            <span class="s1">cls</span><span class="s3">.</span><span class="s1">_take_priority_index </span><span class="s3">+= </span><span class="s6">1</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">cls</span><span class="s3">.</span><span class="s1">_field_list_filters</span><span class="s3">.</span><span class="s1">append</span><span class="s3">((</span><span class="s1">test</span><span class="s3">, </span><span class="s1">list_filter_class</span><span class="s3">))</span>
+
+    <span class="s3">@</span><span class="s1">classmethod</span>
+    <span class="s2">def </span><span class="s1">create</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">, </span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">test</span><span class="s3">, </span><span class="s1">list_filter_class </span><span class="s2">in </span><span class="s1">cls</span><span class="s3">.</span><span class="s1">_field_list_filters</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">test</span><span class="s3">(</span><span class="s1">field</span><span class="s3">):</span>
+                <span class="s2">return </span><span class="s1">list_filter_class</span><span class="s3">(</span>
+                    <span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">=</span><span class="s1">field_path</span>
+                <span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">RelatedFieldListFilter</span><span class="s3">(</span><span class="s1">FieldListFilter</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">):</span>
+        <span class="s1">other_model </span><span class="s3">= </span><span class="s1">get_model_from_relation</span><span class="s3">(</span><span class="s1">field</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg </span><span class="s3">= </span><span class="s5">&quot;%s__%s__exact&quot; </span><span class="s3">% (</span><span class="s1">field_path</span><span class="s3">, </span><span class="s1">field</span><span class="s3">.</span><span class="s1">target_field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull </span><span class="s3">= </span><span class="s5">&quot;%s__isnull&quot; </span><span class="s3">% </span><span class="s1">field_path</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s3">= </span><span class="s1">params</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val_isnull </span><span class="s3">= </span><span class="s1">get_last_value_from_parameters</span><span class="s3">(</span>
+            <span class="s1">params</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span>
+        <span class="s3">)</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_choices </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_choices</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s5">&quot;verbose_name&quot;</span><span class="s3">):</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_title </span><span class="s3">= </span><span class="s1">field</span><span class="s3">.</span><span class="s1">verbose_name</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_title </span><span class="s3">= </span><span class="s1">other_model</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">.</span><span class="s1">verbose_name</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">title </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_title</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">empty_value_display </span><span class="s3">= </span><span class="s1">model_admin</span><span class="s3">.</span><span class="s1">get_empty_value_display</span><span class="s3">()</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">include_empty_choice</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return True if a &quot;(None)&quot; choice should be included, which filters 
+        out everything except empty relationships. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">null </span><span class="s2">or </span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">is_relation </span><span class="s2">and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">many_to_many</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">has_output</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">include_empty_choice</span><span class="s3">:</span>
+            <span class="s1">extra </span><span class="s3">= </span><span class="s6">1</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">extra </span><span class="s3">= </span><span class="s6">0</span>
+        <span class="s2">return </span><span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_choices</span><span class="s3">) + </span><span class="s1">extra </span><span class="s3">&gt; </span><span class="s6">1</span>
+
+    <span class="s2">def </span><span class="s1">expected_parameters</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">field_admin_ordering</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the model admin's ordering for related field, if provided. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">related_admin </span><span class="s3">= </span><span class="s1">model_admin</span><span class="s3">.</span><span class="s1">admin_site</span><span class="s3">.</span><span class="s1">get_model_admin</span><span class="s3">(</span>
+                <span class="s1">field</span><span class="s3">.</span><span class="s1">remote_field</span><span class="s3">.</span><span class="s1">model</span>
+            <span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">NotRegistered</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s3">()</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">related_admin</span><span class="s3">.</span><span class="s1">get_ordering</span><span class="s3">(</span><span class="s1">request</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">field_choices</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">):</span>
+        <span class="s1">ordering </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_admin_ordering</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">field</span><span class="s3">.</span><span class="s1">get_choices</span><span class="s3">(</span><span class="s1">include_blank</span><span class="s3">=</span><span class="s2">False</span><span class="s3">, </span><span class="s1">ordering</span><span class="s3">=</span><span class="s1">ordering</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_facet_counts</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filtered_qs</span><span class="s3">):</span>
+        <span class="s1">counts </span><span class="s3">= {</span>
+            <span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">pk_val</span><span class="s2">}</span><span class="s5">__c&quot;</span><span class="s3">: </span><span class="s1">models</span><span class="s3">.</span><span class="s1">Count</span><span class="s3">(</span>
+                <span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filter</span><span class="s3">=</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Q</span><span class="s3">(**{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">: </span><span class="s1">pk_val</span><span class="s3">})</span>
+            <span class="s3">)</span>
+            <span class="s2">for </span><span class="s1">pk_val</span><span class="s3">, </span><span class="s1">_ </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_choices</span>
+        <span class="s3">}</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">include_empty_choice</span><span class="s3">:</span>
+            <span class="s1">counts</span><span class="s3">[</span><span class="s5">&quot;__c&quot;</span><span class="s3">] = </span><span class="s1">models</span><span class="s3">.</span><span class="s1">Count</span><span class="s3">(</span>
+                <span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filter</span><span class="s3">=</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Q</span><span class="s3">(**{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">: </span><span class="s2">True</span><span class="s3">})</span>
+            <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">counts</span>
+
+    <span class="s2">def </span><span class="s1">choices</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">changelist</span><span class="s3">):</span>
+        <span class="s1">add_facets </span><span class="s3">= </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">add_facets</span>
+        <span class="s1">facet_counts </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_facet_queryset</span><span class="s3">(</span><span class="s1">changelist</span><span class="s3">) </span><span class="s2">if </span><span class="s1">add_facets </span><span class="s2">else None</span>
+        <span class="s2">yield </span><span class="s3">{</span>
+            <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s2">is None and not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val_isnull</span><span class="s3">,</span>
+            <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                <span class="s1">remove</span><span class="s3">=[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">]</span>
+            <span class="s3">),</span>
+            <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;All&quot;</span><span class="s3">),</span>
+        <span class="s3">}</span>
+        <span class="s1">count </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s2">for </span><span class="s1">pk_val</span><span class="s3">, </span><span class="s1">val </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_choices</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">add_facets</span><span class="s3">:</span>
+                <span class="s1">count </span><span class="s3">= </span><span class="s1">facet_counts</span><span class="s3">[</span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">pk_val</span><span class="s2">}</span><span class="s5">__c&quot;</span><span class="s3">]</span>
+                <span class="s1">val </span><span class="s3">= </span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">val</span><span class="s2">} </span><span class="s5">(</span><span class="s2">{</span><span class="s1">count</span><span class="s2">}</span><span class="s5">)&quot;</span>
+            <span class="s2">yield </span><span class="s3">{</span>
+                <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s2">is not None</span>
+                <span class="s2">and </span><span class="s1">str</span><span class="s3">(</span><span class="s1">pk_val</span><span class="s3">) </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val</span><span class="s3">,</span>
+                <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                    <span class="s3">{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">: </span><span class="s1">pk_val</span><span class="s3">}, [</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">]</span>
+                <span class="s3">),</span>
+                <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">val</span><span class="s3">,</span>
+            <span class="s3">}</span>
+        <span class="s1">empty_title </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">empty_value_display</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">include_empty_choice</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">add_facets</span><span class="s3">:</span>
+                <span class="s1">count </span><span class="s3">= </span><span class="s1">facet_counts</span><span class="s3">[</span><span class="s5">&quot;__c&quot;</span><span class="s3">]</span>
+                <span class="s1">empty_title </span><span class="s3">= </span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">empty_title</span><span class="s2">} </span><span class="s5">(</span><span class="s2">{</span><span class="s1">count</span><span class="s2">}</span><span class="s5">)&quot;</span>
+            <span class="s2">yield </span><span class="s3">{</span>
+                <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val_isnull</span><span class="s3">),</span>
+                <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                    <span class="s3">{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">: </span><span class="s5">&quot;True&quot;</span><span class="s3">}, [</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">]</span>
+                <span class="s3">),</span>
+                <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">empty_title</span><span class="s3">,</span>
+            <span class="s3">}</span>
+
+
+<span class="s1">FieldListFilter</span><span class="s3">.</span><span class="s1">register</span><span class="s3">(</span><span class="s2">lambda </span><span class="s1">f</span><span class="s3">: </span><span class="s1">f</span><span class="s3">.</span><span class="s1">remote_field</span><span class="s3">, </span><span class="s1">RelatedFieldListFilter</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">BooleanFieldListFilter</span><span class="s3">(</span><span class="s1">FieldListFilter</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg </span><span class="s3">= </span><span class="s5">&quot;%s__exact&quot; </span><span class="s3">% </span><span class="s1">field_path</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg2 </span><span class="s3">= </span><span class="s5">&quot;%s__isnull&quot; </span><span class="s3">% </span><span class="s1">field_path</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s3">= </span><span class="s1">get_last_value_from_parameters</span><span class="s3">(</span><span class="s1">params</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val2 </span><span class="s3">= </span><span class="s1">get_last_value_from_parameters</span><span class="s3">(</span><span class="s1">params</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg2</span><span class="s3">)</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s3">(</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters</span>
+            <span class="s2">and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters</span>
+            <span class="s2">and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">] </span><span class="s2">in </span><span class="s3">(</span><span class="s5">&quot;1&quot;</span><span class="s3">, </span><span class="s5">&quot;0&quot;</span><span class="s3">)</span>
+        <span class="s3">):</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">] = </span><span class="s1">bool</span><span class="s3">(</span>
+                <span class="s1">int</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">])</span>
+            <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">expected_parameters</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg2</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">get_facet_counts</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filtered_qs</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">{</span>
+            <span class="s5">&quot;true__c&quot;</span><span class="s3">: </span><span class="s1">models</span><span class="s3">.</span><span class="s1">Count</span><span class="s3">(</span>
+                <span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filter</span><span class="s3">=</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Q</span><span class="s3">(**{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_path</span><span class="s3">: </span><span class="s2">True</span><span class="s3">})</span>
+            <span class="s3">),</span>
+            <span class="s5">&quot;false__c&quot;</span><span class="s3">: </span><span class="s1">models</span><span class="s3">.</span><span class="s1">Count</span><span class="s3">(</span>
+                <span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filter</span><span class="s3">=</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Q</span><span class="s3">(**{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_path</span><span class="s3">: </span><span class="s2">False</span><span class="s3">})</span>
+            <span class="s3">),</span>
+            <span class="s5">&quot;null__c&quot;</span><span class="s3">: </span><span class="s1">models</span><span class="s3">.</span><span class="s1">Count</span><span class="s3">(</span>
+                <span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filter</span><span class="s3">=</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Q</span><span class="s3">(**{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg2</span><span class="s3">: </span><span class="s2">True</span><span class="s3">})</span>
+            <span class="s3">),</span>
+        <span class="s3">}</span>
+
+    <span class="s2">def </span><span class="s1">choices</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">changelist</span><span class="s3">):</span>
+        <span class="s1">field_choices </span><span class="s3">= </span><span class="s1">dict</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">flatchoices</span><span class="s3">)</span>
+        <span class="s1">add_facets </span><span class="s3">= </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">add_facets</span>
+        <span class="s1">facet_counts </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_facet_queryset</span><span class="s3">(</span><span class="s1">changelist</span><span class="s3">) </span><span class="s2">if </span><span class="s1">add_facets </span><span class="s2">else None</span>
+        <span class="s2">for </span><span class="s1">lookup</span><span class="s3">, </span><span class="s1">title</span><span class="s3">, </span><span class="s1">count_field </span><span class="s2">in </span><span class="s3">(</span>
+            <span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;All&quot;</span><span class="s3">), </span><span class="s2">None</span><span class="s3">),</span>
+            <span class="s3">(</span><span class="s5">&quot;1&quot;</span><span class="s3">, </span><span class="s1">field_choices</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s2">True</span><span class="s3">, </span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;Yes&quot;</span><span class="s3">)), </span><span class="s5">&quot;true__c&quot;</span><span class="s3">),</span>
+            <span class="s3">(</span><span class="s5">&quot;0&quot;</span><span class="s3">, </span><span class="s1">field_choices</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s2">False</span><span class="s3">, </span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;No&quot;</span><span class="s3">)), </span><span class="s5">&quot;false__c&quot;</span><span class="s3">),</span>
+        <span class="s3">):</span>
+            <span class="s2">if </span><span class="s1">add_facets</span><span class="s3">:</span>
+                <span class="s2">if </span><span class="s1">count_field </span><span class="s2">is not None</span><span class="s3">:</span>
+                    <span class="s1">count </span><span class="s3">= </span><span class="s1">facet_counts</span><span class="s3">[</span><span class="s1">count_field</span><span class="s3">]</span>
+                    <span class="s1">title </span><span class="s3">= </span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">title</span><span class="s2">} </span><span class="s5">(</span><span class="s2">{</span><span class="s1">count</span><span class="s2">}</span><span class="s5">)&quot;</span>
+            <span class="s2">yield </span><span class="s3">{</span>
+                <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s3">== </span><span class="s1">lookup </span><span class="s2">and not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val2</span><span class="s3">,</span>
+                <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                    <span class="s3">{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">: </span><span class="s1">lookup</span><span class="s3">}, [</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg2</span><span class="s3">]</span>
+                <span class="s3">),</span>
+                <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">title</span><span class="s3">,</span>
+            <span class="s3">}</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">null</span><span class="s3">:</span>
+            <span class="s1">display </span><span class="s3">= </span><span class="s1">field_choices</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;Unknown&quot;</span><span class="s3">))</span>
+            <span class="s2">if </span><span class="s1">add_facets</span><span class="s3">:</span>
+                <span class="s1">count </span><span class="s3">= </span><span class="s1">facet_counts</span><span class="s3">[</span><span class="s5">&quot;null__c&quot;</span><span class="s3">]</span>
+                <span class="s1">display </span><span class="s3">= </span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">display</span><span class="s2">} </span><span class="s5">(</span><span class="s2">{</span><span class="s1">count</span><span class="s2">}</span><span class="s5">)&quot;</span>
+            <span class="s2">yield </span><span class="s3">{</span>
+                <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val2 </span><span class="s3">== </span><span class="s5">&quot;True&quot;</span><span class="s3">,</span>
+                <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                    <span class="s3">{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg2</span><span class="s3">: </span><span class="s5">&quot;True&quot;</span><span class="s3">}, [</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">]</span>
+                <span class="s3">),</span>
+                <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">display</span><span class="s3">,</span>
+            <span class="s3">}</span>
+
+
+<span class="s1">FieldListFilter</span><span class="s3">.</span><span class="s1">register</span><span class="s3">(</span>
+    <span class="s2">lambda </span><span class="s1">f</span><span class="s3">: </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">f</span><span class="s3">, </span><span class="s1">models</span><span class="s3">.</span><span class="s1">BooleanField</span><span class="s3">), </span><span class="s1">BooleanFieldListFilter</span>
+<span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">ChoicesFieldListFilter</span><span class="s3">(</span><span class="s1">FieldListFilter</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg </span><span class="s3">= </span><span class="s5">&quot;%s__exact&quot; </span><span class="s3">% </span><span class="s1">field_path</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull </span><span class="s3">= </span><span class="s5">&quot;%s__isnull&quot; </span><span class="s3">% </span><span class="s1">field_path</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s3">= </span><span class="s1">params</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val_isnull </span><span class="s3">= </span><span class="s1">get_last_value_from_parameters</span><span class="s3">(</span>
+            <span class="s1">params</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span>
+        <span class="s3">)</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">expected_parameters</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">get_facet_counts</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filtered_qs</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">{</span>
+            <span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">i</span><span class="s2">}</span><span class="s5">__c&quot;</span><span class="s3">: </span><span class="s1">models</span><span class="s3">.</span><span class="s1">Count</span><span class="s3">(</span>
+                <span class="s1">pk_attname</span><span class="s3">,</span>
+                <span class="s1">filter</span><span class="s3">=</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Q</span><span class="s3">(</span>
+                    <span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">, </span><span class="s1">value</span><span class="s3">)</span>
+                    <span class="s2">if </span><span class="s1">value </span><span class="s2">is not None</span>
+                    <span class="s2">else </span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">, </span><span class="s2">True</span><span class="s3">)</span>
+                <span class="s3">),</span>
+            <span class="s3">)</span>
+            <span class="s2">for </span><span class="s1">i</span><span class="s3">, (</span><span class="s1">value</span><span class="s3">, </span><span class="s1">_</span><span class="s3">) </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">flatchoices</span><span class="s3">)</span>
+        <span class="s3">}</span>
+
+    <span class="s2">def </span><span class="s1">choices</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">changelist</span><span class="s3">):</span>
+        <span class="s1">add_facets </span><span class="s3">= </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">add_facets</span>
+        <span class="s1">facet_counts </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_facet_queryset</span><span class="s3">(</span><span class="s1">changelist</span><span class="s3">) </span><span class="s2">if </span><span class="s1">add_facets </span><span class="s2">else None</span>
+        <span class="s2">yield </span><span class="s3">{</span>
+            <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s2">is None</span><span class="s3">,</span>
+            <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                <span class="s1">remove</span><span class="s3">=[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">]</span>
+            <span class="s3">),</span>
+            <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;All&quot;</span><span class="s3">),</span>
+        <span class="s3">}</span>
+        <span class="s1">none_title </span><span class="s3">= </span><span class="s5">&quot;&quot;</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s3">, (</span><span class="s1">lookup</span><span class="s3">, </span><span class="s1">title</span><span class="s3">) </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">flatchoices</span><span class="s3">):</span>
+            <span class="s2">if </span><span class="s1">add_facets</span><span class="s3">:</span>
+                <span class="s1">count </span><span class="s3">= </span><span class="s1">facet_counts</span><span class="s3">[</span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">i</span><span class="s2">}</span><span class="s5">__c&quot;</span><span class="s3">]</span>
+                <span class="s1">title </span><span class="s3">= </span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">title</span><span class="s2">} </span><span class="s5">(</span><span class="s2">{</span><span class="s1">count</span><span class="s2">}</span><span class="s5">)&quot;</span>
+            <span class="s2">if </span><span class="s1">lookup </span><span class="s2">is None</span><span class="s3">:</span>
+                <span class="s1">none_title </span><span class="s3">= </span><span class="s1">title</span>
+                <span class="s2">continue</span>
+            <span class="s2">yield </span><span class="s3">{</span>
+                <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s2">is not None</span>
+                <span class="s2">and </span><span class="s1">str</span><span class="s3">(</span><span class="s1">lookup</span><span class="s3">) </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val</span><span class="s3">,</span>
+                <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                    <span class="s3">{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">: </span><span class="s1">lookup</span><span class="s3">}, [</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">]</span>
+                <span class="s3">),</span>
+                <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">title</span><span class="s3">,</span>
+            <span class="s3">}</span>
+        <span class="s2">if </span><span class="s1">none_title</span><span class="s3">:</span>
+            <span class="s2">yield </span><span class="s3">{</span>
+                <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val_isnull</span><span class="s3">),</span>
+                <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                    <span class="s3">{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">: </span><span class="s5">&quot;True&quot;</span><span class="s3">}, [</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">]</span>
+                <span class="s3">),</span>
+                <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">none_title</span><span class="s3">,</span>
+            <span class="s3">}</span>
+
+
+<span class="s1">FieldListFilter</span><span class="s3">.</span><span class="s1">register</span><span class="s3">(</span><span class="s2">lambda </span><span class="s1">f</span><span class="s3">: </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">f</span><span class="s3">.</span><span class="s1">choices</span><span class="s3">), </span><span class="s1">ChoicesFieldListFilter</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">DateFieldListFilter</span><span class="s3">(</span><span class="s1">FieldListFilter</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">field_generic </span><span class="s3">= </span><span class="s5">&quot;%s__&quot; </span><span class="s3">% </span><span class="s1">field_path</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">date_params </span><span class="s3">= {</span>
+            <span class="s1">k</span><span class="s3">: </span><span class="s1">v</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">] </span><span class="s2">for </span><span class="s1">k</span><span class="s3">, </span><span class="s1">v </span><span class="s2">in </span><span class="s1">params</span><span class="s3">.</span><span class="s1">items</span><span class="s3">() </span><span class="s2">if </span><span class="s1">k</span><span class="s3">.</span><span class="s1">startswith</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_generic</span><span class="s3">)</span>
+        <span class="s3">}</span>
+
+        <span class="s1">now </span><span class="s3">= </span><span class="s1">timezone</span><span class="s3">.</span><span class="s1">now</span><span class="s3">()</span>
+        <span class="s4"># When time zone support is enabled, convert &quot;now&quot; to the user's time</span>
+        <span class="s4"># zone so Django's definition of &quot;Today&quot; matches what the user expects.</span>
+        <span class="s2">if </span><span class="s1">timezone</span><span class="s3">.</span><span class="s1">is_aware</span><span class="s3">(</span><span class="s1">now</span><span class="s3">):</span>
+            <span class="s1">now </span><span class="s3">= </span><span class="s1">timezone</span><span class="s3">.</span><span class="s1">localtime</span><span class="s3">(</span><span class="s1">now</span><span class="s3">)</span>
+
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s1">models</span><span class="s3">.</span><span class="s1">DateTimeField</span><span class="s3">):</span>
+            <span class="s1">today </span><span class="s3">= </span><span class="s1">now</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s1">hour</span><span class="s3">=</span><span class="s6">0</span><span class="s3">, </span><span class="s1">minute</span><span class="s3">=</span><span class="s6">0</span><span class="s3">, </span><span class="s1">second</span><span class="s3">=</span><span class="s6">0</span><span class="s3">, </span><span class="s1">microsecond</span><span class="s3">=</span><span class="s6">0</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:  </span><span class="s4"># field is a models.DateField</span>
+            <span class="s1">today </span><span class="s3">= </span><span class="s1">now</span><span class="s3">.</span><span class="s1">date</span><span class="s3">()</span>
+        <span class="s1">tomorrow </span><span class="s3">= </span><span class="s1">today </span><span class="s3">+ </span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">timedelta</span><span class="s3">(</span><span class="s1">days</span><span class="s3">=</span><span class="s6">1</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">today</span><span class="s3">.</span><span class="s1">month </span><span class="s3">== </span><span class="s6">12</span><span class="s3">:</span>
+            <span class="s1">next_month </span><span class="s3">= </span><span class="s1">today</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s1">year</span><span class="s3">=</span><span class="s1">today</span><span class="s3">.</span><span class="s1">year </span><span class="s3">+ </span><span class="s6">1</span><span class="s3">, </span><span class="s1">month</span><span class="s3">=</span><span class="s6">1</span><span class="s3">, </span><span class="s1">day</span><span class="s3">=</span><span class="s6">1</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">next_month </span><span class="s3">= </span><span class="s1">today</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s1">month</span><span class="s3">=</span><span class="s1">today</span><span class="s3">.</span><span class="s1">month </span><span class="s3">+ </span><span class="s6">1</span><span class="s3">, </span><span class="s1">day</span><span class="s3">=</span><span class="s6">1</span><span class="s3">)</span>
+        <span class="s1">next_year </span><span class="s3">= </span><span class="s1">today</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s1">year</span><span class="s3">=</span><span class="s1">today</span><span class="s3">.</span><span class="s1">year </span><span class="s3">+ </span><span class="s6">1</span><span class="s3">, </span><span class="s1">month</span><span class="s3">=</span><span class="s6">1</span><span class="s3">, </span><span class="s1">day</span><span class="s3">=</span><span class="s6">1</span><span class="s3">)</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_since </span><span class="s3">= </span><span class="s5">&quot;%s__gte&quot; </span><span class="s3">% </span><span class="s1">field_path</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_until </span><span class="s3">= </span><span class="s5">&quot;%s__lt&quot; </span><span class="s3">% </span><span class="s1">field_path</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">links </span><span class="s3">= (</span>
+            <span class="s3">(</span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;Any date&quot;</span><span class="s3">), {}),</span>
+            <span class="s3">(</span>
+                <span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;Today&quot;</span><span class="s3">),</span>
+                <span class="s3">{</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_since</span><span class="s3">: </span><span class="s1">today</span><span class="s3">,</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_until</span><span class="s3">: </span><span class="s1">tomorrow</span><span class="s3">,</span>
+                <span class="s3">},</span>
+            <span class="s3">),</span>
+            <span class="s3">(</span>
+                <span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;Past 7 days&quot;</span><span class="s3">),</span>
+                <span class="s3">{</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_since</span><span class="s3">: </span><span class="s1">today </span><span class="s3">- </span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">timedelta</span><span class="s3">(</span><span class="s1">days</span><span class="s3">=</span><span class="s6">7</span><span class="s3">),</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_until</span><span class="s3">: </span><span class="s1">tomorrow</span><span class="s3">,</span>
+                <span class="s3">},</span>
+            <span class="s3">),</span>
+            <span class="s3">(</span>
+                <span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;This month&quot;</span><span class="s3">),</span>
+                <span class="s3">{</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_since</span><span class="s3">: </span><span class="s1">today</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s1">day</span><span class="s3">=</span><span class="s6">1</span><span class="s3">),</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_until</span><span class="s3">: </span><span class="s1">next_month</span><span class="s3">,</span>
+                <span class="s3">},</span>
+            <span class="s3">),</span>
+            <span class="s3">(</span>
+                <span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;This year&quot;</span><span class="s3">),</span>
+                <span class="s3">{</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_since</span><span class="s3">: </span><span class="s1">today</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s1">month</span><span class="s3">=</span><span class="s6">1</span><span class="s3">, </span><span class="s1">day</span><span class="s3">=</span><span class="s6">1</span><span class="s3">),</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_until</span><span class="s3">: </span><span class="s1">next_year</span><span class="s3">,</span>
+                <span class="s3">},</span>
+            <span class="s3">),</span>
+        <span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">field</span><span class="s3">.</span><span class="s1">null</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull </span><span class="s3">= </span><span class="s5">&quot;%s__isnull&quot; </span><span class="s3">% </span><span class="s1">field_path</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">links </span><span class="s3">+= (</span>
+                <span class="s3">(</span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;No date&quot;</span><span class="s3">), {</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_generic </span><span class="s3">+ </span><span class="s5">&quot;isnull&quot;</span><span class="s3">: </span><span class="s2">True</span><span class="s3">}),</span>
+                <span class="s3">(</span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;Has date&quot;</span><span class="s3">), {</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_generic </span><span class="s3">+ </span><span class="s5">&quot;isnull&quot;</span><span class="s3">: </span><span class="s2">False</span><span class="s3">}),</span>
+            <span class="s3">)</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">expected_parameters</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">params </span><span class="s3">= [</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_since</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_until</span><span class="s3">]</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">null</span><span class="s3">:</span>
+            <span class="s1">params</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">params</span>
+
+    <span class="s2">def </span><span class="s1">get_facet_counts</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filtered_qs</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">{</span>
+            <span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">i</span><span class="s2">}</span><span class="s5">__c&quot;</span><span class="s3">: </span><span class="s1">models</span><span class="s3">.</span><span class="s1">Count</span><span class="s3">(</span><span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filter</span><span class="s3">=</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Q</span><span class="s3">(**</span><span class="s1">param_dict</span><span class="s3">))</span>
+            <span class="s2">for </span><span class="s1">i</span><span class="s3">, (</span><span class="s1">_</span><span class="s3">, </span><span class="s1">param_dict</span><span class="s3">) </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">links</span><span class="s3">)</span>
+        <span class="s3">}</span>
+
+    <span class="s2">def </span><span class="s1">choices</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">changelist</span><span class="s3">):</span>
+        <span class="s1">add_facets </span><span class="s3">= </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">add_facets</span>
+        <span class="s1">facet_counts </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_facet_queryset</span><span class="s3">(</span><span class="s1">changelist</span><span class="s3">) </span><span class="s2">if </span><span class="s1">add_facets </span><span class="s2">else None</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s3">, (</span><span class="s1">title</span><span class="s3">, </span><span class="s1">param_dict</span><span class="s3">) </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">links</span><span class="s3">):</span>
+            <span class="s1">param_dict_str </span><span class="s3">= {</span><span class="s1">key</span><span class="s3">: </span><span class="s1">str</span><span class="s3">(</span><span class="s1">value</span><span class="s3">) </span><span class="s2">for </span><span class="s1">key</span><span class="s3">, </span><span class="s1">value </span><span class="s2">in </span><span class="s1">param_dict</span><span class="s3">.</span><span class="s1">items</span><span class="s3">()}</span>
+            <span class="s2">if </span><span class="s1">add_facets</span><span class="s3">:</span>
+                <span class="s1">count </span><span class="s3">= </span><span class="s1">facet_counts</span><span class="s3">[</span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">i</span><span class="s2">}</span><span class="s5">__c&quot;</span><span class="s3">]</span>
+                <span class="s1">title </span><span class="s3">= </span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">title</span><span class="s2">} </span><span class="s5">(</span><span class="s2">{</span><span class="s1">count</span><span class="s2">}</span><span class="s5">)&quot;</span>
+            <span class="s2">yield </span><span class="s3">{</span>
+                <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">date_params </span><span class="s3">== </span><span class="s1">param_dict_str</span><span class="s3">,</span>
+                <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                    <span class="s1">param_dict_str</span><span class="s3">, [</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_generic</span><span class="s3">]</span>
+                <span class="s3">),</span>
+                <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">title</span><span class="s3">,</span>
+            <span class="s3">}</span>
+
+
+<span class="s1">FieldListFilter</span><span class="s3">.</span><span class="s1">register</span><span class="s3">(</span><span class="s2">lambda </span><span class="s1">f</span><span class="s3">: </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">f</span><span class="s3">, </span><span class="s1">models</span><span class="s3">.</span><span class="s1">DateField</span><span class="s3">), </span><span class="s1">DateFieldListFilter</span><span class="s3">)</span>
+
+
+<span class="s4"># This should be registered last, because it's a last resort. For example,</span>
+<span class="s4"># if a field is eligible to use the BooleanFieldListFilter, that'd be much</span>
+<span class="s4"># more appropriate, and the AllValuesFieldListFilter won't get used for it.</span>
+<span class="s2">class </span><span class="s1">AllValuesFieldListFilter</span><span class="s3">(</span><span class="s1">FieldListFilter</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg </span><span class="s3">= </span><span class="s1">field_path</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull </span><span class="s3">= </span><span class="s5">&quot;%s__isnull&quot; </span><span class="s3">% </span><span class="s1">field_path</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s3">= </span><span class="s1">params</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val_isnull </span><span class="s3">= </span><span class="s1">get_last_value_from_parameters</span><span class="s3">(</span>
+            <span class="s1">params</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span>
+        <span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">empty_value_display </span><span class="s3">= </span><span class="s1">model_admin</span><span class="s3">.</span><span class="s1">get_empty_value_display</span><span class="s3">()</span>
+        <span class="s1">parent_model</span><span class="s3">, </span><span class="s1">reverse_path </span><span class="s3">= </span><span class="s1">reverse_field_path</span><span class="s3">(</span><span class="s1">model</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">)</span>
+        <span class="s4"># Obey parent ModelAdmin queryset when deciding which options to show</span>
+        <span class="s2">if </span><span class="s1">model </span><span class="s3">== </span><span class="s1">parent_model</span><span class="s3">:</span>
+            <span class="s1">queryset </span><span class="s3">= </span><span class="s1">model_admin</span><span class="s3">.</span><span class="s1">get_queryset</span><span class="s3">(</span><span class="s1">request</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">queryset </span><span class="s3">= </span><span class="s1">parent_model</span><span class="s3">.</span><span class="s1">_default_manager</span><span class="s3">.</span><span class="s1">all</span><span class="s3">()</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_choices </span><span class="s3">= (</span>
+            <span class="s1">queryset</span><span class="s3">.</span><span class="s1">distinct</span><span class="s3">().</span><span class="s1">order_by</span><span class="s3">(</span><span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">).</span><span class="s1">values_list</span><span class="s3">(</span><span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">, </span><span class="s1">flat</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s3">)</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">expected_parameters</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">get_facet_counts</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filtered_qs</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">{</span>
+            <span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">i</span><span class="s2">}</span><span class="s5">__c&quot;</span><span class="s3">: </span><span class="s1">models</span><span class="s3">.</span><span class="s1">Count</span><span class="s3">(</span>
+                <span class="s1">pk_attname</span><span class="s3">,</span>
+                <span class="s1">filter</span><span class="s3">=</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Q</span><span class="s3">(</span>
+                    <span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">, </span><span class="s1">value</span><span class="s3">)</span>
+                    <span class="s2">if </span><span class="s1">value </span><span class="s2">is not None</span>
+                    <span class="s2">else </span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">, </span><span class="s2">True</span><span class="s3">)</span>
+                <span class="s3">),</span>
+            <span class="s3">)</span>
+            <span class="s2">for </span><span class="s1">i</span><span class="s3">, </span><span class="s1">value </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_choices</span><span class="s3">)</span>
+        <span class="s3">}</span>
+
+    <span class="s2">def </span><span class="s1">choices</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">changelist</span><span class="s3">):</span>
+        <span class="s1">add_facets </span><span class="s3">= </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">add_facets</span>
+        <span class="s1">facet_counts </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_facet_queryset</span><span class="s3">(</span><span class="s1">changelist</span><span class="s3">) </span><span class="s2">if </span><span class="s1">add_facets </span><span class="s2">else None</span>
+        <span class="s2">yield </span><span class="s3">{</span>
+            <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s2">is None and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val_isnull </span><span class="s2">is None</span><span class="s3">,</span>
+            <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                <span class="s1">remove</span><span class="s3">=[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">]</span>
+            <span class="s3">),</span>
+            <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;All&quot;</span><span class="s3">),</span>
+        <span class="s3">}</span>
+        <span class="s1">include_none </span><span class="s3">= </span><span class="s2">False</span>
+        <span class="s1">count </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s1">empty_title </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">empty_value_display</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s3">, </span><span class="s1">val </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_choices</span><span class="s3">):</span>
+            <span class="s2">if </span><span class="s1">add_facets</span><span class="s3">:</span>
+                <span class="s1">count </span><span class="s3">= </span><span class="s1">facet_counts</span><span class="s3">[</span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">i</span><span class="s2">}</span><span class="s5">__c&quot;</span><span class="s3">]</span>
+            <span class="s2">if </span><span class="s1">val </span><span class="s2">is None</span><span class="s3">:</span>
+                <span class="s1">include_none </span><span class="s3">= </span><span class="s2">True</span>
+                <span class="s1">empty_title </span><span class="s3">= </span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">empty_title</span><span class="s2">} </span><span class="s5">(</span><span class="s2">{</span><span class="s1">count</span><span class="s2">}</span><span class="s5">)&quot; </span><span class="s2">if </span><span class="s1">add_facets </span><span class="s2">else </span><span class="s1">empty_title</span>
+                <span class="s2">continue</span>
+            <span class="s1">val </span><span class="s3">= </span><span class="s1">str</span><span class="s3">(</span><span class="s1">val</span><span class="s3">)</span>
+            <span class="s2">yield </span><span class="s3">{</span>
+                <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s2">is not None and </span><span class="s1">val </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val</span><span class="s3">,</span>
+                <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                    <span class="s3">{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">: </span><span class="s1">val</span><span class="s3">}, [</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">]</span>
+                <span class="s3">),</span>
+                <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">val</span><span class="s2">} </span><span class="s5">(</span><span class="s2">{</span><span class="s1">count</span><span class="s2">}</span><span class="s5">)&quot; </span><span class="s2">if </span><span class="s1">add_facets </span><span class="s2">else </span><span class="s1">val</span><span class="s3">,</span>
+            <span class="s3">}</span>
+        <span class="s2">if </span><span class="s1">include_none</span><span class="s3">:</span>
+            <span class="s2">yield </span><span class="s3">{</span>
+                <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val_isnull</span><span class="s3">),</span>
+                <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                    <span class="s3">{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg_isnull</span><span class="s3">: </span><span class="s5">&quot;True&quot;</span><span class="s3">}, [</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">]</span>
+                <span class="s3">),</span>
+                <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">empty_title</span><span class="s3">,</span>
+            <span class="s3">}</span>
+
+
+<span class="s1">FieldListFilter</span><span class="s3">.</span><span class="s1">register</span><span class="s3">(</span><span class="s2">lambda </span><span class="s1">f</span><span class="s3">: </span><span class="s2">True</span><span class="s3">, </span><span class="s1">AllValuesFieldListFilter</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">RelatedOnlyFieldListFilter</span><span class="s3">(</span><span class="s1">RelatedFieldListFilter</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">field_choices</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">):</span>
+        <span class="s1">pk_qs </span><span class="s3">= (</span>
+            <span class="s1">model_admin</span><span class="s3">.</span><span class="s1">get_queryset</span><span class="s3">(</span><span class="s1">request</span><span class="s3">)</span>
+            <span class="s3">.</span><span class="s1">distinct</span><span class="s3">()</span>
+            <span class="s3">.</span><span class="s1">values_list</span><span class="s3">(</span><span class="s5">&quot;%s__pk&quot; </span><span class="s3">% </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_path</span><span class="s3">, </span><span class="s1">flat</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s3">)</span>
+        <span class="s1">ordering </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_admin_ordering</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">field</span><span class="s3">.</span><span class="s1">get_choices</span><span class="s3">(</span>
+            <span class="s1">include_blank</span><span class="s3">=</span><span class="s2">False</span><span class="s3">, </span><span class="s1">limit_choices_to</span><span class="s3">={</span><span class="s5">&quot;pk__in&quot;</span><span class="s3">: </span><span class="s1">pk_qs</span><span class="s3">}, </span><span class="s1">ordering</span><span class="s3">=</span><span class="s1">ordering</span>
+        <span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">EmptyFieldListFilter</span><span class="s3">(</span><span class="s1">FieldListFilter</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">):</span>
+        <span class="s2">if not </span><span class="s1">field</span><span class="s3">.</span><span class="s1">empty_strings_allowed </span><span class="s2">and not </span><span class="s1">field</span><span class="s3">.</span><span class="s1">null</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">ImproperlyConfigured</span><span class="s3">(</span>
+                <span class="s5">&quot;The list filter '%s' cannot be used with field '%s' which &quot;</span>
+                <span class="s5">&quot;doesn't allow empty strings and nulls.&quot;</span>
+                <span class="s3">% (</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">__class__</span><span class="s3">.</span><span class="s1">__name__</span><span class="s3">,</span>
+                    <span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">,</span>
+                <span class="s3">)</span>
+            <span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg </span><span class="s3">= </span><span class="s5">&quot;%s__isempty&quot; </span><span class="s3">% </span><span class="s1">field_path</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s3">= </span><span class="s1">get_last_value_from_parameters</span><span class="s3">(</span><span class="s1">params</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">)</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">params</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">model_admin</span><span class="s3">, </span><span class="s1">field_path</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_lookup_condition</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">lookup_conditions </span><span class="s3">= []</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">empty_strings_allowed</span><span class="s3">:</span>
+            <span class="s1">lookup_conditions</span><span class="s3">.</span><span class="s1">append</span><span class="s3">((</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_path</span><span class="s3">, </span><span class="s5">&quot;&quot;</span><span class="s3">))</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">field</span><span class="s3">.</span><span class="s1">null</span><span class="s3">:</span>
+            <span class="s1">lookup_conditions</span><span class="s3">.</span><span class="s1">append</span><span class="s3">((</span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_path</span><span class="s2">}</span><span class="s5">__isnull&quot;</span><span class="s3">, </span><span class="s2">True</span><span class="s3">))</span>
+        <span class="s2">return </span><span class="s1">models</span><span class="s3">.</span><span class="s1">Q</span><span class="s3">.</span><span class="s1">create</span><span class="s3">(</span><span class="s1">lookup_conditions</span><span class="s3">, </span><span class="s1">connector</span><span class="s3">=</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Q</span><span class="s3">.</span><span class="s1">OR</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">queryset</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">queryset</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg </span><span class="s2">not in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">used_parameters</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">queryset</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s2">not in </span><span class="s3">(</span><span class="s5">&quot;0&quot;</span><span class="s3">, </span><span class="s5">&quot;1&quot;</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">IncorrectLookupParameters</span>
+
+        <span class="s1">lookup_condition </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_lookup_condition</span><span class="s3">()</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s3">== </span><span class="s5">&quot;1&quot;</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">queryset</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">lookup_condition</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">queryset</span><span class="s3">.</span><span class="s1">exclude</span><span class="s3">(</span><span class="s1">lookup_condition</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">expected_parameters</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">get_facet_counts</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filtered_qs</span><span class="s3">):</span>
+        <span class="s1">lookup_condition </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_lookup_condition</span><span class="s3">()</span>
+        <span class="s2">return </span><span class="s3">{</span>
+            <span class="s5">&quot;empty__c&quot;</span><span class="s3">: </span><span class="s1">models</span><span class="s3">.</span><span class="s1">Count</span><span class="s3">(</span><span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filter</span><span class="s3">=</span><span class="s1">lookup_condition</span><span class="s3">),</span>
+            <span class="s5">&quot;not_empty__c&quot;</span><span class="s3">: </span><span class="s1">models</span><span class="s3">.</span><span class="s1">Count</span><span class="s3">(</span><span class="s1">pk_attname</span><span class="s3">, </span><span class="s1">filter</span><span class="s3">=~</span><span class="s1">lookup_condition</span><span class="s3">),</span>
+        <span class="s3">}</span>
+
+    <span class="s2">def </span><span class="s1">choices</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">changelist</span><span class="s3">):</span>
+        <span class="s1">add_facets </span><span class="s3">= </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">add_facets</span>
+        <span class="s1">facet_counts </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_facet_queryset</span><span class="s3">(</span><span class="s1">changelist</span><span class="s3">) </span><span class="s2">if </span><span class="s1">add_facets </span><span class="s2">else None</span>
+        <span class="s2">for </span><span class="s1">lookup</span><span class="s3">, </span><span class="s1">title</span><span class="s3">, </span><span class="s1">count_field </span><span class="s2">in </span><span class="s3">(</span>
+            <span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;All&quot;</span><span class="s3">), </span><span class="s2">None</span><span class="s3">),</span>
+            <span class="s3">(</span><span class="s5">&quot;1&quot;</span><span class="s3">, </span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;Empty&quot;</span><span class="s3">), </span><span class="s5">&quot;empty__c&quot;</span><span class="s3">),</span>
+            <span class="s3">(</span><span class="s5">&quot;0&quot;</span><span class="s3">, </span><span class="s1">_</span><span class="s3">(</span><span class="s5">&quot;Not empty&quot;</span><span class="s3">), </span><span class="s5">&quot;not_empty__c&quot;</span><span class="s3">),</span>
+        <span class="s3">):</span>
+            <span class="s2">if </span><span class="s1">add_facets</span><span class="s3">:</span>
+                <span class="s2">if </span><span class="s1">count_field </span><span class="s2">is not None</span><span class="s3">:</span>
+                    <span class="s1">count </span><span class="s3">= </span><span class="s1">facet_counts</span><span class="s3">[</span><span class="s1">count_field</span><span class="s3">]</span>
+                    <span class="s1">title </span><span class="s3">= </span><span class="s5">f&quot;</span><span class="s2">{</span><span class="s1">title</span><span class="s2">} </span><span class="s5">(</span><span class="s2">{</span><span class="s1">count</span><span class="s2">}</span><span class="s5">)&quot;</span>
+            <span class="s2">yield </span><span class="s3">{</span>
+                <span class="s5">&quot;selected&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_val </span><span class="s3">== </span><span class="s1">lookup</span><span class="s3">,</span>
+                <span class="s5">&quot;query_string&quot;</span><span class="s3">: </span><span class="s1">changelist</span><span class="s3">.</span><span class="s1">get_query_string</span><span class="s3">(</span>
+                    <span class="s3">{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">lookup_kwarg</span><span class="s3">: </span><span class="s1">lookup</span><span class="s3">}</span>
+                <span class="s3">),</span>
+                <span class="s5">&quot;display&quot;</span><span class="s3">: </span><span class="s1">title</span><span class="s3">,</span>
+            <span class="s3">}</span>
+</pre>
+</body>
+</html>

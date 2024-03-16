@@ -1,0 +1,461 @@
+<html>
+<head>
+<title>datetime.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #6aab73;}
+.s5 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+datetime.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">datetime </span><span class="s0">import </span><span class="s1">datetime</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">expressions </span><span class="s0">import </span><span class="s1">Func</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">fields </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">DateField</span><span class="s2">,</span>
+    <span class="s1">DateTimeField</span><span class="s2">,</span>
+    <span class="s1">DurationField</span><span class="s2">,</span>
+    <span class="s1">Field</span><span class="s2">,</span>
+    <span class="s1">IntegerField</span><span class="s2">,</span>
+    <span class="s1">TimeField</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">lookups </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">Transform</span><span class="s2">,</span>
+    <span class="s1">YearExact</span><span class="s2">,</span>
+    <span class="s1">YearGt</span><span class="s2">,</span>
+    <span class="s1">YearGte</span><span class="s2">,</span>
+    <span class="s1">YearLt</span><span class="s2">,</span>
+    <span class="s1">YearLte</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">timezone</span>
+
+
+<span class="s0">class </span><span class="s1">TimezoneMixin</span><span class="s2">:</span>
+    <span class="s1">tzinfo </span><span class="s2">= </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">get_tzname</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3"># Timezone conversions must happen to the input datetime *before*</span>
+        <span class="s3"># applying a function. 2015-12-31 23:00:00 -02:00 is stored in the</span>
+        <span class="s3"># database as 2016-01-01 01:00:00 +00:00. Any results should be</span>
+        <span class="s3"># based on the input datetime not the stored datetime.</span>
+        <span class="s1">tzname </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">USE_TZ</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">tzinfo </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s1">tzname </span><span class="s2">= </span><span class="s1">timezone</span><span class="s2">.</span><span class="s1">get_current_timezone_name</span><span class="s2">()</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">tzname </span><span class="s2">= </span><span class="s1">timezone</span><span class="s2">.</span><span class="s1">_get_timezone_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">tzinfo</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">tzname</span>
+
+
+<span class="s0">class </span><span class="s1">Extract</span><span class="s2">(</span><span class="s1">TimezoneMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">IntegerField</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">expression</span><span class="s2">, </span><span class="s1">lookup_name</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">tzinfo</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">extra</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_name </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_name </span><span class="s2">= </span><span class="s1">lookup_name</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_name </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s4">&quot;lookup_name must be provided&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">tzinfo </span><span class="s2">= </span><span class="s1">tzinfo</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">expression</span><span class="s2">, **</span><span class="s1">extra</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">compiler</span><span class="s2">.</span><span class="s1">compile</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">)</span>
+        <span class="s1">lhs_output_field </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">.</span><span class="s1">output_field</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">lhs_output_field</span><span class="s2">, </span><span class="s1">DateTimeField</span><span class="s2">):</span>
+            <span class="s1">tzname </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_tzname</span><span class="s2">()</span>
+            <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">datetime_extract_sql</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_name</span><span class="s2">, </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">params</span><span class="s2">), </span><span class="s1">tzname</span>
+            <span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">self</span><span class="s2">.</span><span class="s1">tzinfo </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s4">&quot;tzinfo can only be used with DateTimeField.&quot;</span><span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">lhs_output_field</span><span class="s2">, </span><span class="s1">DateField</span><span class="s2">):</span>
+            <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">date_extract_sql</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_name</span><span class="s2">, </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">params</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">lhs_output_field</span><span class="s2">, </span><span class="s1">TimeField</span><span class="s2">):</span>
+            <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">time_extract_sql</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_name</span><span class="s2">, </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">params</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">lhs_output_field</span><span class="s2">, </span><span class="s1">DurationField</span><span class="s2">):</span>
+            <span class="s0">if not </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">features</span><span class="s2">.</span><span class="s1">has_native_duration_field</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s4">&quot;Extract requires native DurationField database support.&quot;</span>
+                <span class="s2">)</span>
+            <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">time_extract_sql</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_name</span><span class="s2">, </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">params</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s3"># resolve_expression has already validated the output_field so this</span>
+            <span class="s3"># assert should never be hit.</span>
+            <span class="s0">assert False</span><span class="s2">, </span><span class="s4">&quot;Tried to Extract from an invalid type.&quot;</span>
+        <span class="s0">return </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">params</span>
+
+    <span class="s0">def </span><span class="s1">resolve_expression</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">query</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">allow_joins</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">reuse</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">summarize</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">for_save</span><span class="s2">=</span><span class="s0">False</span>
+    <span class="s2">):</span>
+        <span class="s1">copy </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">resolve_expression</span><span class="s2">(</span>
+            <span class="s1">query</span><span class="s2">, </span><span class="s1">allow_joins</span><span class="s2">, </span><span class="s1">reuse</span><span class="s2">, </span><span class="s1">summarize</span><span class="s2">, </span><span class="s1">for_save</span>
+        <span class="s2">)</span>
+        <span class="s1">field </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">copy</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">, </span><span class="s4">&quot;output_field&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">field </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">copy</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, (</span><span class="s1">DateField</span><span class="s2">, </span><span class="s1">DateTimeField</span><span class="s2">, </span><span class="s1">TimeField</span><span class="s2">, </span><span class="s1">DurationField</span><span class="s2">)):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                <span class="s4">&quot;Extract input expression must be DateField, DateTimeField, &quot;</span>
+                <span class="s4">&quot;TimeField, or DurationField.&quot;</span>
+            <span class="s2">)</span>
+        <span class="s3"># Passing dates to functions expecting datetimes is most likely a mistake.</span>
+        <span class="s0">if </span><span class="s1">type</span><span class="s2">(</span><span class="s1">field</span><span class="s2">) </span><span class="s0">is </span><span class="s1">DateField </span><span class="s0">and </span><span class="s1">copy</span><span class="s2">.</span><span class="s1">lookup_name </span><span class="s0">in </span><span class="s2">(</span>
+            <span class="s4">&quot;hour&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;minute&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;second&quot;</span><span class="s2">,</span>
+        <span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                <span class="s4">&quot;Cannot extract time component '%s' from DateField '%s'.&quot;</span>
+                <span class="s2">% (</span><span class="s1">copy</span><span class="s2">.</span><span class="s1">lookup_name</span><span class="s2">, </span><span class="s1">field</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">DurationField</span><span class="s2">) </span><span class="s0">and </span><span class="s1">copy</span><span class="s2">.</span><span class="s1">lookup_name </span><span class="s0">in </span><span class="s2">(</span>
+            <span class="s4">&quot;year&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;iso_year&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;month&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;week&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;week_day&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;iso_week_day&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;quarter&quot;</span><span class="s2">,</span>
+        <span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                <span class="s4">&quot;Cannot extract component '%s' from DurationField '%s'.&quot;</span>
+                <span class="s2">% (</span><span class="s1">copy</span><span class="s2">.</span><span class="s1">lookup_name</span><span class="s2">, </span><span class="s1">field</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">copy</span>
+
+
+<span class="s0">class </span><span class="s1">ExtractYear</span><span class="s2">(</span><span class="s1">Extract</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s4">&quot;year&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ExtractIsoYear</span><span class="s2">(</span><span class="s1">Extract</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Return the ISO-8601 week-numbering year.&quot;&quot;&quot;</span>
+
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s4">&quot;iso_year&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ExtractMonth</span><span class="s2">(</span><span class="s1">Extract</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s4">&quot;month&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ExtractDay</span><span class="s2">(</span><span class="s1">Extract</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s4">&quot;day&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ExtractWeek</span><span class="s2">(</span><span class="s1">Extract</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Return 1-52 or 53, based on ISO-8601, i.e., Monday is the first of the 
+    week. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s4">&quot;week&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ExtractWeekDay</span><span class="s2">(</span><span class="s1">Extract</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Return Sunday=1 through Saturday=7. 
+ 
+    To replicate this in Python: (mydatetime.isoweekday() % 7) + 1 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s4">&quot;week_day&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ExtractIsoWeekDay</span><span class="s2">(</span><span class="s1">Extract</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Return Monday=1 through Sunday=7, based on ISO-8601.&quot;&quot;&quot;</span>
+
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s4">&quot;iso_week_day&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ExtractQuarter</span><span class="s2">(</span><span class="s1">Extract</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s4">&quot;quarter&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ExtractHour</span><span class="s2">(</span><span class="s1">Extract</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s4">&quot;hour&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ExtractMinute</span><span class="s2">(</span><span class="s1">Extract</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s4">&quot;minute&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ExtractSecond</span><span class="s2">(</span><span class="s1">Extract</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s4">&quot;second&quot;</span>
+
+
+<span class="s1">DateField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractYear</span><span class="s2">)</span>
+<span class="s1">DateField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractMonth</span><span class="s2">)</span>
+<span class="s1">DateField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractDay</span><span class="s2">)</span>
+<span class="s1">DateField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractWeekDay</span><span class="s2">)</span>
+<span class="s1">DateField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractIsoWeekDay</span><span class="s2">)</span>
+<span class="s1">DateField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractWeek</span><span class="s2">)</span>
+<span class="s1">DateField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractIsoYear</span><span class="s2">)</span>
+<span class="s1">DateField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractQuarter</span><span class="s2">)</span>
+
+<span class="s1">TimeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractHour</span><span class="s2">)</span>
+<span class="s1">TimeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractMinute</span><span class="s2">)</span>
+<span class="s1">TimeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractSecond</span><span class="s2">)</span>
+
+<span class="s1">DateTimeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractHour</span><span class="s2">)</span>
+<span class="s1">DateTimeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractMinute</span><span class="s2">)</span>
+<span class="s1">DateTimeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">ExtractSecond</span><span class="s2">)</span>
+
+<span class="s1">ExtractYear</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">YearExact</span><span class="s2">)</span>
+<span class="s1">ExtractYear</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">YearGt</span><span class="s2">)</span>
+<span class="s1">ExtractYear</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">YearGte</span><span class="s2">)</span>
+<span class="s1">ExtractYear</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">YearLt</span><span class="s2">)</span>
+<span class="s1">ExtractYear</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">YearLte</span><span class="s2">)</span>
+
+<span class="s1">ExtractIsoYear</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">YearExact</span><span class="s2">)</span>
+<span class="s1">ExtractIsoYear</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">YearGt</span><span class="s2">)</span>
+<span class="s1">ExtractIsoYear</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">YearGte</span><span class="s2">)</span>
+<span class="s1">ExtractIsoYear</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">YearLt</span><span class="s2">)</span>
+<span class="s1">ExtractIsoYear</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">YearLte</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">Now</span><span class="s2">(</span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">template </span><span class="s2">= </span><span class="s4">&quot;CURRENT_TIMESTAMP&quot;</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">DateTimeField</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">as_postgresql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s3"># PostgreSQL's CURRENT_TIMESTAMP means &quot;the time at the start of the</span>
+        <span class="s3"># transaction&quot;. Use STATEMENT_TIMESTAMP to be cross-compatible with</span>
+        <span class="s3"># other databases.</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">as_sql</span><span class="s2">(</span>
+            <span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">template</span><span class="s2">=</span><span class="s4">&quot;STATEMENT_TIMESTAMP()&quot;</span><span class="s2">, **</span><span class="s1">extra_context</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_mysql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">as_sql</span><span class="s2">(</span>
+            <span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">template</span><span class="s2">=</span><span class="s4">&quot;CURRENT_TIMESTAMP(6)&quot;</span><span class="s2">, **</span><span class="s1">extra_context</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_sqlite</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">as_sql</span><span class="s2">(</span>
+            <span class="s1">compiler</span><span class="s2">,</span>
+            <span class="s1">connection</span><span class="s2">,</span>
+            <span class="s1">template</span><span class="s2">=</span><span class="s4">&quot;STRFTIME('%%%%Y-%%%%m-%%%%d %%%%H:%%%%M:%%%%f', 'NOW')&quot;</span><span class="s2">,</span>
+            <span class="s2">**</span><span class="s1">extra_context</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_oracle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">as_sql</span><span class="s2">(</span>
+            <span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">template</span><span class="s2">=</span><span class="s4">&quot;LOCALTIMESTAMP&quot;</span><span class="s2">, **</span><span class="s1">extra_context</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">TruncBase</span><span class="s2">(</span><span class="s1">TimezoneMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">kind </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">tzinfo </span><span class="s2">= </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">expression</span><span class="s2">,</span>
+        <span class="s1">output_field</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">tzinfo</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s2">**</span><span class="s1">extra</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">tzinfo </span><span class="s2">= </span><span class="s1">tzinfo</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">expression</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">=</span><span class="s1">output_field</span><span class="s2">, **</span><span class="s1">extra</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">compiler</span><span class="s2">.</span><span class="s1">compile</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">)</span>
+        <span class="s1">tzname </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">DateTimeField</span><span class="s2">):</span>
+            <span class="s1">tzname </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_tzname</span><span class="s2">()</span>
+        <span class="s0">elif </span><span class="s1">self</span><span class="s2">.</span><span class="s1">tzinfo </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s4">&quot;tzinfo can only be used with DateTimeField.&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">DateTimeField</span><span class="s2">):</span>
+            <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">datetime_trunc_sql</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">kind</span><span class="s2">, </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">params</span><span class="s2">), </span><span class="s1">tzname</span>
+            <span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">DateField</span><span class="s2">):</span>
+            <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">date_trunc_sql</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">kind</span><span class="s2">, </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">params</span><span class="s2">), </span><span class="s1">tzname</span>
+            <span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">TimeField</span><span class="s2">):</span>
+            <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">time_trunc_sql</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">kind</span><span class="s2">, </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">params</span><span class="s2">), </span><span class="s1">tzname</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                <span class="s4">&quot;Trunc only valid on DateField, TimeField, or DateTimeField.&quot;</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">params</span>
+
+    <span class="s0">def </span><span class="s1">resolve_expression</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">query</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">allow_joins</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">reuse</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">summarize</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">for_save</span><span class="s2">=</span><span class="s0">False</span>
+    <span class="s2">):</span>
+        <span class="s1">copy </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">resolve_expression</span><span class="s2">(</span>
+            <span class="s1">query</span><span class="s2">, </span><span class="s1">allow_joins</span><span class="s2">, </span><span class="s1">reuse</span><span class="s2">, </span><span class="s1">summarize</span><span class="s2">, </span><span class="s1">for_save</span>
+        <span class="s2">)</span>
+        <span class="s1">field </span><span class="s2">= </span><span class="s1">copy</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">.</span><span class="s1">output_field</span>
+        <span class="s3"># DateTimeField is a subclass of DateField so this works for both.</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, (</span><span class="s1">DateField</span><span class="s2">, </span><span class="s1">TimeField</span><span class="s2">)):</span>
+            <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                <span class="s4">&quot;%r isn't a DateField, TimeField, or DateTimeField.&quot; </span><span class="s2">% </span><span class="s1">field</span><span class="s2">.</span><span class="s1">name</span>
+            <span class="s2">)</span>
+        <span class="s3"># If self.output_field was None, then accessing the field will trigger</span>
+        <span class="s3"># the resolver to assign it to self.lhs.output_field.</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">copy</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">, (</span><span class="s1">DateField</span><span class="s2">, </span><span class="s1">DateTimeField</span><span class="s2">, </span><span class="s1">TimeField</span><span class="s2">)):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                <span class="s4">&quot;output_field must be either DateField, TimeField, or DateTimeField&quot;</span>
+            <span class="s2">)</span>
+        <span class="s3"># Passing dates or times to functions expecting datetimes is most</span>
+        <span class="s3"># likely a mistake.</span>
+        <span class="s1">class_output_field </span><span class="s2">= (</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">output_field</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">Field</span><span class="s2">)</span>
+            <span class="s0">else None</span>
+        <span class="s2">)</span>
+        <span class="s1">output_field </span><span class="s2">= </span><span class="s1">class_output_field </span><span class="s0">or </span><span class="s1">copy</span><span class="s2">.</span><span class="s1">output_field</span>
+        <span class="s1">has_explicit_output_field </span><span class="s2">= (</span>
+            <span class="s1">class_output_field </span><span class="s0">or </span><span class="s1">field</span><span class="s2">.</span><span class="s1">__class__ </span><span class="s0">is not </span><span class="s1">copy</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">.</span><span class="s1">__class__</span>
+        <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">type</span><span class="s2">(</span><span class="s1">field</span><span class="s2">) </span><span class="s0">is </span><span class="s1">DateField </span><span class="s0">and </span><span class="s2">(</span>
+            <span class="s1">isinstance</span><span class="s2">(</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">DateTimeField</span><span class="s2">)</span>
+            <span class="s0">or </span><span class="s1">copy</span><span class="s2">.</span><span class="s1">kind </span><span class="s0">in </span><span class="s2">(</span><span class="s4">&quot;hour&quot;</span><span class="s2">, </span><span class="s4">&quot;minute&quot;</span><span class="s2">, </span><span class="s4">&quot;second&quot;</span><span class="s2">, </span><span class="s4">&quot;time&quot;</span><span class="s2">)</span>
+        <span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                <span class="s4">&quot;Cannot truncate DateField '%s' to %s.&quot;</span>
+                <span class="s2">% (</span>
+                    <span class="s1">field</span><span class="s2">.</span><span class="s1">name</span><span class="s2">,</span>
+                    <span class="s2">(</span>
+                        <span class="s1">output_field</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span>
+                        <span class="s0">if </span><span class="s1">has_explicit_output_field</span>
+                        <span class="s0">else </span><span class="s4">&quot;DateTimeField&quot;</span>
+                    <span class="s2">),</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">TimeField</span><span class="s2">) </span><span class="s0">and </span><span class="s2">(</span>
+            <span class="s1">isinstance</span><span class="s2">(</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">DateTimeField</span><span class="s2">)</span>
+            <span class="s0">or </span><span class="s1">copy</span><span class="s2">.</span><span class="s1">kind </span><span class="s0">in </span><span class="s2">(</span><span class="s4">&quot;year&quot;</span><span class="s2">, </span><span class="s4">&quot;quarter&quot;</span><span class="s2">, </span><span class="s4">&quot;month&quot;</span><span class="s2">, </span><span class="s4">&quot;week&quot;</span><span class="s2">, </span><span class="s4">&quot;day&quot;</span><span class="s2">, </span><span class="s4">&quot;date&quot;</span><span class="s2">)</span>
+        <span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                <span class="s4">&quot;Cannot truncate TimeField '%s' to %s.&quot;</span>
+                <span class="s2">% (</span>
+                    <span class="s1">field</span><span class="s2">.</span><span class="s1">name</span><span class="s2">,</span>
+                    <span class="s2">(</span>
+                        <span class="s1">output_field</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span>
+                        <span class="s0">if </span><span class="s1">has_explicit_output_field</span>
+                        <span class="s0">else </span><span class="s4">&quot;DateTimeField&quot;</span>
+                    <span class="s2">),</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">copy</span>
+
+    <span class="s0">def </span><span class="s1">convert_value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">expression</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">DateTimeField</span><span class="s2">):</span>
+            <span class="s0">if not </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">USE_TZ</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+            <span class="s0">elif </span><span class="s1">value </span><span class="s0">is not None</span><span class="s2">:</span>
+                <span class="s1">value </span><span class="s2">= </span><span class="s1">value</span><span class="s2">.</span><span class="s1">replace</span><span class="s2">(</span><span class="s1">tzinfo</span><span class="s2">=</span><span class="s0">None</span><span class="s2">)</span>
+                <span class="s1">value </span><span class="s2">= </span><span class="s1">timezone</span><span class="s2">.</span><span class="s1">make_aware</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">tzinfo</span><span class="s2">)</span>
+            <span class="s0">elif not </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">features</span><span class="s2">.</span><span class="s1">has_zoneinfo_database</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s4">&quot;Database returned an invalid datetime value. Are time &quot;</span>
+                    <span class="s4">&quot;zone definitions for your database installed?&quot;</span>
+                <span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">datetime</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">value </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+            <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">DateField</span><span class="s2">):</span>
+                <span class="s1">value </span><span class="s2">= </span><span class="s1">value</span><span class="s2">.</span><span class="s1">date</span><span class="s2">()</span>
+            <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">TimeField</span><span class="s2">):</span>
+                <span class="s1">value </span><span class="s2">= </span><span class="s1">value</span><span class="s2">.</span><span class="s1">time</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">value</span>
+
+
+<span class="s0">class </span><span class="s1">Trunc</span><span class="s2">(</span><span class="s1">TruncBase</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">expression</span><span class="s2">,</span>
+        <span class="s1">kind</span><span class="s2">,</span>
+        <span class="s1">output_field</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">tzinfo</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s2">**</span><span class="s1">extra</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">kind </span><span class="s2">= </span><span class="s1">kind</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">expression</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">=</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">tzinfo</span><span class="s2">=</span><span class="s1">tzinfo</span><span class="s2">, **</span><span class="s1">extra</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">TruncYear</span><span class="s2">(</span><span class="s1">TruncBase</span><span class="s2">):</span>
+    <span class="s1">kind </span><span class="s2">= </span><span class="s4">&quot;year&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TruncQuarter</span><span class="s2">(</span><span class="s1">TruncBase</span><span class="s2">):</span>
+    <span class="s1">kind </span><span class="s2">= </span><span class="s4">&quot;quarter&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TruncMonth</span><span class="s2">(</span><span class="s1">TruncBase</span><span class="s2">):</span>
+    <span class="s1">kind </span><span class="s2">= </span><span class="s4">&quot;month&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TruncWeek</span><span class="s2">(</span><span class="s1">TruncBase</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Truncate to midnight on the Monday of the week.&quot;&quot;&quot;</span>
+
+    <span class="s1">kind </span><span class="s2">= </span><span class="s4">&quot;week&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TruncDay</span><span class="s2">(</span><span class="s1">TruncBase</span><span class="s2">):</span>
+    <span class="s1">kind </span><span class="s2">= </span><span class="s4">&quot;day&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TruncDate</span><span class="s2">(</span><span class="s1">TruncBase</span><span class="s2">):</span>
+    <span class="s1">kind </span><span class="s2">= </span><span class="s4">&quot;date&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s4">&quot;date&quot;</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">DateField</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s3"># Cast to date rather than truncate to date.</span>
+        <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">compiler</span><span class="s2">.</span><span class="s1">compile</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">)</span>
+        <span class="s1">tzname </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_tzname</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">datetime_cast_date_sql</span><span class="s2">(</span><span class="s1">sql</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">params</span><span class="s2">), </span><span class="s1">tzname</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">TruncTime</span><span class="s2">(</span><span class="s1">TruncBase</span><span class="s2">):</span>
+    <span class="s1">kind </span><span class="s2">= </span><span class="s4">&quot;time&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s4">&quot;time&quot;</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">TimeField</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s3"># Cast to time rather than truncate to time.</span>
+        <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">compiler</span><span class="s2">.</span><span class="s1">compile</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">)</span>
+        <span class="s1">tzname </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_tzname</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">datetime_cast_time_sql</span><span class="s2">(</span><span class="s1">sql</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">params</span><span class="s2">), </span><span class="s1">tzname</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">TruncHour</span><span class="s2">(</span><span class="s1">TruncBase</span><span class="s2">):</span>
+    <span class="s1">kind </span><span class="s2">= </span><span class="s4">&quot;hour&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TruncMinute</span><span class="s2">(</span><span class="s1">TruncBase</span><span class="s2">):</span>
+    <span class="s1">kind </span><span class="s2">= </span><span class="s4">&quot;minute&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">TruncSecond</span><span class="s2">(</span><span class="s1">TruncBase</span><span class="s2">):</span>
+    <span class="s1">kind </span><span class="s2">= </span><span class="s4">&quot;second&quot;</span>
+
+
+<span class="s1">DateTimeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">TruncDate</span><span class="s2">)</span>
+<span class="s1">DateTimeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">TruncTime</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

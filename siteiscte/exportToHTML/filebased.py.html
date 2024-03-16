@@ -1,0 +1,193 @@
+<html>
+<head>
+<title>filebased.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+filebased.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;File-based cache backend&quot;</span>
+<span class="s2">import </span><span class="s1">glob</span>
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">import </span><span class="s1">pickle</span>
+<span class="s2">import </span><span class="s1">random</span>
+<span class="s2">import </span><span class="s1">tempfile</span>
+<span class="s2">import </span><span class="s1">time</span>
+<span class="s2">import </span><span class="s1">zlib</span>
+<span class="s2">from </span><span class="s1">hashlib </span><span class="s2">import </span><span class="s1">md5</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">cache</span><span class="s3">.</span><span class="s1">backends</span><span class="s3">.</span><span class="s1">base </span><span class="s2">import </span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">BaseCache</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">files </span><span class="s2">import </span><span class="s1">locks</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">files</span><span class="s3">.</span><span class="s1">move </span><span class="s2">import </span><span class="s1">file_move_safe</span>
+
+
+<span class="s2">class </span><span class="s1">FileBasedCache</span><span class="s3">(</span><span class="s1">BaseCache</span><span class="s3">):</span>
+    <span class="s1">cache_suffix </span><span class="s3">= </span><span class="s4">&quot;.djcache&quot;</span>
+    <span class="s1">pickle_protocol </span><span class="s3">= </span><span class="s1">pickle</span><span class="s3">.</span><span class="s1">HIGHEST_PROTOCOL</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">dir</span><span class="s3">, </span><span class="s1">params</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">params</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_dir </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">abspath</span><span class="s3">(</span><span class="s1">dir</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_createdir</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">add</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">has_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">):</span>
+            <span class="s2">return False</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">set</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">, </span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">return True</span>
+
+    <span class="s2">def </span><span class="s1">get</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">default</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">fname </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_key_to_file</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">with </span><span class="s1">open</span><span class="s3">(</span><span class="s1">fname</span><span class="s3">, </span><span class="s4">&quot;rb&quot;</span><span class="s3">) </span><span class="s2">as </span><span class="s1">f</span><span class="s3">:</span>
+                <span class="s2">if not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_is_expired</span><span class="s3">(</span><span class="s1">f</span><span class="s3">):</span>
+                    <span class="s2">return </span><span class="s1">pickle</span><span class="s3">.</span><span class="s1">loads</span><span class="s3">(</span><span class="s1">zlib</span><span class="s3">.</span><span class="s1">decompress</span><span class="s3">(</span><span class="s1">f</span><span class="s3">.</span><span class="s1">read</span><span class="s3">()))</span>
+        <span class="s2">except </span><span class="s1">FileNotFoundError</span><span class="s3">:</span>
+            <span class="s2">pass</span>
+        <span class="s2">return </span><span class="s1">default</span>
+
+    <span class="s2">def </span><span class="s1">_write_content</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">file</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">, </span><span class="s1">value</span><span class="s3">):</span>
+        <span class="s1">expiry </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_backend_timeout</span><span class="s3">(</span><span class="s1">timeout</span><span class="s3">)</span>
+        <span class="s1">file</span><span class="s3">.</span><span class="s1">write</span><span class="s3">(</span><span class="s1">pickle</span><span class="s3">.</span><span class="s1">dumps</span><span class="s3">(</span><span class="s1">expiry</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">pickle_protocol</span><span class="s3">))</span>
+        <span class="s1">file</span><span class="s3">.</span><span class="s1">write</span><span class="s3">(</span><span class="s1">zlib</span><span class="s3">.</span><span class="s1">compress</span><span class="s3">(</span><span class="s1">pickle</span><span class="s3">.</span><span class="s1">dumps</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">pickle_protocol</span><span class="s3">)))</span>
+
+    <span class="s2">def </span><span class="s1">set</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_createdir</span><span class="s3">()  </span><span class="s5"># Cache dir can be deleted at any time.</span>
+        <span class="s1">fname </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_key_to_file</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cull</span><span class="s3">()  </span><span class="s5"># make some room if necessary</span>
+        <span class="s1">fd</span><span class="s3">, </span><span class="s1">tmp_path </span><span class="s3">= </span><span class="s1">tempfile</span><span class="s3">.</span><span class="s1">mkstemp</span><span class="s3">(</span><span class="s1">dir</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_dir</span><span class="s3">)</span>
+        <span class="s1">renamed </span><span class="s3">= </span><span class="s2">False</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">with </span><span class="s1">open</span><span class="s3">(</span><span class="s1">fd</span><span class="s3">, </span><span class="s4">&quot;wb&quot;</span><span class="s3">) </span><span class="s2">as </span><span class="s1">f</span><span class="s3">:</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">_write_content</span><span class="s3">(</span><span class="s1">f</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">, </span><span class="s1">value</span><span class="s3">)</span>
+            <span class="s1">file_move_safe</span><span class="s3">(</span><span class="s1">tmp_path</span><span class="s3">, </span><span class="s1">fname</span><span class="s3">, </span><span class="s1">allow_overwrite</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+            <span class="s1">renamed </span><span class="s3">= </span><span class="s2">True</span>
+        <span class="s2">finally</span><span class="s3">:</span>
+            <span class="s2">if not </span><span class="s1">renamed</span><span class="s3">:</span>
+                <span class="s1">os</span><span class="s3">.</span><span class="s1">remove</span><span class="s3">(</span><span class="s1">tmp_path</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">touch</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">with </span><span class="s1">open</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_key_to_file</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">), </span><span class="s4">&quot;r+b&quot;</span><span class="s3">) </span><span class="s2">as </span><span class="s1">f</span><span class="s3">:</span>
+                <span class="s2">try</span><span class="s3">:</span>
+                    <span class="s1">locks</span><span class="s3">.</span><span class="s1">lock</span><span class="s3">(</span><span class="s1">f</span><span class="s3">, </span><span class="s1">locks</span><span class="s3">.</span><span class="s1">LOCK_EX</span><span class="s3">)</span>
+                    <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_is_expired</span><span class="s3">(</span><span class="s1">f</span><span class="s3">):</span>
+                        <span class="s2">return False</span>
+                    <span class="s2">else</span><span class="s3">:</span>
+                        <span class="s1">previous_value </span><span class="s3">= </span><span class="s1">pickle</span><span class="s3">.</span><span class="s1">loads</span><span class="s3">(</span><span class="s1">zlib</span><span class="s3">.</span><span class="s1">decompress</span><span class="s3">(</span><span class="s1">f</span><span class="s3">.</span><span class="s1">read</span><span class="s3">()))</span>
+                        <span class="s1">f</span><span class="s3">.</span><span class="s1">seek</span><span class="s3">(</span><span class="s6">0</span><span class="s3">)</span>
+                        <span class="s1">self</span><span class="s3">.</span><span class="s1">_write_content</span><span class="s3">(</span><span class="s1">f</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">, </span><span class="s1">previous_value</span><span class="s3">)</span>
+                        <span class="s2">return True</span>
+                <span class="s2">finally</span><span class="s3">:</span>
+                    <span class="s1">locks</span><span class="s3">.</span><span class="s1">unlock</span><span class="s3">(</span><span class="s1">f</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">FileNotFoundError</span><span class="s3">:</span>
+            <span class="s2">return False</span>
+
+    <span class="s2">def </span><span class="s1">delete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_delete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_key_to_file</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">_delete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">fname</span><span class="s3">):</span>
+        <span class="s2">if not </span><span class="s1">fname</span><span class="s3">.</span><span class="s1">startswith</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_dir</span><span class="s3">) </span><span class="s2">or not </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">exists</span><span class="s3">(</span><span class="s1">fname</span><span class="s3">):</span>
+            <span class="s2">return False</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">os</span><span class="s3">.</span><span class="s1">remove</span><span class="s3">(</span><span class="s1">fname</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">FileNotFoundError</span><span class="s3">:</span>
+            <span class="s5"># The file may have been removed by another process.</span>
+            <span class="s2">return False</span>
+        <span class="s2">return True</span>
+
+    <span class="s2">def </span><span class="s1">has_key</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">fname </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_key_to_file</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">with </span><span class="s1">open</span><span class="s3">(</span><span class="s1">fname</span><span class="s3">, </span><span class="s4">&quot;rb&quot;</span><span class="s3">) </span><span class="s2">as </span><span class="s1">f</span><span class="s3">:</span>
+                <span class="s2">return not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_is_expired</span><span class="s3">(</span><span class="s1">f</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">FileNotFoundError</span><span class="s3">:</span>
+            <span class="s2">return False</span>
+
+    <span class="s2">def </span><span class="s1">_cull</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Remove random cache entries if max_entries is reached at a ratio 
+        of num_entries / cull_frequency. A value of 0 for CULL_FREQUENCY means 
+        that the entire cache will be purged. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">filelist </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_list_cache_files</span><span class="s3">()</span>
+        <span class="s1">num_entries </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">filelist</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">num_entries </span><span class="s3">&lt; </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_max_entries</span><span class="s3">:</span>
+            <span class="s2">return  </span><span class="s5"># return early if no culling is required</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cull_frequency </span><span class="s3">== </span><span class="s6">0</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">clear</span><span class="s3">()  </span><span class="s5"># Clear the cache when CULL_FREQUENCY = 0</span>
+        <span class="s5"># Delete a random selection of entries</span>
+        <span class="s1">filelist </span><span class="s3">= </span><span class="s1">random</span><span class="s3">.</span><span class="s1">sample</span><span class="s3">(</span><span class="s1">filelist</span><span class="s3">, </span><span class="s1">int</span><span class="s3">(</span><span class="s1">num_entries </span><span class="s3">/ </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cull_frequency</span><span class="s3">))</span>
+        <span class="s2">for </span><span class="s1">fname </span><span class="s2">in </span><span class="s1">filelist</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_delete</span><span class="s3">(</span><span class="s1">fname</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_createdir</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s5"># Set the umask because os.makedirs() doesn't apply the &quot;mode&quot; argument</span>
+        <span class="s5"># to intermediate-level directories.</span>
+        <span class="s1">old_umask </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">umask</span><span class="s3">(</span><span class="s6">0o077</span><span class="s3">)</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">os</span><span class="s3">.</span><span class="s1">makedirs</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_dir</span><span class="s3">, </span><span class="s6">0o700</span><span class="s3">, </span><span class="s1">exist_ok</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s2">finally</span><span class="s3">:</span>
+            <span class="s1">os</span><span class="s3">.</span><span class="s1">umask</span><span class="s3">(</span><span class="s1">old_umask</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_key_to_file</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Convert a key into a cache file path. Basically this is the 
+        root cache path joined with the md5sum of the key and a suffix. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_dir</span><span class="s3">,</span>
+            <span class="s4">&quot;&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span>
+                <span class="s3">[</span>
+                    <span class="s1">md5</span><span class="s3">(</span><span class="s1">key</span><span class="s3">.</span><span class="s1">encode</span><span class="s3">(), </span><span class="s1">usedforsecurity</span><span class="s3">=</span><span class="s2">False</span><span class="s3">).</span><span class="s1">hexdigest</span><span class="s3">(),</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">cache_suffix</span><span class="s3">,</span>
+                <span class="s3">]</span>
+            <span class="s3">),</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">clear</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Remove all the cache files. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">for </span><span class="s1">fname </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_list_cache_files</span><span class="s3">():</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_delete</span><span class="s3">(</span><span class="s1">fname</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_is_expired</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">f</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Take an open cache file `f` and delete it if it's expired. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">exp </span><span class="s3">= </span><span class="s1">pickle</span><span class="s3">.</span><span class="s1">load</span><span class="s3">(</span><span class="s1">f</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">EOFError</span><span class="s3">:</span>
+            <span class="s1">exp </span><span class="s3">= </span><span class="s6">0  </span><span class="s5"># An empty file is considered expired.</span>
+        <span class="s2">if </span><span class="s1">exp </span><span class="s2">is not None and </span><span class="s1">exp </span><span class="s3">&lt; </span><span class="s1">time</span><span class="s3">.</span><span class="s1">time</span><span class="s3">():</span>
+            <span class="s1">f</span><span class="s3">.</span><span class="s1">close</span><span class="s3">()  </span><span class="s5"># On Windows a file has to be closed before deleting</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_delete</span><span class="s3">(</span><span class="s1">f</span><span class="s3">.</span><span class="s1">name</span><span class="s3">)</span>
+            <span class="s2">return True</span>
+        <span class="s2">return False</span>
+
+    <span class="s2">def </span><span class="s1">_list_cache_files</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Get a list of paths to all the cache files. These are all the files 
+        in the root cache dir that end on the cache_suffix. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s3">[</span>
+            <span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_dir</span><span class="s3">, </span><span class="s1">fname</span><span class="s3">)</span>
+            <span class="s2">for </span><span class="s1">fname </span><span class="s2">in </span><span class="s1">glob</span><span class="s3">.</span><span class="s1">glob1</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_dir</span><span class="s3">, </span><span class="s4">&quot;*%s&quot; </span><span class="s3">% </span><span class="s1">self</span><span class="s3">.</span><span class="s1">cache_suffix</span><span class="s3">)</span>
+        <span class="s3">]</span>
+</pre>
+</body>
+</html>

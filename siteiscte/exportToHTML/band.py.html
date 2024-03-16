@@ -1,0 +1,296 @@
+<html>
+<head>
+<title>band.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+.s6 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+band.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">byref</span><span class="s2">, </span><span class="s1">c_double</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s1">c_void_p</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">error </span><span class="s0">import </span><span class="s1">GDALException</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">prototypes </span><span class="s0">import </span><span class="s1">raster </span><span class="s0">as </span><span class="s1">capi</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">raster</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">GDALRasterBase</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">shortcuts </span><span class="s0">import </span><span class="s1">numpy</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">encoding </span><span class="s0">import </span><span class="s1">force_str</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">const </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">GDAL_COLOR_TYPES</span><span class="s2">,</span>
+    <span class="s1">GDAL_INTEGER_TYPES</span><span class="s2">,</span>
+    <span class="s1">GDAL_PIXEL_TYPES</span><span class="s2">,</span>
+    <span class="s1">GDAL_TO_CTYPES</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">GDALBand</span><span class="s2">(</span><span class="s1">GDALRasterBase</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Wrap a GDAL raster band, needs to be obtained from a GDALRaster object. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">source</span><span class="s2">, </span><span class="s1">index</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">source </span><span class="s2">= </span><span class="s1">source</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr </span><span class="s2">= </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_ds_raster_band</span><span class="s2">(</span><span class="s1">source</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">, </span><span class="s1">index</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_flush</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Call the flush method on the Band's parent raster and force a refresh 
+        of the statistics attribute when requested the next time. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">source</span><span class="s2">.</span><span class="s1">_flush</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_stats_refresh </span><span class="s2">= </span><span class="s0">True</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">description</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the description string of the band. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">force_str</span><span class="s2">(</span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_band_description</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">))</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">width</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Width (X axis) in pixels of the band. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_band_xsize</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">height</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Height (Y axis) in pixels of the band. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_band_ysize</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">pixel_count</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the total number of pixels in this band. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">width </span><span class="s2">* </span><span class="s1">self</span><span class="s2">.</span><span class="s1">height</span>
+
+    <span class="s1">_stats_refresh </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s0">def </span><span class="s1">statistics</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">refresh</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">approximate</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Compute statistics on the pixel values of this band. 
+ 
+        The return value is a tuple with the following structure: 
+        (minimum, maximum, mean, standard deviation). 
+ 
+        If approximate=True, the statistics may be computed based on overviews 
+        or a subset of image tiles. 
+ 
+        If refresh=True, the statistics will be computed from the data directly, 
+        and the cache will be updated where applicable. 
+ 
+        For empty bands (where all pixel values are nodata), all statistics 
+        values are returned as None. 
+ 
+        For raster formats using Persistent Auxiliary Metadata (PAM) services, 
+        the statistics might be cached in an auxiliary file. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># Prepare array with arguments for capi function</span>
+        <span class="s1">smin</span><span class="s2">, </span><span class="s1">smax</span><span class="s2">, </span><span class="s1">smean</span><span class="s2">, </span><span class="s1">sstd </span><span class="s2">= </span><span class="s1">c_double</span><span class="s2">(), </span><span class="s1">c_double</span><span class="s2">(), </span><span class="s1">c_double</span><span class="s2">(), </span><span class="s1">c_double</span><span class="s2">()</span>
+        <span class="s1">stats_args </span><span class="s2">= [</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">,</span>
+            <span class="s1">c_int</span><span class="s2">(</span><span class="s1">approximate</span><span class="s2">),</span>
+            <span class="s1">byref</span><span class="s2">(</span><span class="s1">smin</span><span class="s2">),</span>
+            <span class="s1">byref</span><span class="s2">(</span><span class="s1">smax</span><span class="s2">),</span>
+            <span class="s1">byref</span><span class="s2">(</span><span class="s1">smean</span><span class="s2">),</span>
+            <span class="s1">byref</span><span class="s2">(</span><span class="s1">sstd</span><span class="s2">),</span>
+            <span class="s1">c_void_p</span><span class="s2">(),</span>
+            <span class="s1">c_void_p</span><span class="s2">(),</span>
+        <span class="s2">]</span>
+
+        <span class="s0">if </span><span class="s1">refresh </span><span class="s0">or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_stats_refresh</span><span class="s2">:</span>
+            <span class="s1">func </span><span class="s2">= </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">compute_band_statistics</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s4"># Add additional argument to force computation if there is no</span>
+            <span class="s4"># existing PAM file to take the values from.</span>
+            <span class="s1">force </span><span class="s2">= </span><span class="s0">True</span>
+            <span class="s1">stats_args</span><span class="s2">.</span><span class="s1">insert</span><span class="s2">(</span><span class="s5">2</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">(</span><span class="s1">force</span><span class="s2">))</span>
+            <span class="s1">func </span><span class="s2">= </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_band_statistics</span>
+
+        <span class="s4"># Computation of statistics fails for empty bands.</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">func</span><span class="s2">(*</span><span class="s1">stats_args</span><span class="s2">)</span>
+            <span class="s1">result </span><span class="s2">= </span><span class="s1">smin</span><span class="s2">.</span><span class="s1">value</span><span class="s2">, </span><span class="s1">smax</span><span class="s2">.</span><span class="s1">value</span><span class="s2">, </span><span class="s1">smean</span><span class="s2">.</span><span class="s1">value</span><span class="s2">, </span><span class="s1">sstd</span><span class="s2">.</span><span class="s1">value</span>
+        <span class="s0">except </span><span class="s1">GDALException</span><span class="s2">:</span>
+            <span class="s1">result </span><span class="s2">= (</span><span class="s0">None</span><span class="s2">, </span><span class="s0">None</span><span class="s2">, </span><span class="s0">None</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_stats_refresh </span><span class="s2">= </span><span class="s0">False</span>
+
+        <span class="s0">return </span><span class="s1">result</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">min</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the minimum pixel value for this band. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">statistics</span><span class="s2">()[</span><span class="s5">0</span><span class="s2">]</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">max</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the maximum pixel value for this band. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">statistics</span><span class="s2">()[</span><span class="s5">1</span><span class="s2">]</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">mean</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the mean of all pixel values of this band. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">statistics</span><span class="s2">()[</span><span class="s5">2</span><span class="s2">]</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">std</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the standard deviation of all pixel values of this band. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">statistics</span><span class="s2">()[</span><span class="s5">3</span><span class="s2">]</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">nodata_value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the nodata value for this band, or None if it isn't set. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># Get value and nodata exists flag</span>
+        <span class="s1">nodata_exists </span><span class="s2">= </span><span class="s1">c_int</span><span class="s2">()</span>
+        <span class="s1">value </span><span class="s2">= </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_band_nodata_value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">, </span><span class="s1">nodata_exists</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">nodata_exists</span><span class="s2">:</span>
+            <span class="s1">value </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s4"># If the pixeltype is an integer, convert to int</span>
+        <span class="s0">elif </span><span class="s1">self</span><span class="s2">.</span><span class="s1">datatype</span><span class="s2">() </span><span class="s0">in </span><span class="s1">GDAL_INTEGER_TYPES</span><span class="s2">:</span>
+            <span class="s1">value </span><span class="s2">= </span><span class="s1">int</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">value</span>
+
+    <span class="s2">@</span><span class="s1">nodata_value</span><span class="s2">.</span><span class="s1">setter</span>
+    <span class="s0">def </span><span class="s1">nodata_value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">value</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Set the nodata value for this band. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">value </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">capi</span><span class="s2">.</span><span class="s1">delete_band_nodata_value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">)</span>
+        <span class="s0">elif not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, (</span><span class="s1">int</span><span class="s2">, </span><span class="s1">float</span><span class="s2">)):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s6">&quot;Nodata value must be numeric or None.&quot;</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">capi</span><span class="s2">.</span><span class="s1">set_band_nodata_value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">, </span><span class="s1">value</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_flush</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">datatype</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">as_string</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the GDAL Pixel Datatype for this band. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">dtype </span><span class="s2">= </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_band_datatype</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">as_string</span><span class="s2">:</span>
+            <span class="s1">dtype </span><span class="s2">= </span><span class="s1">GDAL_PIXEL_TYPES</span><span class="s2">[</span><span class="s1">dtype</span><span class="s2">]</span>
+        <span class="s0">return </span><span class="s1">dtype</span>
+
+    <span class="s0">def </span><span class="s1">color_interp</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">as_string</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Return the GDAL color interpretation for this band.&quot;&quot;&quot;</span>
+        <span class="s1">color </span><span class="s2">= </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_band_color_interp</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">as_string</span><span class="s2">:</span>
+            <span class="s1">color </span><span class="s2">= </span><span class="s1">GDAL_COLOR_TYPES</span><span class="s2">[</span><span class="s1">color</span><span class="s2">]</span>
+        <span class="s0">return </span><span class="s1">color</span>
+
+    <span class="s0">def </span><span class="s1">data</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">data</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">offset</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">size</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">shape</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">as_memoryview</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Read or writes pixel values for this band. Blocks of data can 
+        be accessed by specifying the width, height and offset of the 
+        desired block. The same specification can be used to update 
+        parts of a raster by providing an array of values. 
+ 
+        Allowed input data types are bytes, memoryview, list, tuple, and array. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">offset </span><span class="s2">= </span><span class="s1">offset </span><span class="s0">or </span><span class="s2">(</span><span class="s5">0</span><span class="s2">, </span><span class="s5">0</span><span class="s2">)</span>
+        <span class="s1">size </span><span class="s2">= </span><span class="s1">size </span><span class="s0">or </span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">width </span><span class="s2">- </span><span class="s1">offset</span><span class="s2">[</span><span class="s5">0</span><span class="s2">], </span><span class="s1">self</span><span class="s2">.</span><span class="s1">height </span><span class="s2">- </span><span class="s1">offset</span><span class="s2">[</span><span class="s5">1</span><span class="s2">])</span>
+        <span class="s1">shape </span><span class="s2">= </span><span class="s1">shape </span><span class="s0">or </span><span class="s1">size</span>
+        <span class="s0">if </span><span class="s1">any</span><span class="s2">(</span><span class="s1">x </span><span class="s2">&lt;= </span><span class="s5">0 </span><span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">size</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s6">&quot;Offset too big for this raster.&quot;</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">size</span><span class="s2">[</span><span class="s5">0</span><span class="s2">] &gt; </span><span class="s1">self</span><span class="s2">.</span><span class="s1">width </span><span class="s0">or </span><span class="s1">size</span><span class="s2">[</span><span class="s5">1</span><span class="s2">] &gt; </span><span class="s1">self</span><span class="s2">.</span><span class="s1">height</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s6">&quot;Size is larger than raster.&quot;</span><span class="s2">)</span>
+
+        <span class="s4"># Create ctypes type array generator</span>
+        <span class="s1">ctypes_array </span><span class="s2">= </span><span class="s1">GDAL_TO_CTYPES</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">datatype</span><span class="s2">()] * (</span><span class="s1">shape</span><span class="s2">[</span><span class="s5">0</span><span class="s2">] * </span><span class="s1">shape</span><span class="s2">[</span><span class="s5">1</span><span class="s2">])</span>
+
+        <span class="s0">if </span><span class="s1">data </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s4"># Set read mode</span>
+            <span class="s1">access_flag </span><span class="s2">= </span><span class="s5">0</span>
+            <span class="s4"># Prepare empty ctypes array</span>
+            <span class="s1">data_array </span><span class="s2">= </span><span class="s1">ctypes_array</span><span class="s2">()</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s4"># Set write mode</span>
+            <span class="s1">access_flag </span><span class="s2">= </span><span class="s5">1</span>
+
+            <span class="s4"># Instantiate ctypes array holding the input data</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">data</span><span class="s2">, (</span><span class="s1">bytes</span><span class="s2">, </span><span class="s1">memoryview</span><span class="s2">)) </span><span class="s0">or </span><span class="s2">(</span>
+                <span class="s1">numpy </span><span class="s0">and </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">data</span><span class="s2">, </span><span class="s1">numpy</span><span class="s2">.</span><span class="s1">ndarray</span><span class="s2">)</span>
+            <span class="s2">):</span>
+                <span class="s1">data_array </span><span class="s2">= </span><span class="s1">ctypes_array</span><span class="s2">.</span><span class="s1">from_buffer_copy</span><span class="s2">(</span><span class="s1">data</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">data_array </span><span class="s2">= </span><span class="s1">ctypes_array</span><span class="s2">(*</span><span class="s1">data</span><span class="s2">)</span>
+
+        <span class="s4"># Access band</span>
+        <span class="s1">capi</span><span class="s2">.</span><span class="s1">band_io</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">,</span>
+            <span class="s1">access_flag</span><span class="s2">,</span>
+            <span class="s1">offset</span><span class="s2">[</span><span class="s5">0</span><span class="s2">],</span>
+            <span class="s1">offset</span><span class="s2">[</span><span class="s5">1</span><span class="s2">],</span>
+            <span class="s1">size</span><span class="s2">[</span><span class="s5">0</span><span class="s2">],</span>
+            <span class="s1">size</span><span class="s2">[</span><span class="s5">1</span><span class="s2">],</span>
+            <span class="s1">byref</span><span class="s2">(</span><span class="s1">data_array</span><span class="s2">),</span>
+            <span class="s1">shape</span><span class="s2">[</span><span class="s5">0</span><span class="s2">],</span>
+            <span class="s1">shape</span><span class="s2">[</span><span class="s5">1</span><span class="s2">],</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">datatype</span><span class="s2">(),</span>
+            <span class="s5">0</span><span class="s2">,</span>
+            <span class="s5">0</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+        <span class="s4"># Return data as numpy array if possible, otherwise as list</span>
+        <span class="s0">if </span><span class="s1">data </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">as_memoryview</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">memoryview</span><span class="s2">(</span><span class="s1">data_array</span><span class="s2">)</span>
+            <span class="s0">elif </span><span class="s1">numpy</span><span class="s2">:</span>
+                <span class="s4"># reshape() needs a reshape parameter with the height first.</span>
+                <span class="s0">return </span><span class="s1">numpy</span><span class="s2">.</span><span class="s1">frombuffer</span><span class="s2">(</span>
+                    <span class="s1">data_array</span><span class="s2">, </span><span class="s1">dtype</span><span class="s2">=</span><span class="s1">numpy</span><span class="s2">.</span><span class="s1">dtype</span><span class="s2">(</span><span class="s1">data_array</span><span class="s2">)</span>
+                <span class="s2">).</span><span class="s1">reshape</span><span class="s2">(</span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">reversed</span><span class="s2">(</span><span class="s1">size</span><span class="s2">)))</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">list</span><span class="s2">(</span><span class="s1">data_array</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_flush</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">BandList</span><span class="s2">(</span><span class="s1">list</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">source</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">source </span><span class="s2">= </span><span class="s1">source</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">__iter__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">for </span><span class="s1">idx </span><span class="s0">in </span><span class="s1">range</span><span class="s2">(</span><span class="s5">1</span><span class="s2">, </span><span class="s1">len</span><span class="s2">(</span><span class="s1">self</span><span class="s2">) + </span><span class="s5">1</span><span class="s2">):</span>
+            <span class="s0">yield </span><span class="s1">GDALBand</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">source</span><span class="s2">, </span><span class="s1">idx</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__len__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">capi</span><span class="s2">.</span><span class="s1">get_ds_raster_count</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">source</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__getitem__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">index</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">GDALBand</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">source</span><span class="s2">, </span><span class="s1">index </span><span class="s2">+ </span><span class="s5">1</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">GDALException</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">GDALException</span><span class="s2">(</span><span class="s6">&quot;Unable to get band index %d&quot; </span><span class="s2">% </span><span class="s1">index</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<html>
+<head>
+<title>jinja2.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jinja2.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">pathlib </span><span class="s0">import </span><span class="s1">Path</span>
+
+<span class="s0">import </span><span class="s1">jinja2</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template </span><span class="s0">import </span><span class="s1">TemplateDoesNotExist</span><span class="s2">, </span><span class="s1">TemplateSyntaxError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">module_loading </span><span class="s0">import </span><span class="s1">import_string</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseEngine</span>
+<span class="s0">from </span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">csrf_input_lazy</span><span class="s2">, </span><span class="s1">csrf_token_lazy</span>
+
+
+<span class="s0">class </span><span class="s1">Jinja2</span><span class="s2">(</span><span class="s1">BaseEngine</span><span class="s2">):</span>
+    <span class="s1">app_dirname </span><span class="s2">= </span><span class="s3">&quot;jinja2&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">params</span><span class="s2">):</span>
+        <span class="s1">params </span><span class="s2">= </span><span class="s1">params</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s1">options </span><span class="s2">= </span><span class="s1">params</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s3">&quot;OPTIONS&quot;</span><span class="s2">).</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">params</span><span class="s2">)</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">context_processors </span><span class="s2">= </span><span class="s1">options</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s3">&quot;context_processors&quot;</span><span class="s2">, [])</span>
+
+        <span class="s1">environment </span><span class="s2">= </span><span class="s1">options</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s3">&quot;environment&quot;</span><span class="s2">, </span><span class="s3">&quot;jinja2.Environment&quot;</span><span class="s2">)</span>
+        <span class="s1">environment_cls </span><span class="s2">= </span><span class="s1">import_string</span><span class="s2">(</span><span class="s1">environment</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s3">&quot;loader&quot; </span><span class="s0">not in </span><span class="s1">options</span><span class="s2">:</span>
+            <span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;loader&quot;</span><span class="s2">] = </span><span class="s1">jinja2</span><span class="s2">.</span><span class="s1">FileSystemLoader</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">template_dirs</span><span class="s2">)</span>
+        <span class="s1">options</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span><span class="s3">&quot;autoescape&quot;</span><span class="s2">, </span><span class="s0">True</span><span class="s2">)</span>
+        <span class="s1">options</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span><span class="s3">&quot;auto_reload&quot;</span><span class="s2">, </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DEBUG</span><span class="s2">)</span>
+        <span class="s1">options</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span>
+            <span class="s3">&quot;undefined&quot;</span><span class="s2">, </span><span class="s1">jinja2</span><span class="s2">.</span><span class="s1">DebugUndefined </span><span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DEBUG </span><span class="s0">else </span><span class="s1">jinja2</span><span class="s2">.</span><span class="s1">Undefined</span>
+        <span class="s2">)</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">env </span><span class="s2">= </span><span class="s1">environment_cls</span><span class="s2">(**</span><span class="s1">options</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">from_string</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_code</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">Template</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">env</span><span class="s2">.</span><span class="s1">from_string</span><span class="s2">(</span><span class="s1">template_code</span><span class="s2">), </span><span class="s1">self</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">Template</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">env</span><span class="s2">.</span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">), </span><span class="s1">self</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">jinja2</span><span class="s2">.</span><span class="s1">TemplateNotFound </span><span class="s0">as </span><span class="s1">exc</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TemplateDoesNotExist</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">.</span><span class="s1">name</span><span class="s2">, </span><span class="s1">backend</span><span class="s2">=</span><span class="s1">self</span><span class="s2">) </span><span class="s0">from </span><span class="s1">exc</span>
+        <span class="s0">except </span><span class="s1">jinja2</span><span class="s2">.</span><span class="s1">TemplateSyntaxError </span><span class="s0">as </span><span class="s1">exc</span><span class="s2">:</span>
+            <span class="s1">new </span><span class="s2">= </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">.</span><span class="s1">args</span><span class="s2">)</span>
+            <span class="s1">new</span><span class="s2">.</span><span class="s1">template_debug </span><span class="s2">= </span><span class="s1">get_exception_info</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">)</span>
+            <span class="s0">raise </span><span class="s1">new </span><span class="s0">from </span><span class="s1">exc</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">template_context_processors</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">[</span><span class="s1">import_string</span><span class="s2">(</span><span class="s1">path</span><span class="s2">) </span><span class="s0">for </span><span class="s1">path </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">context_processors</span><span class="s2">]</span>
+
+
+<span class="s0">class </span><span class="s1">Template</span><span class="s2">:</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template</span><span class="s2">, </span><span class="s1">backend</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">template </span><span class="s2">= </span><span class="s1">template</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">backend </span><span class="s2">= </span><span class="s1">backend</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">origin </span><span class="s2">= </span><span class="s1">Origin</span><span class="s2">(</span>
+            <span class="s1">name</span><span class="s2">=</span><span class="s1">template</span><span class="s2">.</span><span class="s1">filename</span><span class="s2">,</span>
+            <span class="s1">template_name</span><span class="s2">=</span><span class="s1">template</span><span class="s2">.</span><span class="s1">name</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">request</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">context </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">context </span><span class="s2">= {}</span>
+        <span class="s0">if </span><span class="s1">request </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">context</span><span class="s2">[</span><span class="s3">&quot;request&quot;</span><span class="s2">] = </span><span class="s1">request</span>
+            <span class="s1">context</span><span class="s2">[</span><span class="s3">&quot;csrf_input&quot;</span><span class="s2">] = </span><span class="s1">csrf_input_lazy</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+            <span class="s1">context</span><span class="s2">[</span><span class="s3">&quot;csrf_token&quot;</span><span class="s2">] = </span><span class="s1">csrf_token_lazy</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">context_processor </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">backend</span><span class="s2">.</span><span class="s1">template_context_processors</span><span class="s2">:</span>
+                <span class="s1">context</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">context_processor</span><span class="s2">(</span><span class="s1">request</span><span class="s2">))</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">template</span><span class="s2">.</span><span class="s1">render</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">jinja2</span><span class="s2">.</span><span class="s1">TemplateSyntaxError </span><span class="s0">as </span><span class="s1">exc</span><span class="s2">:</span>
+            <span class="s1">new </span><span class="s2">= </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">.</span><span class="s1">args</span><span class="s2">)</span>
+            <span class="s1">new</span><span class="s2">.</span><span class="s1">template_debug </span><span class="s2">= </span><span class="s1">get_exception_info</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">)</span>
+            <span class="s0">raise </span><span class="s1">new </span><span class="s0">from </span><span class="s1">exc</span>
+
+
+<span class="s0">class </span><span class="s1">Origin</span><span class="s2">:</span>
+    <span class="s4">&quot;&quot;&quot; 
+    A container to hold debug information as described in the template API 
+    documentation. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">name</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">template_name </span><span class="s2">= </span><span class="s1">template_name</span>
+
+
+<span class="s0">def </span><span class="s1">get_exception_info</span><span class="s2">(</span><span class="s1">exception</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Format exception information for display on the debug page using the 
+    structure described in the template API documentation. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">context_lines </span><span class="s2">= </span><span class="s5">10</span>
+    <span class="s1">lineno </span><span class="s2">= </span><span class="s1">exception</span><span class="s2">.</span><span class="s1">lineno</span>
+    <span class="s1">source </span><span class="s2">= </span><span class="s1">exception</span><span class="s2">.</span><span class="s1">source</span>
+    <span class="s0">if </span><span class="s1">source </span><span class="s0">is None</span><span class="s2">:</span>
+        <span class="s1">exception_file </span><span class="s2">= </span><span class="s1">Path</span><span class="s2">(</span><span class="s1">exception</span><span class="s2">.</span><span class="s1">filename</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">exception_file</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">():</span>
+            <span class="s1">source </span><span class="s2">= </span><span class="s1">exception_file</span><span class="s2">.</span><span class="s1">read_text</span><span class="s2">()</span>
+    <span class="s0">if </span><span class="s1">source </span><span class="s0">is not None</span><span class="s2">:</span>
+        <span class="s1">lines </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">enumerate</span><span class="s2">(</span><span class="s1">source</span><span class="s2">.</span><span class="s1">strip</span><span class="s2">().</span><span class="s1">split</span><span class="s2">(</span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s2">), </span><span class="s1">start</span><span class="s2">=</span><span class="s5">1</span><span class="s2">))</span>
+        <span class="s1">during </span><span class="s2">= </span><span class="s1">lines</span><span class="s2">[</span><span class="s1">lineno </span><span class="s2">- </span><span class="s5">1</span><span class="s2">][</span><span class="s5">1</span><span class="s2">]</span>
+        <span class="s1">total </span><span class="s2">= </span><span class="s1">len</span><span class="s2">(</span><span class="s1">lines</span><span class="s2">)</span>
+        <span class="s1">top </span><span class="s2">= </span><span class="s1">max</span><span class="s2">(</span><span class="s5">0</span><span class="s2">, </span><span class="s1">lineno </span><span class="s2">- </span><span class="s1">context_lines </span><span class="s2">- </span><span class="s5">1</span><span class="s2">)</span>
+        <span class="s1">bottom </span><span class="s2">= </span><span class="s1">min</span><span class="s2">(</span><span class="s1">total</span><span class="s2">, </span><span class="s1">lineno </span><span class="s2">+ </span><span class="s1">context_lines</span><span class="s2">)</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">during </span><span class="s2">= </span><span class="s3">&quot;&quot;</span>
+        <span class="s1">lines </span><span class="s2">= []</span>
+        <span class="s1">total </span><span class="s2">= </span><span class="s1">top </span><span class="s2">= </span><span class="s1">bottom </span><span class="s2">= </span><span class="s5">0</span>
+    <span class="s0">return </span><span class="s2">{</span>
+        <span class="s3">&quot;name&quot;</span><span class="s2">: </span><span class="s1">exception</span><span class="s2">.</span><span class="s1">filename</span><span class="s2">,</span>
+        <span class="s3">&quot;message&quot;</span><span class="s2">: </span><span class="s1">exception</span><span class="s2">.</span><span class="s1">message</span><span class="s2">,</span>
+        <span class="s3">&quot;source_lines&quot;</span><span class="s2">: </span><span class="s1">lines</span><span class="s2">[</span><span class="s1">top</span><span class="s2">:</span><span class="s1">bottom</span><span class="s2">],</span>
+        <span class="s3">&quot;line&quot;</span><span class="s2">: </span><span class="s1">lineno</span><span class="s2">,</span>
+        <span class="s3">&quot;before&quot;</span><span class="s2">: </span><span class="s3">&quot;&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;during&quot;</span><span class="s2">: </span><span class="s1">during</span><span class="s2">,</span>
+        <span class="s3">&quot;after&quot;</span><span class="s2">: </span><span class="s3">&quot;&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;total&quot;</span><span class="s2">: </span><span class="s1">total</span><span class="s2">,</span>
+        <span class="s3">&quot;top&quot;</span><span class="s2">: </span><span class="s1">top</span><span class="s2">,</span>
+        <span class="s3">&quot;bottom&quot;</span><span class="s2">: </span><span class="s1">bottom</span><span class="s2">,</span>
+    <span class="s2">}</span>
+</pre>
+</body>
+</html>

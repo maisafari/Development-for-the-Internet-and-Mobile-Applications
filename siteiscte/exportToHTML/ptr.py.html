@@ -1,0 +1,63 @@
+<html>
+<head>
+<title>ptr.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+ptr.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">c_void_p</span>
+
+
+<span class="s0">class </span><span class="s1">CPointerBase</span><span class="s2">:</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Base class for objects that have a pointer access property 
+    that controls access to the underlying C pointer. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">_ptr </span><span class="s2">= </span><span class="s0">None  </span><span class="s4"># Initially the pointer is NULL.</span>
+    <span class="s1">ptr_type </span><span class="s2">= </span><span class="s1">c_void_p</span>
+    <span class="s1">destructor </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">null_ptr_exception_class </span><span class="s2">= </span><span class="s1">AttributeError</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">ptr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4"># Raise an exception if the pointer isn't valid so that NULL pointers</span>
+        <span class="s4"># aren't passed to routines -- that's very bad.</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span>
+        <span class="s0">raise </span><span class="s1">self</span><span class="s2">.</span><span class="s1">null_ptr_exception_class</span><span class="s2">(</span>
+            <span class="s5">&quot;NULL %s pointer encountered.&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span>
+        <span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">ptr</span><span class="s2">.</span><span class="s1">setter</span>
+    <span class="s0">def </span><span class="s1">ptr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">ptr</span><span class="s2">):</span>
+        <span class="s4"># Only allow the pointer to be set with pointers of the compatible</span>
+        <span class="s4"># type or None (NULL).</span>
+        <span class="s0">if not </span><span class="s2">(</span><span class="s1">ptr </span><span class="s0">is None or </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">ptr</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr_type</span><span class="s2">)):</span>
+            <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span><span class="s5">&quot;Incompatible pointer type: %s.&quot; </span><span class="s2">% </span><span class="s1">type</span><span class="s2">(</span><span class="s1">ptr</span><span class="s2">))</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr </span><span class="s2">= </span><span class="s1">ptr</span>
+
+    <span class="s0">def </span><span class="s1">__del__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Free the memory used by the C++ object. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">destructor </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_ptr</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">destructor</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s2">(</span><span class="s1">AttributeError</span><span class="s2">, </span><span class="s1">ImportError</span><span class="s2">, </span><span class="s1">TypeError</span><span class="s2">):</span>
+                <span class="s0">pass  </span><span class="s4"># Some part might already have been garbage collected</span>
+</pre>
+</body>
+</html>

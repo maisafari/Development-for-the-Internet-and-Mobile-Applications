@@ -1,0 +1,264 @@
+<html>
+<head>
+<title>indexes.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+indexes.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">NotSupportedError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">Func</span><span class="s2">, </span><span class="s1">Index</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+
+<span class="s1">__all__ </span><span class="s2">= [</span>
+    <span class="s3">&quot;BloomIndex&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;BrinIndex&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;BTreeIndex&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;GinIndex&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;GistIndex&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;HashIndex&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;SpGistIndex&quot;</span><span class="s2">,</span>
+<span class="s2">]</span>
+
+
+<span class="s0">class </span><span class="s1">PostgresIndex</span><span class="s2">(</span><span class="s1">Index</span><span class="s2">):</span>
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">max_name_length</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4"># Allow an index name longer than 30 characters when the suffix is</span>
+        <span class="s4"># longer than the usual 3 character limit. The 30 character limit for</span>
+        <span class="s4"># cross-database compatibility isn't applicable to PostgreSQL-specific</span>
+        <span class="s4"># indexes.</span>
+        <span class="s0">return </span><span class="s1">Index</span><span class="s2">.</span><span class="s1">max_name_length </span><span class="s2">- </span><span class="s1">len</span><span class="s2">(</span><span class="s1">Index</span><span class="s2">.</span><span class="s1">suffix</span><span class="s2">) + </span><span class="s1">len</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">suffix</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">create_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s3">&quot;&quot;</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">check_supported</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">)</span>
+        <span class="s1">statement </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">create_sql</span><span class="s2">(</span>
+            <span class="s1">model</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s3">&quot; USING %s&quot; </span><span class="s2">% (</span><span class="s1">using </span><span class="s0">or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">suffix</span><span class="s2">), **</span><span class="s1">kwargs</span>
+        <span class="s2">)</span>
+        <span class="s1">with_params </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_with_params</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">with_params</span><span class="s2">:</span>
+            <span class="s1">statement</span><span class="s2">.</span><span class="s1">parts</span><span class="s2">[</span><span class="s3">&quot;extra&quot;</span><span class="s2">] = </span><span class="s3">&quot; WITH (%s)%s&quot; </span><span class="s2">% (</span>
+                <span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">with_params</span><span class="s2">),</span>
+                <span class="s1">statement</span><span class="s2">.</span><span class="s1">parts</span><span class="s2">[</span><span class="s3">&quot;extra&quot;</span><span class="s2">],</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">statement</span>
+
+    <span class="s0">def </span><span class="s1">check_supported</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">):</span>
+        <span class="s0">pass</span>
+
+    <span class="s0">def </span><span class="s1">get_with_params</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">[]</span>
+
+
+<span class="s0">class </span><span class="s1">BloomIndex</span><span class="s2">(</span><span class="s1">PostgresIndex</span><span class="s2">):</span>
+    <span class="s1">suffix </span><span class="s2">= </span><span class="s3">&quot;bloom&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">expressions</span><span class="s2">, </span><span class="s1">length</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">columns</span><span class="s2">=(), **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">expressions</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">) &gt; </span><span class="s5">32</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;Bloom indexes support a maximum of 32 fields.&quot;</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">columns</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;BloomIndex.columns must be a list or tuple.&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">columns</span><span class="s2">) &gt; </span><span class="s1">len</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;BloomIndex.columns cannot have more values than fields.&quot;</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">all</span><span class="s2">(</span><span class="s5">0 </span><span class="s2">&lt; </span><span class="s1">col </span><span class="s2">&lt;= </span><span class="s5">4095 </span><span class="s0">for </span><span class="s1">col </span><span class="s0">in </span><span class="s1">columns</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                <span class="s3">&quot;BloomIndex.columns must contain integers from 1 to 4095.&quot;</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">length </span><span class="s0">is not None and not </span><span class="s5">0 </span><span class="s2">&lt; </span><span class="s1">length </span><span class="s2">&lt;= </span><span class="s5">4096</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                <span class="s3">&quot;BloomIndex.length must be None or an integer from 1 to 4096.&quot;</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">length </span><span class="s2">= </span><span class="s1">length</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">columns </span><span class="s2">= </span><span class="s1">columns</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">deconstruct</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">length </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;length&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">length</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">columns</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;columns&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">columns</span>
+        <span class="s0">return </span><span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs</span>
+
+    <span class="s0">def </span><span class="s1">get_with_params</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">with_params </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">length </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">with_params</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;length = %d&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">length</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">columns</span><span class="s2">:</span>
+            <span class="s1">with_params</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span>
+                <span class="s3">&quot;col%d = %d&quot; </span><span class="s2">% (</span><span class="s1">i</span><span class="s2">, </span><span class="s1">v</span><span class="s2">) </span><span class="s0">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">enumerate</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">columns</span><span class="s2">, </span><span class="s1">start</span><span class="s2">=</span><span class="s5">1</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">with_params</span>
+
+
+<span class="s0">class </span><span class="s1">BrinIndex</span><span class="s2">(</span><span class="s1">PostgresIndex</span><span class="s2">):</span>
+    <span class="s1">suffix </span><span class="s2">= </span><span class="s3">&quot;brin&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">, *</span><span class="s1">expressions</span><span class="s2">, </span><span class="s1">autosummarize</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">pages_per_range</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">kwargs</span>
+    <span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">pages_per_range </span><span class="s0">is not None and </span><span class="s1">pages_per_range </span><span class="s2">&lt;= </span><span class="s5">0</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;pages_per_range must be None or a positive integer&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">autosummarize </span><span class="s2">= </span><span class="s1">autosummarize</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">pages_per_range </span><span class="s2">= </span><span class="s1">pages_per_range</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">expressions</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">deconstruct</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">autosummarize </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;autosummarize&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">autosummarize</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pages_per_range </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;pages_per_range&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pages_per_range</span>
+        <span class="s0">return </span><span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs</span>
+
+    <span class="s0">def </span><span class="s1">get_with_params</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">with_params </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">autosummarize </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">with_params</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                <span class="s3">&quot;autosummarize = %s&quot; </span><span class="s2">% (</span><span class="s3">&quot;on&quot; </span><span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">autosummarize </span><span class="s0">else </span><span class="s3">&quot;off&quot;</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pages_per_range </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">with_params</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;pages_per_range = %d&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pages_per_range</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">with_params</span>
+
+
+<span class="s0">class </span><span class="s1">BTreeIndex</span><span class="s2">(</span><span class="s1">PostgresIndex</span><span class="s2">):</span>
+    <span class="s1">suffix </span><span class="s2">= </span><span class="s3">&quot;btree&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">expressions</span><span class="s2">, </span><span class="s1">fillfactor</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor </span><span class="s2">= </span><span class="s1">fillfactor</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">expressions</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">deconstruct</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;fillfactor&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor</span>
+        <span class="s0">return </span><span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs</span>
+
+    <span class="s0">def </span><span class="s1">get_with_params</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">with_params </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">with_params</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;fillfactor = %d&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">with_params</span>
+
+
+<span class="s0">class </span><span class="s1">GinIndex</span><span class="s2">(</span><span class="s1">PostgresIndex</span><span class="s2">):</span>
+    <span class="s1">suffix </span><span class="s2">= </span><span class="s3">&quot;gin&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">, *</span><span class="s1">expressions</span><span class="s2">, </span><span class="s1">fastupdate</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">gin_pending_list_limit</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">kwargs</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">fastupdate </span><span class="s2">= </span><span class="s1">fastupdate</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">gin_pending_list_limit </span><span class="s2">= </span><span class="s1">gin_pending_list_limit</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">expressions</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">deconstruct</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fastupdate </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;fastupdate&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fastupdate</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">gin_pending_list_limit </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;gin_pending_list_limit&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">gin_pending_list_limit</span>
+        <span class="s0">return </span><span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs</span>
+
+    <span class="s0">def </span><span class="s1">get_with_params</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">with_params </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">gin_pending_list_limit </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">with_params</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                <span class="s3">&quot;gin_pending_list_limit = %d&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">gin_pending_list_limit</span>
+            <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fastupdate </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">with_params</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;fastupdate = %s&quot; </span><span class="s2">% (</span><span class="s3">&quot;on&quot; </span><span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fastupdate </span><span class="s0">else </span><span class="s3">&quot;off&quot;</span><span class="s2">))</span>
+        <span class="s0">return </span><span class="s1">with_params</span>
+
+
+<span class="s0">class </span><span class="s1">GistIndex</span><span class="s2">(</span><span class="s1">PostgresIndex</span><span class="s2">):</span>
+    <span class="s1">suffix </span><span class="s2">= </span><span class="s3">&quot;gist&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">expressions</span><span class="s2">, </span><span class="s1">buffering</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">fillfactor</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">buffering </span><span class="s2">= </span><span class="s1">buffering</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor </span><span class="s2">= </span><span class="s1">fillfactor</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">expressions</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">deconstruct</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">buffering </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;buffering&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">buffering</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;fillfactor&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor</span>
+        <span class="s0">return </span><span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs</span>
+
+    <span class="s0">def </span><span class="s1">get_with_params</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">with_params </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">buffering </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">with_params</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;buffering = %s&quot; </span><span class="s2">% (</span><span class="s3">&quot;on&quot; </span><span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">buffering </span><span class="s0">else </span><span class="s3">&quot;off&quot;</span><span class="s2">))</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">with_params</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;fillfactor = %d&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">with_params</span>
+
+
+<span class="s0">class </span><span class="s1">HashIndex</span><span class="s2">(</span><span class="s1">PostgresIndex</span><span class="s2">):</span>
+    <span class="s1">suffix </span><span class="s2">= </span><span class="s3">&quot;hash&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">expressions</span><span class="s2">, </span><span class="s1">fillfactor</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor </span><span class="s2">= </span><span class="s1">fillfactor</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">expressions</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">deconstruct</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;fillfactor&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor</span>
+        <span class="s0">return </span><span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs</span>
+
+    <span class="s0">def </span><span class="s1">get_with_params</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">with_params </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">with_params</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;fillfactor = %d&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">with_params</span>
+
+
+<span class="s0">class </span><span class="s1">SpGistIndex</span><span class="s2">(</span><span class="s1">PostgresIndex</span><span class="s2">):</span>
+    <span class="s1">suffix </span><span class="s2">= </span><span class="s3">&quot;spgist&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">expressions</span><span class="s2">, </span><span class="s1">fillfactor</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor </span><span class="s2">= </span><span class="s1">fillfactor</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">expressions</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">deconstruct</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;fillfactor&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor</span>
+        <span class="s0">return </span><span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs</span>
+
+    <span class="s0">def </span><span class="s1">get_with_params</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">with_params </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">with_params</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;fillfactor = %d&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fillfactor</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">with_params</span>
+
+    <span class="s0">def </span><span class="s1">check_supported</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">include</span>
+            <span class="s0">and not </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">features</span><span class="s2">.</span><span class="s1">supports_covering_spgist_indexes</span>
+        <span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">NotSupportedError</span><span class="s2">(</span><span class="s3">&quot;Covering SP-GiST indexes require PostgreSQL 14+.&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">OpClass</span><span class="s2">(</span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">template </span><span class="s2">= </span><span class="s3">&quot;%(expressions)s %(name)s&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">expression</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">expression</span><span class="s2">, </span><span class="s1">name</span><span class="s2">=</span><span class="s1">name</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

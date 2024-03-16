@@ -1,0 +1,144 @@
+<html>
+<head>
+<title>utils.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #5f826b; font-style: italic;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+utils.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#</span>
+<span class="s0"># Copyright (C) 2009-2020 the sqlparse authors and contributors</span>
+<span class="s0"># &lt;see AUTHORS file&gt;</span>
+<span class="s0">#</span>
+<span class="s0"># This module is part of python-sqlparse and is released under</span>
+<span class="s0"># the BSD License: https://opensource.org/licenses/BSD-3-Clause</span>
+
+<span class="s2">import </span><span class="s1">itertools</span>
+<span class="s2">import </span><span class="s1">re</span>
+<span class="s2">from </span><span class="s1">collections </span><span class="s2">import </span><span class="s1">deque</span>
+<span class="s2">from </span><span class="s1">contextlib </span><span class="s2">import </span><span class="s1">contextmanager</span>
+
+<span class="s0"># This regular expression replaces the home-cooked parser that was here before.</span>
+<span class="s0"># It is much faster, but requires an extra post-processing step to get the</span>
+<span class="s0"># desired results (that are compatible with what you would expect from the</span>
+<span class="s0"># str.splitlines() method).</span>
+<span class="s0">#</span>
+<span class="s0"># It matches groups of characters: newlines, quoted strings, or unquoted text,</span>
+<span class="s0"># and splits on that basis. The post-processing step puts those back together</span>
+<span class="s0"># into the actual lines of SQL.</span>
+<span class="s1">SPLIT_REGEX </span><span class="s3">= </span><span class="s1">re</span><span class="s3">.</span><span class="s1">compile</span><span class="s3">(</span><span class="s4">r&quot;&quot;&quot; 
+( 
+ (?:                     # Start of non-capturing group 
+  (?:\r\n|\r|\n)      |  # Match any single newline, or 
+  [^\r\n'&quot;]+          |  # Match any character series without quotes or 
+                         # newlines, or 
+  &quot;(?:[^&quot;\\]|\\.)*&quot;   |  # Match double-quoted strings, or 
+  '(?:[^'\\]|\\.)*'      # Match single quoted strings 
+ ) 
+) 
+&quot;&quot;&quot;</span><span class="s3">, </span><span class="s1">re</span><span class="s3">.</span><span class="s1">VERBOSE</span><span class="s3">)</span>
+
+<span class="s1">LINE_MATCH </span><span class="s3">= </span><span class="s1">re</span><span class="s3">.</span><span class="s1">compile</span><span class="s3">(</span><span class="s4">r'(\r\n|\r|\n)'</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">split_unquoted_newlines</span><span class="s3">(</span><span class="s1">stmt</span><span class="s3">):</span>
+    <span class="s5">&quot;&quot;&quot;Split a string on all unquoted newlines. 
+ 
+    Unlike str.splitlines(), this will ignore CR/LF/CR+LF if the requisite 
+    character is inside of a string.&quot;&quot;&quot;</span>
+    <span class="s1">text </span><span class="s3">= </span><span class="s1">str</span><span class="s3">(</span><span class="s1">stmt</span><span class="s3">)</span>
+    <span class="s1">lines </span><span class="s3">= </span><span class="s1">SPLIT_REGEX</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s1">text</span><span class="s3">)</span>
+    <span class="s1">outputlines </span><span class="s3">= [</span><span class="s4">''</span><span class="s3">]</span>
+    <span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">lines</span><span class="s3">:</span>
+        <span class="s2">if not </span><span class="s1">line</span><span class="s3">:</span>
+            <span class="s2">continue</span>
+        <span class="s2">elif </span><span class="s1">LINE_MATCH</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(</span><span class="s1">line</span><span class="s3">):</span>
+            <span class="s1">outputlines</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s4">''</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">outputlines</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">] += </span><span class="s1">line</span>
+    <span class="s2">return </span><span class="s1">outputlines</span>
+
+
+<span class="s2">def </span><span class="s1">remove_quotes</span><span class="s3">(</span><span class="s1">val</span><span class="s3">):</span>
+    <span class="s5">&quot;&quot;&quot;Helper that removes surrounding quotes from strings.&quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">val </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return</span>
+    <span class="s2">if </span><span class="s1">val</span><span class="s3">[</span><span class="s6">0</span><span class="s3">] </span><span class="s2">in </span><span class="s3">(</span><span class="s4">'&quot;'</span><span class="s3">, </span><span class="s4">&quot;'&quot;</span><span class="s3">, </span><span class="s4">'`'</span><span class="s3">) </span><span class="s2">and </span><span class="s1">val</span><span class="s3">[</span><span class="s6">0</span><span class="s3">] == </span><span class="s1">val</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">]:</span>
+        <span class="s1">val </span><span class="s3">= </span><span class="s1">val</span><span class="s3">[</span><span class="s6">1</span><span class="s3">:-</span><span class="s6">1</span><span class="s3">]</span>
+    <span class="s2">return </span><span class="s1">val</span>
+
+
+<span class="s2">def </span><span class="s1">recurse</span><span class="s3">(*</span><span class="s1">cls</span><span class="s3">):</span>
+    <span class="s5">&quot;&quot;&quot;Function decorator to help with recursion 
+ 
+    :param cls: Classes to not recurse over 
+    :return: function 
+    &quot;&quot;&quot;</span>
+    <span class="s2">def </span><span class="s1">wrap</span><span class="s3">(</span><span class="s1">f</span><span class="s3">):</span>
+        <span class="s2">def </span><span class="s1">wrapped_f</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">):</span>
+            <span class="s2">for </span><span class="s1">sgroup </span><span class="s2">in </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">get_sublists</span><span class="s3">():</span>
+                <span class="s2">if not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">sgroup</span><span class="s3">, </span><span class="s1">cls</span><span class="s3">):</span>
+                    <span class="s1">wrapped_f</span><span class="s3">(</span><span class="s1">sgroup</span><span class="s3">)</span>
+            <span class="s1">f</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">)</span>
+
+        <span class="s2">return </span><span class="s1">wrapped_f</span>
+
+    <span class="s2">return </span><span class="s1">wrap</span>
+
+
+<span class="s2">def </span><span class="s1">imt</span><span class="s3">(</span><span class="s1">token</span><span class="s3">, </span><span class="s1">i</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">m</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">t</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s5">&quot;&quot;&quot;Helper function to simplify comparisons Instance, Match and TokenType 
+    :param token: 
+    :param i: Class or Tuple/List of Classes 
+    :param m: Tuple of TokenType &amp; Value. Can be list of Tuple for multiple 
+    :param t: TokenType or Tuple/List of TokenTypes 
+    :return:  bool 
+    &quot;&quot;&quot;</span>
+    <span class="s1">clss </span><span class="s3">= </span><span class="s1">i</span>
+    <span class="s1">types </span><span class="s3">= [</span><span class="s1">t</span><span class="s3">, ] </span><span class="s2">if </span><span class="s1">t </span><span class="s2">and not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">t</span><span class="s3">, </span><span class="s1">list</span><span class="s3">) </span><span class="s2">else </span><span class="s1">t</span>
+    <span class="s1">mpatterns </span><span class="s3">= [</span><span class="s1">m</span><span class="s3">, ] </span><span class="s2">if </span><span class="s1">m </span><span class="s2">and not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">m</span><span class="s3">, </span><span class="s1">list</span><span class="s3">) </span><span class="s2">else </span><span class="s1">m</span>
+
+    <span class="s2">if </span><span class="s1">token </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return False</span>
+    <span class="s2">elif </span><span class="s1">clss </span><span class="s2">and </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">token</span><span class="s3">, </span><span class="s1">clss</span><span class="s3">):</span>
+        <span class="s2">return True</span>
+    <span class="s2">elif </span><span class="s1">mpatterns </span><span class="s2">and </span><span class="s1">any</span><span class="s3">(</span><span class="s1">token</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(*</span><span class="s1">pattern</span><span class="s3">) </span><span class="s2">for </span><span class="s1">pattern </span><span class="s2">in </span><span class="s1">mpatterns</span><span class="s3">):</span>
+        <span class="s2">return True</span>
+    <span class="s2">elif </span><span class="s1">types </span><span class="s2">and </span><span class="s1">any</span><span class="s3">(</span><span class="s1">token</span><span class="s3">.</span><span class="s1">ttype </span><span class="s2">in </span><span class="s1">ttype </span><span class="s2">for </span><span class="s1">ttype </span><span class="s2">in </span><span class="s1">types</span><span class="s3">):</span>
+        <span class="s2">return True</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s2">return False</span>
+
+
+<span class="s2">def </span><span class="s1">consume</span><span class="s3">(</span><span class="s1">iterator</span><span class="s3">, </span><span class="s1">n</span><span class="s3">):</span>
+    <span class="s5">&quot;&quot;&quot;Advance the iterator n-steps ahead. If n is none, consume entirely.&quot;&quot;&quot;</span>
+    <span class="s1">deque</span><span class="s3">(</span><span class="s1">itertools</span><span class="s3">.</span><span class="s1">islice</span><span class="s3">(</span><span class="s1">iterator</span><span class="s3">, </span><span class="s1">n</span><span class="s3">), </span><span class="s1">maxlen</span><span class="s3">=</span><span class="s6">0</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">contextmanager</span>
+<span class="s2">def </span><span class="s1">offset</span><span class="s3">(</span><span class="s1">filter_</span><span class="s3">, </span><span class="s1">n</span><span class="s3">=</span><span class="s6">0</span><span class="s3">):</span>
+    <span class="s1">filter_</span><span class="s3">.</span><span class="s1">offset </span><span class="s3">+= </span><span class="s1">n</span>
+    <span class="s2">yield</span>
+    <span class="s1">filter_</span><span class="s3">.</span><span class="s1">offset </span><span class="s3">-= </span><span class="s1">n</span>
+
+
+<span class="s3">@</span><span class="s1">contextmanager</span>
+<span class="s2">def </span><span class="s1">indent</span><span class="s3">(</span><span class="s1">filter_</span><span class="s3">, </span><span class="s1">n</span><span class="s3">=</span><span class="s6">1</span><span class="s3">):</span>
+    <span class="s1">filter_</span><span class="s3">.</span><span class="s1">indent </span><span class="s3">+= </span><span class="s1">n</span>
+    <span class="s2">yield</span>
+    <span class="s1">filter_</span><span class="s3">.</span><span class="s1">indent </span><span class="s3">-= </span><span class="s1">n</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,747 @@
+<html>
+<head>
+<title>layermapping.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #5f826b; font-style: italic;}
+.s3 { color: #cf8e6d;}
+.s4 { color: #bcbec4;}
+.s5 { color: #2aacb8;}
+.s6 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+layermapping.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># LayerMapping -- A Django Model/OGR Layer Mapping Utility</span>
+<span class="s2">&quot;&quot;&quot; 
+ The LayerMapping class provides a way to map the contents of OGR 
+ vector files (e.g. SHP files) to Geographic-enabled Django models. 
+ 
+ For more information, please consult the GeoDjango documentation: 
+   https://docs.djangoproject.com/en/dev/ref/contrib/gis/layermapping/ 
+&quot;&quot;&quot;</span>
+<span class="s3">import </span><span class="s1">sys</span>
+<span class="s3">from </span><span class="s1">decimal </span><span class="s3">import </span><span class="s1">Decimal</span>
+<span class="s3">from </span><span class="s1">decimal </span><span class="s3">import </span><span class="s1">InvalidOperation </span><span class="s3">as </span><span class="s1">DecimalInvalidOperation</span>
+<span class="s3">from </span><span class="s1">pathlib </span><span class="s3">import </span><span class="s1">Path</span>
+
+<span class="s3">from </span><span class="s1">django</span><span class="s4">.</span><span class="s1">contrib</span><span class="s4">.</span><span class="s1">gis</span><span class="s4">.</span><span class="s1">db</span><span class="s4">.</span><span class="s1">models </span><span class="s3">import </span><span class="s1">GeometryField</span>
+<span class="s3">from </span><span class="s1">django</span><span class="s4">.</span><span class="s1">contrib</span><span class="s4">.</span><span class="s1">gis</span><span class="s4">.</span><span class="s1">gdal </span><span class="s3">import </span><span class="s4">(</span>
+    <span class="s1">CoordTransform</span><span class="s4">,</span>
+    <span class="s1">DataSource</span><span class="s4">,</span>
+    <span class="s1">GDALException</span><span class="s4">,</span>
+    <span class="s1">OGRGeometry</span><span class="s4">,</span>
+    <span class="s1">OGRGeomType</span><span class="s4">,</span>
+    <span class="s1">SpatialReference</span><span class="s4">,</span>
+<span class="s4">)</span>
+<span class="s3">from </span><span class="s1">django</span><span class="s4">.</span><span class="s1">contrib</span><span class="s4">.</span><span class="s1">gis</span><span class="s4">.</span><span class="s1">gdal</span><span class="s4">.</span><span class="s1">field </span><span class="s3">import </span><span class="s4">(</span>
+    <span class="s1">OFTDate</span><span class="s4">,</span>
+    <span class="s1">OFTDateTime</span><span class="s4">,</span>
+    <span class="s1">OFTInteger</span><span class="s4">,</span>
+    <span class="s1">OFTInteger64</span><span class="s4">,</span>
+    <span class="s1">OFTReal</span><span class="s4">,</span>
+    <span class="s1">OFTString</span><span class="s4">,</span>
+    <span class="s1">OFTTime</span><span class="s4">,</span>
+<span class="s4">)</span>
+<span class="s3">from </span><span class="s1">django</span><span class="s4">.</span><span class="s1">core</span><span class="s4">.</span><span class="s1">exceptions </span><span class="s3">import </span><span class="s1">FieldDoesNotExist</span><span class="s4">, </span><span class="s1">ObjectDoesNotExist</span>
+<span class="s3">from </span><span class="s1">django</span><span class="s4">.</span><span class="s1">db </span><span class="s3">import </span><span class="s1">connections</span><span class="s4">, </span><span class="s1">models</span><span class="s4">, </span><span class="s1">router</span><span class="s4">, </span><span class="s1">transaction</span>
+<span class="s3">from </span><span class="s1">django</span><span class="s4">.</span><span class="s1">utils</span><span class="s4">.</span><span class="s1">encoding </span><span class="s3">import </span><span class="s1">force_str</span>
+
+
+<span class="s0"># LayerMapping exceptions.</span>
+<span class="s3">class </span><span class="s1">LayerMapError</span><span class="s4">(</span><span class="s1">Exception</span><span class="s4">):</span>
+    <span class="s3">pass</span>
+
+
+<span class="s3">class </span><span class="s1">InvalidString</span><span class="s4">(</span><span class="s1">LayerMapError</span><span class="s4">):</span>
+    <span class="s3">pass</span>
+
+
+<span class="s3">class </span><span class="s1">InvalidDecimal</span><span class="s4">(</span><span class="s1">LayerMapError</span><span class="s4">):</span>
+    <span class="s3">pass</span>
+
+
+<span class="s3">class </span><span class="s1">InvalidInteger</span><span class="s4">(</span><span class="s1">LayerMapError</span><span class="s4">):</span>
+    <span class="s3">pass</span>
+
+
+<span class="s3">class </span><span class="s1">MissingForeignKey</span><span class="s4">(</span><span class="s1">LayerMapError</span><span class="s4">):</span>
+    <span class="s3">pass</span>
+
+
+<span class="s3">class </span><span class="s1">LayerMapping</span><span class="s4">:</span>
+    <span class="s2">&quot;A class that maps OGR Layers to GeoDjango Models.&quot;</span>
+
+    <span class="s0"># Acceptable 'base' types for a multi-geometry type.</span>
+    <span class="s1">MULTI_TYPES </span><span class="s4">= {</span>
+        <span class="s5">1</span><span class="s4">: </span><span class="s1">OGRGeomType</span><span class="s4">(</span><span class="s6">&quot;MultiPoint&quot;</span><span class="s4">),</span>
+        <span class="s5">2</span><span class="s4">: </span><span class="s1">OGRGeomType</span><span class="s4">(</span><span class="s6">&quot;MultiLineString&quot;</span><span class="s4">),</span>
+        <span class="s5">3</span><span class="s4">: </span><span class="s1">OGRGeomType</span><span class="s4">(</span><span class="s6">&quot;MultiPolygon&quot;</span><span class="s4">),</span>
+        <span class="s1">OGRGeomType</span><span class="s4">(</span><span class="s6">&quot;Point25D&quot;</span><span class="s4">).</span><span class="s1">num</span><span class="s4">: </span><span class="s1">OGRGeomType</span><span class="s4">(</span><span class="s6">&quot;MultiPoint25D&quot;</span><span class="s4">),</span>
+        <span class="s1">OGRGeomType</span><span class="s4">(</span><span class="s6">&quot;LineString25D&quot;</span><span class="s4">).</span><span class="s1">num</span><span class="s4">: </span><span class="s1">OGRGeomType</span><span class="s4">(</span><span class="s6">&quot;MultiLineString25D&quot;</span><span class="s4">),</span>
+        <span class="s1">OGRGeomType</span><span class="s4">(</span><span class="s6">&quot;Polygon25D&quot;</span><span class="s4">).</span><span class="s1">num</span><span class="s4">: </span><span class="s1">OGRGeomType</span><span class="s4">(</span><span class="s6">&quot;MultiPolygon25D&quot;</span><span class="s4">),</span>
+    <span class="s4">}</span>
+    <span class="s0"># Acceptable Django field types and corresponding acceptable OGR</span>
+    <span class="s0"># counterparts.</span>
+    <span class="s1">FIELD_TYPES </span><span class="s4">= {</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">AutoField</span><span class="s4">: </span><span class="s1">OFTInteger</span><span class="s4">,</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">BigAutoField</span><span class="s4">: </span><span class="s1">OFTInteger64</span><span class="s4">,</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">SmallAutoField</span><span class="s4">: </span><span class="s1">OFTInteger</span><span class="s4">,</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">BooleanField</span><span class="s4">: (</span><span class="s1">OFTInteger</span><span class="s4">, </span><span class="s1">OFTReal</span><span class="s4">, </span><span class="s1">OFTString</span><span class="s4">),</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">IntegerField</span><span class="s4">: (</span><span class="s1">OFTInteger</span><span class="s4">, </span><span class="s1">OFTReal</span><span class="s4">, </span><span class="s1">OFTString</span><span class="s4">),</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">FloatField</span><span class="s4">: (</span><span class="s1">OFTInteger</span><span class="s4">, </span><span class="s1">OFTReal</span><span class="s4">),</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">DateField</span><span class="s4">: </span><span class="s1">OFTDate</span><span class="s4">,</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">DateTimeField</span><span class="s4">: </span><span class="s1">OFTDateTime</span><span class="s4">,</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">EmailField</span><span class="s4">: </span><span class="s1">OFTString</span><span class="s4">,</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">TimeField</span><span class="s4">: </span><span class="s1">OFTTime</span><span class="s4">,</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">DecimalField</span><span class="s4">: (</span><span class="s1">OFTInteger</span><span class="s4">, </span><span class="s1">OFTReal</span><span class="s4">),</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">CharField</span><span class="s4">: </span><span class="s1">OFTString</span><span class="s4">,</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">SlugField</span><span class="s4">: </span><span class="s1">OFTString</span><span class="s4">,</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">TextField</span><span class="s4">: </span><span class="s1">OFTString</span><span class="s4">,</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">URLField</span><span class="s4">: </span><span class="s1">OFTString</span><span class="s4">,</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">UUIDField</span><span class="s4">: </span><span class="s1">OFTString</span><span class="s4">,</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">BigIntegerField</span><span class="s4">: (</span><span class="s1">OFTInteger</span><span class="s4">, </span><span class="s1">OFTReal</span><span class="s4">, </span><span class="s1">OFTString</span><span class="s4">),</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">SmallIntegerField</span><span class="s4">: (</span><span class="s1">OFTInteger</span><span class="s4">, </span><span class="s1">OFTReal</span><span class="s4">, </span><span class="s1">OFTString</span><span class="s4">),</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">PositiveBigIntegerField</span><span class="s4">: (</span><span class="s1">OFTInteger</span><span class="s4">, </span><span class="s1">OFTReal</span><span class="s4">, </span><span class="s1">OFTString</span><span class="s4">),</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">PositiveIntegerField</span><span class="s4">: (</span><span class="s1">OFTInteger</span><span class="s4">, </span><span class="s1">OFTReal</span><span class="s4">, </span><span class="s1">OFTString</span><span class="s4">),</span>
+        <span class="s1">models</span><span class="s4">.</span><span class="s1">PositiveSmallIntegerField</span><span class="s4">: (</span><span class="s1">OFTInteger</span><span class="s4">, </span><span class="s1">OFTReal</span><span class="s4">, </span><span class="s1">OFTString</span><span class="s4">),</span>
+    <span class="s4">}</span>
+
+    <span class="s3">def </span><span class="s1">__init__</span><span class="s4">(</span>
+        <span class="s1">self</span><span class="s4">,</span>
+        <span class="s1">model</span><span class="s4">,</span>
+        <span class="s1">data</span><span class="s4">,</span>
+        <span class="s1">mapping</span><span class="s4">,</span>
+        <span class="s1">layer</span><span class="s4">=</span><span class="s5">0</span><span class="s4">,</span>
+        <span class="s1">source_srs</span><span class="s4">=</span><span class="s3">None</span><span class="s4">,</span>
+        <span class="s1">encoding</span><span class="s4">=</span><span class="s6">&quot;utf-8&quot;</span><span class="s4">,</span>
+        <span class="s1">transaction_mode</span><span class="s4">=</span><span class="s6">&quot;commit_on_success&quot;</span><span class="s4">,</span>
+        <span class="s1">transform</span><span class="s4">=</span><span class="s3">True</span><span class="s4">,</span>
+        <span class="s1">unique</span><span class="s4">=</span><span class="s3">None</span><span class="s4">,</span>
+        <span class="s1">using</span><span class="s4">=</span><span class="s3">None</span><span class="s4">,</span>
+    <span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        A LayerMapping object is initialized using the given Model (not an instance), 
+        a DataSource (or string path to an OGR-supported data file), and a mapping 
+        dictionary.  See the module level docstring for more details and keyword 
+        argument usage. 
+        &quot;&quot;&quot;</span>
+        <span class="s0"># Getting the DataSource and the associated Layer.</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">data</span><span class="s4">, (</span><span class="s1">str</span><span class="s4">, </span><span class="s1">Path</span><span class="s4">)):</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">ds </span><span class="s4">= </span><span class="s1">DataSource</span><span class="s4">(</span><span class="s1">data</span><span class="s4">, </span><span class="s1">encoding</span><span class="s4">=</span><span class="s1">encoding</span><span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">ds </span><span class="s4">= </span><span class="s1">data</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">layer </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">ds</span><span class="s4">[</span><span class="s1">layer</span><span class="s4">]</span>
+
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">using </span><span class="s4">= </span><span class="s1">using </span><span class="s3">if </span><span class="s1">using </span><span class="s3">is not None else </span><span class="s1">router</span><span class="s4">.</span><span class="s1">db_for_write</span><span class="s4">(</span><span class="s1">model</span><span class="s4">)</span>
+        <span class="s1">connection </span><span class="s4">= </span><span class="s1">connections</span><span class="s4">[</span><span class="s1">self</span><span class="s4">.</span><span class="s1">using</span><span class="s4">]</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">spatial_backend </span><span class="s4">= </span><span class="s1">connection</span><span class="s4">.</span><span class="s1">ops</span>
+
+        <span class="s0"># Setting the mapping &amp; model attributes.</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">mapping </span><span class="s4">= </span><span class="s1">mapping</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">model </span><span class="s4">= </span><span class="s1">model</span>
+
+        <span class="s0"># Checking the layer -- initialization of the object will fail if</span>
+        <span class="s0"># things don't check out before hand.</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">check_layer</span><span class="s4">()</span>
+
+        <span class="s0"># Getting the geometry column associated with the model (an</span>
+        <span class="s0"># exception will be raised if there is no geometry column).</span>
+        <span class="s3">if </span><span class="s1">connection</span><span class="s4">.</span><span class="s1">features</span><span class="s4">.</span><span class="s1">supports_transform</span><span class="s4">:</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">geo_field </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">geometry_field</span><span class="s4">()</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">transform </span><span class="s4">= </span><span class="s3">False</span>
+
+        <span class="s0"># Checking the source spatial reference system, and getting</span>
+        <span class="s0"># the coordinate transformation object (unless the `transform`</span>
+        <span class="s0"># keyword is set to False)</span>
+        <span class="s3">if </span><span class="s1">transform</span><span class="s4">:</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">source_srs </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">check_srs</span><span class="s4">(</span><span class="s1">source_srs</span><span class="s4">)</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">transform </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">coord_transform</span><span class="s4">()</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">transform </span><span class="s4">= </span><span class="s1">transform</span>
+
+        <span class="s0"># Setting the encoding for OFTString fields, if specified.</span>
+        <span class="s3">if </span><span class="s1">encoding</span><span class="s4">:</span>
+            <span class="s0"># Making sure the encoding exists, if not a LookupError</span>
+            <span class="s0"># exception will be thrown.</span>
+            <span class="s3">from </span><span class="s1">codecs </span><span class="s3">import </span><span class="s1">lookup</span>
+
+            <span class="s1">lookup</span><span class="s4">(</span><span class="s1">encoding</span><span class="s4">)</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">encoding </span><span class="s4">= </span><span class="s1">encoding</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">encoding </span><span class="s4">= </span><span class="s3">None</span>
+
+        <span class="s3">if </span><span class="s1">unique</span><span class="s4">:</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">check_unique</span><span class="s4">(</span><span class="s1">unique</span><span class="s4">)</span>
+            <span class="s1">transaction_mode </span><span class="s4">= </span><span class="s6">&quot;autocommit&quot;  </span><span class="s0"># Has to be set to autocommit.</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">unique </span><span class="s4">= </span><span class="s1">unique</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">unique </span><span class="s4">= </span><span class="s3">None</span>
+
+        <span class="s0"># Setting the transaction decorator with the function in the</span>
+        <span class="s0"># transaction modes dictionary.</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">transaction_mode </span><span class="s4">= </span><span class="s1">transaction_mode</span>
+        <span class="s3">if </span><span class="s1">transaction_mode </span><span class="s4">== </span><span class="s6">&quot;autocommit&quot;</span><span class="s4">:</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">transaction_decorator </span><span class="s4">= </span><span class="s3">None</span>
+        <span class="s3">elif </span><span class="s1">transaction_mode </span><span class="s4">== </span><span class="s6">&quot;commit_on_success&quot;</span><span class="s4">:</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">transaction_decorator </span><span class="s4">= </span><span class="s1">transaction</span><span class="s4">.</span><span class="s1">atomic</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">LayerMapError</span><span class="s4">(</span><span class="s6">&quot;Unrecognized transaction mode: %s&quot; </span><span class="s4">% </span><span class="s1">transaction_mode</span><span class="s4">)</span>
+
+    <span class="s0"># #### Checking routines used during initialization ####</span>
+    <span class="s3">def </span><span class="s1">check_fid_range</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">fid_range</span><span class="s4">):</span>
+        <span class="s2">&quot;Check the `fid_range` keyword.&quot;</span>
+        <span class="s3">if </span><span class="s1">fid_range</span><span class="s4">:</span>
+            <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">fid_range</span><span class="s4">, (</span><span class="s1">tuple</span><span class="s4">, </span><span class="s1">list</span><span class="s4">)):</span>
+                <span class="s3">return </span><span class="s1">slice</span><span class="s4">(*</span><span class="s1">fid_range</span><span class="s4">)</span>
+            <span class="s3">elif </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">fid_range</span><span class="s4">, </span><span class="s1">slice</span><span class="s4">):</span>
+                <span class="s3">return </span><span class="s1">fid_range</span>
+            <span class="s3">else</span><span class="s4">:</span>
+                <span class="s3">raise </span><span class="s1">TypeError</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">return None</span>
+
+    <span class="s3">def </span><span class="s1">check_layer</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Check the Layer metadata and ensure that it's compatible with the 
+        mapping information and model. Unlike previous revisions, there is no 
+        need to increment through each feature in the Layer. 
+        &quot;&quot;&quot;</span>
+        <span class="s0"># The geometry field of the model is set here.</span>
+        <span class="s0"># TODO: Support more than one geometry field / model.  However, this</span>
+        <span class="s0"># depends on the GDAL Driver in use.</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">geom_field </span><span class="s4">= </span><span class="s3">False</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">fields </span><span class="s4">= {}</span>
+
+        <span class="s0"># Getting lists of the field names and the field types available in</span>
+        <span class="s0"># the OGR Layer.</span>
+        <span class="s1">ogr_fields </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">layer</span><span class="s4">.</span><span class="s1">fields</span>
+        <span class="s1">ogr_field_types </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">layer</span><span class="s4">.</span><span class="s1">field_types</span>
+
+        <span class="s0"># Function for determining if the OGR mapping field is in the Layer.</span>
+        <span class="s3">def </span><span class="s1">check_ogr_fld</span><span class="s4">(</span><span class="s1">ogr_map_fld</span><span class="s4">):</span>
+            <span class="s3">try</span><span class="s4">:</span>
+                <span class="s1">idx </span><span class="s4">= </span><span class="s1">ogr_fields</span><span class="s4">.</span><span class="s1">index</span><span class="s4">(</span><span class="s1">ogr_map_fld</span><span class="s4">)</span>
+            <span class="s3">except </span><span class="s1">ValueError</span><span class="s4">:</span>
+                <span class="s3">raise </span><span class="s1">LayerMapError</span><span class="s4">(</span>
+                    <span class="s6">'Given mapping OGR field &quot;%s&quot; not found in OGR Layer.' </span><span class="s4">% </span><span class="s1">ogr_map_fld</span>
+                <span class="s4">)</span>
+            <span class="s3">return </span><span class="s1">idx</span>
+
+        <span class="s0"># No need to increment through each feature in the model, simply check</span>
+        <span class="s0"># the Layer metadata against what was given in the mapping dictionary.</span>
+        <span class="s3">for </span><span class="s1">field_name</span><span class="s4">, </span><span class="s1">ogr_name </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">mapping</span><span class="s4">.</span><span class="s1">items</span><span class="s4">():</span>
+            <span class="s0"># Ensuring that a corresponding field exists in the model</span>
+            <span class="s0"># for the given field name in the mapping.</span>
+            <span class="s3">try</span><span class="s4">:</span>
+                <span class="s1">model_field </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">model</span><span class="s4">.</span><span class="s1">_meta</span><span class="s4">.</span><span class="s1">get_field</span><span class="s4">(</span><span class="s1">field_name</span><span class="s4">)</span>
+            <span class="s3">except </span><span class="s1">FieldDoesNotExist</span><span class="s4">:</span>
+                <span class="s3">raise </span><span class="s1">LayerMapError</span><span class="s4">(</span>
+                    <span class="s6">'Given mapping field &quot;%s&quot; not in given Model fields.' </span><span class="s4">% </span><span class="s1">field_name</span>
+                <span class="s4">)</span>
+
+            <span class="s0"># Getting the string name for the Django field class (e.g., 'PointField').</span>
+            <span class="s1">fld_name </span><span class="s4">= </span><span class="s1">model_field</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">.</span><span class="s1">__name__</span>
+
+            <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">model_field</span><span class="s4">, </span><span class="s1">GeometryField</span><span class="s4">):</span>
+                <span class="s3">if </span><span class="s1">self</span><span class="s4">.</span><span class="s1">geom_field</span><span class="s4">:</span>
+                    <span class="s3">raise </span><span class="s1">LayerMapError</span><span class="s4">(</span>
+                        <span class="s6">&quot;LayerMapping does not support more than one GeometryField per &quot;</span>
+                        <span class="s6">&quot;model.&quot;</span>
+                    <span class="s4">)</span>
+
+                <span class="s0"># Getting the coordinate dimension of the geometry field.</span>
+                <span class="s1">coord_dim </span><span class="s4">= </span><span class="s1">model_field</span><span class="s4">.</span><span class="s1">dim</span>
+
+                <span class="s3">try</span><span class="s4">:</span>
+                    <span class="s3">if </span><span class="s1">coord_dim </span><span class="s4">== </span><span class="s5">3</span><span class="s4">:</span>
+                        <span class="s1">gtype </span><span class="s4">= </span><span class="s1">OGRGeomType</span><span class="s4">(</span><span class="s1">ogr_name </span><span class="s4">+ </span><span class="s6">&quot;25D&quot;</span><span class="s4">)</span>
+                    <span class="s3">else</span><span class="s4">:</span>
+                        <span class="s1">gtype </span><span class="s4">= </span><span class="s1">OGRGeomType</span><span class="s4">(</span><span class="s1">ogr_name</span><span class="s4">)</span>
+                <span class="s3">except </span><span class="s1">GDALException</span><span class="s4">:</span>
+                    <span class="s3">raise </span><span class="s1">LayerMapError</span><span class="s4">(</span>
+                        <span class="s6">'Invalid mapping for GeometryField &quot;%s&quot;.' </span><span class="s4">% </span><span class="s1">field_name</span>
+                    <span class="s4">)</span>
+
+                <span class="s0"># Making sure that the OGR Layer's Geometry is compatible.</span>
+                <span class="s1">ltype </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">layer</span><span class="s4">.</span><span class="s1">geom_type</span>
+                <span class="s3">if not </span><span class="s4">(</span>
+                    <span class="s1">ltype</span><span class="s4">.</span><span class="s1">name</span><span class="s4">.</span><span class="s1">startswith</span><span class="s4">(</span><span class="s1">gtype</span><span class="s4">.</span><span class="s1">name</span><span class="s4">)</span>
+                    <span class="s3">or </span><span class="s1">self</span><span class="s4">.</span><span class="s1">make_multi</span><span class="s4">(</span><span class="s1">ltype</span><span class="s4">, </span><span class="s1">model_field</span><span class="s4">)</span>
+                <span class="s4">):</span>
+                    <span class="s3">raise </span><span class="s1">LayerMapError</span><span class="s4">(</span>
+                        <span class="s6">&quot;Invalid mapping geometry; model has %s%s, &quot;</span>
+                        <span class="s6">&quot;layer geometry type is %s.&quot;</span>
+                        <span class="s4">% (</span><span class="s1">fld_name</span><span class="s4">, </span><span class="s6">&quot;(dim=3)&quot; </span><span class="s3">if </span><span class="s1">coord_dim </span><span class="s4">== </span><span class="s5">3 </span><span class="s3">else </span><span class="s6">&quot;&quot;</span><span class="s4">, </span><span class="s1">ltype</span><span class="s4">)</span>
+                    <span class="s4">)</span>
+
+                <span class="s0"># Setting the `geom_field` attribute w/the name of the model field</span>
+                <span class="s0"># that is a Geometry.  Also setting the coordinate dimension</span>
+                <span class="s0"># attribute.</span>
+                <span class="s1">self</span><span class="s4">.</span><span class="s1">geom_field </span><span class="s4">= </span><span class="s1">field_name</span>
+                <span class="s1">self</span><span class="s4">.</span><span class="s1">coord_dim </span><span class="s4">= </span><span class="s1">coord_dim</span>
+                <span class="s1">fields_val </span><span class="s4">= </span><span class="s1">model_field</span>
+            <span class="s3">elif </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">model_field</span><span class="s4">, </span><span class="s1">models</span><span class="s4">.</span><span class="s1">ForeignKey</span><span class="s4">):</span>
+                <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">ogr_name</span><span class="s4">, </span><span class="s1">dict</span><span class="s4">):</span>
+                    <span class="s0"># Is every given related model mapping field in the Layer?</span>
+                    <span class="s1">rel_model </span><span class="s4">= </span><span class="s1">model_field</span><span class="s4">.</span><span class="s1">remote_field</span><span class="s4">.</span><span class="s1">model</span>
+                    <span class="s3">for </span><span class="s1">rel_name</span><span class="s4">, </span><span class="s1">ogr_field </span><span class="s3">in </span><span class="s1">ogr_name</span><span class="s4">.</span><span class="s1">items</span><span class="s4">():</span>
+                        <span class="s1">idx </span><span class="s4">= </span><span class="s1">check_ogr_fld</span><span class="s4">(</span><span class="s1">ogr_field</span><span class="s4">)</span>
+                        <span class="s3">try</span><span class="s4">:</span>
+                            <span class="s1">rel_model</span><span class="s4">.</span><span class="s1">_meta</span><span class="s4">.</span><span class="s1">get_field</span><span class="s4">(</span><span class="s1">rel_name</span><span class="s4">)</span>
+                        <span class="s3">except </span><span class="s1">FieldDoesNotExist</span><span class="s4">:</span>
+                            <span class="s3">raise </span><span class="s1">LayerMapError</span><span class="s4">(</span>
+                                <span class="s6">'ForeignKey mapping field &quot;%s&quot; not in %s fields.'</span>
+                                <span class="s4">% (</span><span class="s1">rel_name</span><span class="s4">, </span><span class="s1">rel_model</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">.</span><span class="s1">__name__</span><span class="s4">)</span>
+                            <span class="s4">)</span>
+                    <span class="s1">fields_val </span><span class="s4">= </span><span class="s1">rel_model</span>
+                <span class="s3">else</span><span class="s4">:</span>
+                    <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span><span class="s6">&quot;ForeignKey mapping must be of dictionary type.&quot;</span><span class="s4">)</span>
+            <span class="s3">else</span><span class="s4">:</span>
+                <span class="s0"># Is the model field type supported by LayerMapping?</span>
+                <span class="s3">if </span><span class="s1">model_field</span><span class="s4">.</span><span class="s1">__class__ </span><span class="s3">not in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">FIELD_TYPES</span><span class="s4">:</span>
+                    <span class="s3">raise </span><span class="s1">LayerMapError</span><span class="s4">(</span>
+                        <span class="s6">'Django field type &quot;%s&quot; has no OGR mapping (yet).' </span><span class="s4">% </span><span class="s1">fld_name</span>
+                    <span class="s4">)</span>
+
+                <span class="s0"># Is the OGR field in the Layer?</span>
+                <span class="s1">idx </span><span class="s4">= </span><span class="s1">check_ogr_fld</span><span class="s4">(</span><span class="s1">ogr_name</span><span class="s4">)</span>
+                <span class="s1">ogr_field </span><span class="s4">= </span><span class="s1">ogr_field_types</span><span class="s4">[</span><span class="s1">idx</span><span class="s4">]</span>
+
+                <span class="s0"># Can the OGR field type be mapped to the Django field type?</span>
+                <span class="s3">if not </span><span class="s1">issubclass</span><span class="s4">(</span><span class="s1">ogr_field</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">FIELD_TYPES</span><span class="s4">[</span><span class="s1">model_field</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">]):</span>
+                    <span class="s3">raise </span><span class="s1">LayerMapError</span><span class="s4">(</span>
+                        <span class="s6">'OGR field &quot;%s&quot; (of type %s) cannot be mapped to Django %s.'</span>
+                        <span class="s4">% (</span><span class="s1">ogr_field</span><span class="s4">, </span><span class="s1">ogr_field</span><span class="s4">.</span><span class="s1">__name__</span><span class="s4">, </span><span class="s1">fld_name</span><span class="s4">)</span>
+                    <span class="s4">)</span>
+                <span class="s1">fields_val </span><span class="s4">= </span><span class="s1">model_field</span>
+
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">fields</span><span class="s4">[</span><span class="s1">field_name</span><span class="s4">] = </span><span class="s1">fields_val</span>
+
+    <span class="s3">def </span><span class="s1">check_srs</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">source_srs</span><span class="s4">):</span>
+        <span class="s2">&quot;Check the compatibility of the given spatial reference object.&quot;</span>
+
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">source_srs</span><span class="s4">, </span><span class="s1">SpatialReference</span><span class="s4">):</span>
+            <span class="s1">sr </span><span class="s4">= </span><span class="s1">source_srs</span>
+        <span class="s3">elif </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">source_srs</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">spatial_backend</span><span class="s4">.</span><span class="s1">spatial_ref_sys</span><span class="s4">()):</span>
+            <span class="s1">sr </span><span class="s4">= </span><span class="s1">source_srs</span><span class="s4">.</span><span class="s1">srs</span>
+        <span class="s3">elif </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">source_srs</span><span class="s4">, (</span><span class="s1">int</span><span class="s4">, </span><span class="s1">str</span><span class="s4">)):</span>
+            <span class="s1">sr </span><span class="s4">= </span><span class="s1">SpatialReference</span><span class="s4">(</span><span class="s1">source_srs</span><span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s0"># Otherwise just pulling the SpatialReference from the layer</span>
+            <span class="s1">sr </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">layer</span><span class="s4">.</span><span class="s1">srs</span>
+
+        <span class="s3">if not </span><span class="s1">sr</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">LayerMapError</span><span class="s4">(</span><span class="s6">&quot;No source reference system defined.&quot;</span><span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">sr</span>
+
+    <span class="s3">def </span><span class="s1">check_unique</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">unique</span><span class="s4">):</span>
+        <span class="s2">&quot;Check the `unique` keyword parameter -- may be a sequence or string.&quot;</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">unique</span><span class="s4">, (</span><span class="s1">list</span><span class="s4">, </span><span class="s1">tuple</span><span class="s4">)):</span>
+            <span class="s0"># List of fields to determine uniqueness with</span>
+            <span class="s3">for </span><span class="s1">attr </span><span class="s3">in </span><span class="s1">unique</span><span class="s4">:</span>
+                <span class="s3">if </span><span class="s1">attr </span><span class="s3">not in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">mapping</span><span class="s4">:</span>
+                    <span class="s3">raise </span><span class="s1">ValueError</span>
+        <span class="s3">elif </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">unique</span><span class="s4">, </span><span class="s1">str</span><span class="s4">):</span>
+            <span class="s0"># Only a single field passed in.</span>
+            <span class="s3">if </span><span class="s1">unique </span><span class="s3">not in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">mapping</span><span class="s4">:</span>
+                <span class="s3">raise </span><span class="s1">ValueError</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span>
+                <span class="s6">&quot;Unique keyword argument must be set with a tuple, list, or string.&quot;</span>
+            <span class="s4">)</span>
+
+    <span class="s0"># Keyword argument retrieval routines ####</span>
+    <span class="s3">def </span><span class="s1">feature_kwargs</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">feat</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Given an OGR Feature, return a dictionary of keyword arguments for 
+        constructing the mapped model. 
+        &quot;&quot;&quot;</span>
+        <span class="s0"># The keyword arguments for model construction.</span>
+        <span class="s1">kwargs </span><span class="s4">= {}</span>
+
+        <span class="s0"># Incrementing through each model field and OGR field in the</span>
+        <span class="s0"># dictionary mapping.</span>
+        <span class="s3">for </span><span class="s1">field_name</span><span class="s4">, </span><span class="s1">ogr_name </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">mapping</span><span class="s4">.</span><span class="s1">items</span><span class="s4">():</span>
+            <span class="s1">model_field </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">fields</span><span class="s4">[</span><span class="s1">field_name</span><span class="s4">]</span>
+
+            <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">model_field</span><span class="s4">, </span><span class="s1">GeometryField</span><span class="s4">):</span>
+                <span class="s0"># Verify OGR geometry.</span>
+                <span class="s3">try</span><span class="s4">:</span>
+                    <span class="s1">val </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">verify_geom</span><span class="s4">(</span><span class="s1">feat</span><span class="s4">.</span><span class="s1">geom</span><span class="s4">, </span><span class="s1">model_field</span><span class="s4">)</span>
+                <span class="s3">except </span><span class="s1">GDALException</span><span class="s4">:</span>
+                    <span class="s3">raise </span><span class="s1">LayerMapError</span><span class="s4">(</span><span class="s6">&quot;Could not retrieve geometry from feature.&quot;</span><span class="s4">)</span>
+            <span class="s3">elif </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">model_field</span><span class="s4">, </span><span class="s1">models</span><span class="s4">.</span><span class="s1">base</span><span class="s4">.</span><span class="s1">ModelBase</span><span class="s4">):</span>
+                <span class="s0"># The related _model_, not a field was passed in -- indicating</span>
+                <span class="s0"># another mapping for the related Model.</span>
+                <span class="s1">val </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">verify_fk</span><span class="s4">(</span><span class="s1">feat</span><span class="s4">, </span><span class="s1">model_field</span><span class="s4">, </span><span class="s1">ogr_name</span><span class="s4">)</span>
+            <span class="s3">else</span><span class="s4">:</span>
+                <span class="s0"># Otherwise, verify OGR Field type.</span>
+                <span class="s1">val </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">verify_ogr_field</span><span class="s4">(</span><span class="s1">feat</span><span class="s4">[</span><span class="s1">ogr_name</span><span class="s4">], </span><span class="s1">model_field</span><span class="s4">)</span>
+
+            <span class="s0"># Setting the keyword arguments for the field name with the</span>
+            <span class="s0"># value obtained above.</span>
+            <span class="s1">kwargs</span><span class="s4">[</span><span class="s1">field_name</span><span class="s4">] = </span><span class="s1">val</span>
+
+        <span class="s3">return </span><span class="s1">kwargs</span>
+
+    <span class="s3">def </span><span class="s1">unique_kwargs</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">kwargs</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Given the feature keyword arguments (from `feature_kwargs`), construct 
+        and return the uniqueness keyword arguments -- a subset of the feature 
+        kwargs. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">unique</span><span class="s4">, </span><span class="s1">str</span><span class="s4">):</span>
+            <span class="s3">return </span><span class="s4">{</span><span class="s1">self</span><span class="s4">.</span><span class="s1">unique</span><span class="s4">: </span><span class="s1">kwargs</span><span class="s4">[</span><span class="s1">self</span><span class="s4">.</span><span class="s1">unique</span><span class="s4">]}</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s4">{</span><span class="s1">fld</span><span class="s4">: </span><span class="s1">kwargs</span><span class="s4">[</span><span class="s1">fld</span><span class="s4">] </span><span class="s3">for </span><span class="s1">fld </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">unique</span><span class="s4">}</span>
+
+    <span class="s0"># #### Verification routines used in constructing model keyword arguments. ####</span>
+    <span class="s3">def </span><span class="s1">verify_ogr_field</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">ogr_field</span><span class="s4">, </span><span class="s1">model_field</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Verify if the OGR Field contents are acceptable to the model field. If 
+        they are, return the verified value, otherwise raise an exception. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">ogr_field</span><span class="s4">, </span><span class="s1">OFTString</span><span class="s4">) </span><span class="s3">and </span><span class="s1">isinstance</span><span class="s4">(</span>
+            <span class="s1">model_field</span><span class="s4">, (</span><span class="s1">models</span><span class="s4">.</span><span class="s1">CharField</span><span class="s4">, </span><span class="s1">models</span><span class="s4">.</span><span class="s1">TextField</span><span class="s4">)</span>
+        <span class="s4">):</span>
+            <span class="s3">if </span><span class="s1">self</span><span class="s4">.</span><span class="s1">encoding </span><span class="s3">and </span><span class="s1">ogr_field</span><span class="s4">.</span><span class="s1">value </span><span class="s3">is not None</span><span class="s4">:</span>
+                <span class="s0"># The encoding for OGR data sources may be specified here</span>
+                <span class="s0"># (e.g., 'cp437' for Census Bureau boundary files).</span>
+                <span class="s1">val </span><span class="s4">= </span><span class="s1">force_str</span><span class="s4">(</span><span class="s1">ogr_field</span><span class="s4">.</span><span class="s1">value</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">encoding</span><span class="s4">)</span>
+            <span class="s3">else</span><span class="s4">:</span>
+                <span class="s1">val </span><span class="s4">= </span><span class="s1">ogr_field</span><span class="s4">.</span><span class="s1">value</span>
+            <span class="s3">if </span><span class="s4">(</span>
+                <span class="s1">model_field</span><span class="s4">.</span><span class="s1">max_length</span>
+                <span class="s3">and </span><span class="s1">val </span><span class="s3">is not None</span>
+                <span class="s3">and </span><span class="s1">len</span><span class="s4">(</span><span class="s1">val</span><span class="s4">) &gt; </span><span class="s1">model_field</span><span class="s4">.</span><span class="s1">max_length</span>
+            <span class="s4">):</span>
+                <span class="s3">raise </span><span class="s1">InvalidString</span><span class="s4">(</span>
+                    <span class="s6">&quot;%s model field maximum string length is %s, given %s characters.&quot;</span>
+                    <span class="s4">% (</span><span class="s1">model_field</span><span class="s4">.</span><span class="s1">name</span><span class="s4">, </span><span class="s1">model_field</span><span class="s4">.</span><span class="s1">max_length</span><span class="s4">, </span><span class="s1">len</span><span class="s4">(</span><span class="s1">val</span><span class="s4">))</span>
+                <span class="s4">)</span>
+        <span class="s3">elif </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">ogr_field</span><span class="s4">, </span><span class="s1">OFTReal</span><span class="s4">) </span><span class="s3">and </span><span class="s1">isinstance</span><span class="s4">(</span>
+            <span class="s1">model_field</span><span class="s4">, </span><span class="s1">models</span><span class="s4">.</span><span class="s1">DecimalField</span>
+        <span class="s4">):</span>
+            <span class="s3">try</span><span class="s4">:</span>
+                <span class="s0"># Creating an instance of the Decimal value to use.</span>
+                <span class="s1">d </span><span class="s4">= </span><span class="s1">Decimal</span><span class="s4">(</span><span class="s1">str</span><span class="s4">(</span><span class="s1">ogr_field</span><span class="s4">.</span><span class="s1">value</span><span class="s4">))</span>
+            <span class="s3">except </span><span class="s1">DecimalInvalidOperation</span><span class="s4">:</span>
+                <span class="s3">raise </span><span class="s1">InvalidDecimal</span><span class="s4">(</span>
+                    <span class="s6">&quot;Could not construct decimal from: %s&quot; </span><span class="s4">% </span><span class="s1">ogr_field</span><span class="s4">.</span><span class="s1">value</span>
+                <span class="s4">)</span>
+
+            <span class="s0"># Getting the decimal value as a tuple.</span>
+            <span class="s1">dtup </span><span class="s4">= </span><span class="s1">d</span><span class="s4">.</span><span class="s1">as_tuple</span><span class="s4">()</span>
+            <span class="s1">digits </span><span class="s4">= </span><span class="s1">dtup</span><span class="s4">[</span><span class="s5">1</span><span class="s4">]</span>
+            <span class="s1">d_idx </span><span class="s4">= </span><span class="s1">dtup</span><span class="s4">[</span><span class="s5">2</span><span class="s4">]  </span><span class="s0"># index where the decimal is</span>
+
+            <span class="s0"># Maximum amount of precision, or digits to the left of the decimal.</span>
+            <span class="s1">max_prec </span><span class="s4">= </span><span class="s1">model_field</span><span class="s4">.</span><span class="s1">max_digits </span><span class="s4">- </span><span class="s1">model_field</span><span class="s4">.</span><span class="s1">decimal_places</span>
+
+            <span class="s0"># Getting the digits to the left of the decimal place for the</span>
+            <span class="s0"># given decimal.</span>
+            <span class="s3">if </span><span class="s1">d_idx </span><span class="s4">&lt; </span><span class="s5">0</span><span class="s4">:</span>
+                <span class="s1">n_prec </span><span class="s4">= </span><span class="s1">len</span><span class="s4">(</span><span class="s1">digits</span><span class="s4">[:</span><span class="s1">d_idx</span><span class="s4">])</span>
+            <span class="s3">else</span><span class="s4">:</span>
+                <span class="s1">n_prec </span><span class="s4">= </span><span class="s1">len</span><span class="s4">(</span><span class="s1">digits</span><span class="s4">) + </span><span class="s1">d_idx</span>
+
+            <span class="s0"># If we have more than the maximum digits allowed, then throw an</span>
+            <span class="s0"># InvalidDecimal exception.</span>
+            <span class="s3">if </span><span class="s1">n_prec </span><span class="s4">&gt; </span><span class="s1">max_prec</span><span class="s4">:</span>
+                <span class="s3">raise </span><span class="s1">InvalidDecimal</span><span class="s4">(</span>
+                    <span class="s6">&quot;A DecimalField with max_digits %d, decimal_places %d must &quot;</span>
+                    <span class="s6">&quot;round to an absolute value less than 10^%d.&quot;</span>
+                    <span class="s4">% (</span><span class="s1">model_field</span><span class="s4">.</span><span class="s1">max_digits</span><span class="s4">, </span><span class="s1">model_field</span><span class="s4">.</span><span class="s1">decimal_places</span><span class="s4">, </span><span class="s1">max_prec</span><span class="s4">)</span>
+                <span class="s4">)</span>
+            <span class="s1">val </span><span class="s4">= </span><span class="s1">d</span>
+        <span class="s3">elif </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">ogr_field</span><span class="s4">, (</span><span class="s1">OFTReal</span><span class="s4">, </span><span class="s1">OFTString</span><span class="s4">)) </span><span class="s3">and </span><span class="s1">isinstance</span><span class="s4">(</span>
+            <span class="s1">model_field</span><span class="s4">, </span><span class="s1">models</span><span class="s4">.</span><span class="s1">IntegerField</span>
+        <span class="s4">):</span>
+            <span class="s0"># Attempt to convert any OFTReal and OFTString value to an OFTInteger.</span>
+            <span class="s3">try</span><span class="s4">:</span>
+                <span class="s1">val </span><span class="s4">= </span><span class="s1">int</span><span class="s4">(</span><span class="s1">ogr_field</span><span class="s4">.</span><span class="s1">value</span><span class="s4">)</span>
+            <span class="s3">except </span><span class="s1">ValueError</span><span class="s4">:</span>
+                <span class="s3">raise </span><span class="s1">InvalidInteger</span><span class="s4">(</span>
+                    <span class="s6">&quot;Could not construct integer from: %s&quot; </span><span class="s4">% </span><span class="s1">ogr_field</span><span class="s4">.</span><span class="s1">value</span>
+                <span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">val </span><span class="s4">= </span><span class="s1">ogr_field</span><span class="s4">.</span><span class="s1">value</span>
+        <span class="s3">return </span><span class="s1">val</span>
+
+    <span class="s3">def </span><span class="s1">verify_fk</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">feat</span><span class="s4">, </span><span class="s1">rel_model</span><span class="s4">, </span><span class="s1">rel_mapping</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Given an OGR Feature, the related model and its dictionary mapping, 
+        retrieve the related model for the ForeignKey mapping. 
+        &quot;&quot;&quot;</span>
+        <span class="s0"># TODO: It is expensive to retrieve a model for every record --</span>
+        <span class="s0">#  explore if an efficient mechanism exists for caching related</span>
+        <span class="s0">#  ForeignKey models.</span>
+
+        <span class="s0"># Constructing and verifying the related model keyword arguments.</span>
+        <span class="s1">fk_kwargs </span><span class="s4">= {}</span>
+        <span class="s3">for </span><span class="s1">field_name</span><span class="s4">, </span><span class="s1">ogr_name </span><span class="s3">in </span><span class="s1">rel_mapping</span><span class="s4">.</span><span class="s1">items</span><span class="s4">():</span>
+            <span class="s1">fk_kwargs</span><span class="s4">[</span><span class="s1">field_name</span><span class="s4">] = </span><span class="s1">self</span><span class="s4">.</span><span class="s1">verify_ogr_field</span><span class="s4">(</span>
+                <span class="s1">feat</span><span class="s4">[</span><span class="s1">ogr_name</span><span class="s4">], </span><span class="s1">rel_model</span><span class="s4">.</span><span class="s1">_meta</span><span class="s4">.</span><span class="s1">get_field</span><span class="s4">(</span><span class="s1">field_name</span><span class="s4">)</span>
+            <span class="s4">)</span>
+
+        <span class="s0"># Attempting to retrieve and return the related model.</span>
+        <span class="s3">try</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">rel_model</span><span class="s4">.</span><span class="s1">objects</span><span class="s4">.</span><span class="s1">using</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">using</span><span class="s4">).</span><span class="s1">get</span><span class="s4">(**</span><span class="s1">fk_kwargs</span><span class="s4">)</span>
+        <span class="s3">except </span><span class="s1">ObjectDoesNotExist</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">MissingForeignKey</span><span class="s4">(</span>
+                <span class="s6">&quot;No ForeignKey %s model found with keyword arguments: %s&quot;</span>
+                <span class="s4">% (</span><span class="s1">rel_model</span><span class="s4">.</span><span class="s1">__name__</span><span class="s4">, </span><span class="s1">fk_kwargs</span><span class="s4">)</span>
+            <span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">verify_geom</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">geom</span><span class="s4">, </span><span class="s1">model_field</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Verify the geometry -- construct and return a GeometryCollection 
+        if necessary (for example if the model field is MultiPolygonField while 
+        the mapped shapefile only contains Polygons). 
+        &quot;&quot;&quot;</span>
+        <span class="s0"># Downgrade a 3D geom to a 2D one, if necessary.</span>
+        <span class="s3">if </span><span class="s1">self</span><span class="s4">.</span><span class="s1">coord_dim </span><span class="s4">!= </span><span class="s1">geom</span><span class="s4">.</span><span class="s1">coord_dim</span><span class="s4">:</span>
+            <span class="s1">geom</span><span class="s4">.</span><span class="s1">coord_dim </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">coord_dim</span>
+
+        <span class="s3">if </span><span class="s1">self</span><span class="s4">.</span><span class="s1">make_multi</span><span class="s4">(</span><span class="s1">geom</span><span class="s4">.</span><span class="s1">geom_type</span><span class="s4">, </span><span class="s1">model_field</span><span class="s4">):</span>
+            <span class="s0"># Constructing a multi-geometry type to contain the single geometry</span>
+            <span class="s1">multi_type </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">MULTI_TYPES</span><span class="s4">[</span><span class="s1">geom</span><span class="s4">.</span><span class="s1">geom_type</span><span class="s4">.</span><span class="s1">num</span><span class="s4">]</span>
+            <span class="s1">g </span><span class="s4">= </span><span class="s1">OGRGeometry</span><span class="s4">(</span><span class="s1">multi_type</span><span class="s4">)</span>
+            <span class="s1">g</span><span class="s4">.</span><span class="s1">add</span><span class="s4">(</span><span class="s1">geom</span><span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">g </span><span class="s4">= </span><span class="s1">geom</span>
+
+        <span class="s0"># Transforming the geometry with our Coordinate Transformation object,</span>
+        <span class="s0"># but only if the class variable `transform` is set w/a CoordTransform</span>
+        <span class="s0"># object.</span>
+        <span class="s3">if </span><span class="s1">self</span><span class="s4">.</span><span class="s1">transform</span><span class="s4">:</span>
+            <span class="s1">g</span><span class="s4">.</span><span class="s1">transform</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">transform</span><span class="s4">)</span>
+
+        <span class="s0"># Returning the WKT of the geometry.</span>
+        <span class="s3">return </span><span class="s1">g</span><span class="s4">.</span><span class="s1">wkt</span>
+
+    <span class="s0"># #### Other model methods ####</span>
+    <span class="s3">def </span><span class="s1">coord_transform</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;Return the coordinate transformation object.&quot;</span>
+        <span class="s1">SpatialRefSys </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">spatial_backend</span><span class="s4">.</span><span class="s1">spatial_ref_sys</span><span class="s4">()</span>
+        <span class="s3">try</span><span class="s4">:</span>
+            <span class="s0"># Getting the target spatial reference system</span>
+            <span class="s1">target_srs </span><span class="s4">= (</span>
+                <span class="s1">SpatialRefSys</span><span class="s4">.</span><span class="s1">objects</span><span class="s4">.</span><span class="s1">using</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">using</span><span class="s4">)</span>
+                <span class="s4">.</span><span class="s1">get</span><span class="s4">(</span><span class="s1">srid</span><span class="s4">=</span><span class="s1">self</span><span class="s4">.</span><span class="s1">geo_field</span><span class="s4">.</span><span class="s1">srid</span><span class="s4">)</span>
+                <span class="s4">.</span><span class="s1">srs</span>
+            <span class="s4">)</span>
+
+            <span class="s0"># Creating the CoordTransform object</span>
+            <span class="s3">return </span><span class="s1">CoordTransform</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">source_srs</span><span class="s4">, </span><span class="s1">target_srs</span><span class="s4">)</span>
+        <span class="s3">except </span><span class="s1">Exception </span><span class="s3">as </span><span class="s1">exc</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">LayerMapError</span><span class="s4">(</span>
+                <span class="s6">&quot;Could not translate between the data source and model geometry.&quot;</span>
+            <span class="s4">) </span><span class="s3">from </span><span class="s1">exc</span>
+
+    <span class="s3">def </span><span class="s1">geometry_field</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;Return the GeometryField instance associated with the geographic column.&quot;</span>
+        <span class="s0"># Use `get_field()` on the model's options so that we</span>
+        <span class="s0"># get the correct field instance if there's model inheritance.</span>
+        <span class="s1">opts </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">model</span><span class="s4">.</span><span class="s1">_meta</span>
+        <span class="s3">return </span><span class="s1">opts</span><span class="s4">.</span><span class="s1">get_field</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">geom_field</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">make_multi</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">geom_type</span><span class="s4">, </span><span class="s1">model_field</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Given the OGRGeomType for a geometry and its associated GeometryField, 
+        determine whether the geometry should be turned into a GeometryCollection. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">return </span><span class="s4">(</span>
+            <span class="s1">geom_type</span><span class="s4">.</span><span class="s1">num </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">MULTI_TYPES</span>
+            <span class="s3">and </span><span class="s1">model_field</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">.</span><span class="s1">__name__ </span><span class="s4">== </span><span class="s6">&quot;Multi%s&quot; </span><span class="s4">% </span><span class="s1">geom_type</span><span class="s4">.</span><span class="s1">django</span>
+        <span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">save</span><span class="s4">(</span>
+        <span class="s1">self</span><span class="s4">,</span>
+        <span class="s1">verbose</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+        <span class="s1">fid_range</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+        <span class="s1">step</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+        <span class="s1">progress</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+        <span class="s1">silent</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+        <span class="s1">stream</span><span class="s4">=</span><span class="s1">sys</span><span class="s4">.</span><span class="s1">stdout</span><span class="s4">,</span>
+        <span class="s1">strict</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+    <span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Save the contents from the OGR DataSource Layer into the database 
+        according to the mapping dictionary given at initialization. 
+ 
+        Keyword Parameters: 
+         verbose: 
+           If set, information will be printed subsequent to each model save 
+           executed on the database. 
+ 
+         fid_range: 
+           May be set with a slice or tuple of (begin, end) feature ID's to map 
+           from the data source.  In other words, this keyword enables the user 
+           to selectively import a subset range of features in the geographic 
+           data source. 
+ 
+         step: 
+           If set with an integer, transactions will occur at every step 
+           interval. For example, if step=1000, a commit would occur after 
+           the 1,000th feature, the 2,000th feature etc. 
+ 
+         progress: 
+           When this keyword is set, status information will be printed giving 
+           the number of features processed and successfully saved.  By default, 
+           progress information will pe printed every 1000 features processed, 
+           however, this default may be overridden by setting this keyword with an 
+           integer for the desired interval. 
+ 
+         stream: 
+           Status information will be written to this file handle.  Defaults to 
+           using `sys.stdout`, but any object with a `write` method is supported. 
+ 
+         silent: 
+           By default, non-fatal error notifications are printed to stdout, but 
+           this keyword may be set to disable these notifications. 
+ 
+         strict: 
+           Execution of the model mapping will cease upon the first error 
+           encountered.  The default behavior is to attempt to continue. 
+        &quot;&quot;&quot;</span>
+        <span class="s0"># Getting the default Feature ID range.</span>
+        <span class="s1">default_range </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">check_fid_range</span><span class="s4">(</span><span class="s1">fid_range</span><span class="s4">)</span>
+
+        <span class="s0"># Setting the progress interval, if requested.</span>
+        <span class="s3">if </span><span class="s1">progress</span><span class="s4">:</span>
+            <span class="s3">if </span><span class="s1">progress </span><span class="s3">is True or not </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">progress</span><span class="s4">, </span><span class="s1">int</span><span class="s4">):</span>
+                <span class="s1">progress_interval </span><span class="s4">= </span><span class="s5">1000</span>
+            <span class="s3">else</span><span class="s4">:</span>
+                <span class="s1">progress_interval </span><span class="s4">= </span><span class="s1">progress</span>
+
+        <span class="s3">def </span><span class="s1">_save</span><span class="s4">(</span><span class="s1">feat_range</span><span class="s4">=</span><span class="s1">default_range</span><span class="s4">, </span><span class="s1">num_feat</span><span class="s4">=</span><span class="s5">0</span><span class="s4">, </span><span class="s1">num_saved</span><span class="s4">=</span><span class="s5">0</span><span class="s4">):</span>
+            <span class="s3">if </span><span class="s1">feat_range</span><span class="s4">:</span>
+                <span class="s1">layer_iter </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">layer</span><span class="s4">[</span><span class="s1">feat_range</span><span class="s4">]</span>
+            <span class="s3">else</span><span class="s4">:</span>
+                <span class="s1">layer_iter </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">layer</span>
+
+            <span class="s3">for </span><span class="s1">feat </span><span class="s3">in </span><span class="s1">layer_iter</span><span class="s4">:</span>
+                <span class="s1">num_feat </span><span class="s4">+= </span><span class="s5">1</span>
+                <span class="s0"># Getting the keyword arguments</span>
+                <span class="s3">try</span><span class="s4">:</span>
+                    <span class="s1">kwargs </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">feature_kwargs</span><span class="s4">(</span><span class="s1">feat</span><span class="s4">)</span>
+                <span class="s3">except </span><span class="s1">LayerMapError </span><span class="s3">as </span><span class="s1">msg</span><span class="s4">:</span>
+                    <span class="s0"># Something borked the validation</span>
+                    <span class="s3">if </span><span class="s1">strict</span><span class="s4">:</span>
+                        <span class="s3">raise</span>
+                    <span class="s3">elif not </span><span class="s1">silent</span><span class="s4">:</span>
+                        <span class="s1">stream</span><span class="s4">.</span><span class="s1">write</span><span class="s4">(</span>
+                            <span class="s6">&quot;Ignoring Feature ID %s because: %s</span><span class="s3">\n</span><span class="s6">&quot; </span><span class="s4">% (</span><span class="s1">feat</span><span class="s4">.</span><span class="s1">fid</span><span class="s4">, </span><span class="s1">msg</span><span class="s4">)</span>
+                        <span class="s4">)</span>
+                <span class="s3">else</span><span class="s4">:</span>
+                    <span class="s0"># Constructing the model using the keyword args</span>
+                    <span class="s1">is_update </span><span class="s4">= </span><span class="s3">False</span>
+                    <span class="s3">if </span><span class="s1">self</span><span class="s4">.</span><span class="s1">unique</span><span class="s4">:</span>
+                        <span class="s0"># If we want unique models on a particular field, handle the</span>
+                        <span class="s0"># geometry appropriately.</span>
+                        <span class="s3">try</span><span class="s4">:</span>
+                            <span class="s0"># Getting the keyword arguments and retrieving</span>
+                            <span class="s0"># the unique model.</span>
+                            <span class="s1">u_kwargs </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">unique_kwargs</span><span class="s4">(</span><span class="s1">kwargs</span><span class="s4">)</span>
+                            <span class="s1">m </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">model</span><span class="s4">.</span><span class="s1">objects</span><span class="s4">.</span><span class="s1">using</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">using</span><span class="s4">).</span><span class="s1">get</span><span class="s4">(**</span><span class="s1">u_kwargs</span><span class="s4">)</span>
+                            <span class="s1">is_update </span><span class="s4">= </span><span class="s3">True</span>
+
+                            <span class="s0"># Getting the geometry (in OGR form), creating</span>
+                            <span class="s0"># one from the kwargs WKT, adding in additional</span>
+                            <span class="s0"># geometries, and update the attribute with the</span>
+                            <span class="s0"># just-updated geometry WKT.</span>
+                            <span class="s1">geom_value </span><span class="s4">= </span><span class="s1">getattr</span><span class="s4">(</span><span class="s1">m</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">geom_field</span><span class="s4">)</span>
+                            <span class="s3">if </span><span class="s1">geom_value </span><span class="s3">is None</span><span class="s4">:</span>
+                                <span class="s1">geom </span><span class="s4">= </span><span class="s1">OGRGeometry</span><span class="s4">(</span><span class="s1">kwargs</span><span class="s4">[</span><span class="s1">self</span><span class="s4">.</span><span class="s1">geom_field</span><span class="s4">])</span>
+                            <span class="s3">else</span><span class="s4">:</span>
+                                <span class="s1">geom </span><span class="s4">= </span><span class="s1">geom_value</span><span class="s4">.</span><span class="s1">ogr</span>
+                                <span class="s1">new </span><span class="s4">= </span><span class="s1">OGRGeometry</span><span class="s4">(</span><span class="s1">kwargs</span><span class="s4">[</span><span class="s1">self</span><span class="s4">.</span><span class="s1">geom_field</span><span class="s4">])</span>
+                                <span class="s3">for </span><span class="s1">g </span><span class="s3">in </span><span class="s1">new</span><span class="s4">:</span>
+                                    <span class="s1">geom</span><span class="s4">.</span><span class="s1">add</span><span class="s4">(</span><span class="s1">g</span><span class="s4">)</span>
+                            <span class="s1">setattr</span><span class="s4">(</span><span class="s1">m</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">geom_field</span><span class="s4">, </span><span class="s1">geom</span><span class="s4">.</span><span class="s1">wkt</span><span class="s4">)</span>
+                        <span class="s3">except </span><span class="s1">ObjectDoesNotExist</span><span class="s4">:</span>
+                            <span class="s0"># No unique model exists yet, create.</span>
+                            <span class="s1">m </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">model</span><span class="s4">(**</span><span class="s1">kwargs</span><span class="s4">)</span>
+                    <span class="s3">else</span><span class="s4">:</span>
+                        <span class="s1">m </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">model</span><span class="s4">(**</span><span class="s1">kwargs</span><span class="s4">)</span>
+
+                    <span class="s3">try</span><span class="s4">:</span>
+                        <span class="s0"># Attempting to save.</span>
+                        <span class="s1">m</span><span class="s4">.</span><span class="s1">save</span><span class="s4">(</span><span class="s1">using</span><span class="s4">=</span><span class="s1">self</span><span class="s4">.</span><span class="s1">using</span><span class="s4">)</span>
+                        <span class="s1">num_saved </span><span class="s4">+= </span><span class="s5">1</span>
+                        <span class="s3">if </span><span class="s1">verbose</span><span class="s4">:</span>
+                            <span class="s1">stream</span><span class="s4">.</span><span class="s1">write</span><span class="s4">(</span>
+                                <span class="s6">&quot;%s: %s</span><span class="s3">\n</span><span class="s6">&quot; </span><span class="s4">% (</span><span class="s6">&quot;Updated&quot; </span><span class="s3">if </span><span class="s1">is_update </span><span class="s3">else </span><span class="s6">&quot;Saved&quot;</span><span class="s4">, </span><span class="s1">m</span><span class="s4">)</span>
+                            <span class="s4">)</span>
+                    <span class="s3">except </span><span class="s1">Exception </span><span class="s3">as </span><span class="s1">msg</span><span class="s4">:</span>
+                        <span class="s3">if </span><span class="s1">strict</span><span class="s4">:</span>
+                            <span class="s0"># Bailing out if the `strict` keyword is set.</span>
+                            <span class="s3">if not </span><span class="s1">silent</span><span class="s4">:</span>
+                                <span class="s1">stream</span><span class="s4">.</span><span class="s1">write</span><span class="s4">(</span>
+                                    <span class="s6">&quot;Failed to save the feature (id: %s) into the &quot;</span>
+                                    <span class="s6">&quot;model with the keyword arguments:</span><span class="s3">\n</span><span class="s6">&quot; </span><span class="s4">% </span><span class="s1">feat</span><span class="s4">.</span><span class="s1">fid</span>
+                                <span class="s4">)</span>
+                                <span class="s1">stream</span><span class="s4">.</span><span class="s1">write</span><span class="s4">(</span><span class="s6">&quot;%s</span><span class="s3">\n</span><span class="s6">&quot; </span><span class="s4">% </span><span class="s1">kwargs</span><span class="s4">)</span>
+                            <span class="s3">raise</span>
+                        <span class="s3">elif not </span><span class="s1">silent</span><span class="s4">:</span>
+                            <span class="s1">stream</span><span class="s4">.</span><span class="s1">write</span><span class="s4">(</span>
+                                <span class="s6">&quot;Failed to save %s:</span><span class="s3">\n </span><span class="s6">%s</span><span class="s3">\n</span><span class="s6">Continuing</span><span class="s3">\n</span><span class="s6">&quot; </span><span class="s4">% (</span><span class="s1">kwargs</span><span class="s4">, </span><span class="s1">msg</span><span class="s4">)</span>
+                            <span class="s4">)</span>
+
+                <span class="s0"># Printing progress information, if requested.</span>
+                <span class="s3">if </span><span class="s1">progress </span><span class="s3">and </span><span class="s1">num_feat </span><span class="s4">% </span><span class="s1">progress_interval </span><span class="s4">== </span><span class="s5">0</span><span class="s4">:</span>
+                    <span class="s1">stream</span><span class="s4">.</span><span class="s1">write</span><span class="s4">(</span>
+                        <span class="s6">&quot;Processed %d features, saved %d ...</span><span class="s3">\n</span><span class="s6">&quot; </span><span class="s4">% (</span><span class="s1">num_feat</span><span class="s4">, </span><span class="s1">num_saved</span><span class="s4">)</span>
+                    <span class="s4">)</span>
+
+            <span class="s0"># Only used for status output purposes -- incremental saving uses the</span>
+            <span class="s0"># values returned here.</span>
+            <span class="s3">return </span><span class="s1">num_saved</span><span class="s4">, </span><span class="s1">num_feat</span>
+
+        <span class="s3">if </span><span class="s1">self</span><span class="s4">.</span><span class="s1">transaction_decorator </span><span class="s3">is not None</span><span class="s4">:</span>
+            <span class="s1">_save </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">transaction_decorator</span><span class="s4">(</span><span class="s1">_save</span><span class="s4">)</span>
+
+        <span class="s1">nfeat </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">layer</span><span class="s4">.</span><span class="s1">num_feat</span>
+        <span class="s3">if </span><span class="s1">step </span><span class="s3">and </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">step</span><span class="s4">, </span><span class="s1">int</span><span class="s4">) </span><span class="s3">and </span><span class="s1">step </span><span class="s4">&lt; </span><span class="s1">nfeat</span><span class="s4">:</span>
+            <span class="s0"># Incremental saving is requested at the given interval (step)</span>
+            <span class="s3">if </span><span class="s1">default_range</span><span class="s4">:</span>
+                <span class="s3">raise </span><span class="s1">LayerMapError</span><span class="s4">(</span>
+                    <span class="s6">&quot;The `step` keyword may not be used in conjunction with the &quot;</span>
+                    <span class="s6">&quot;`fid_range` keyword.&quot;</span>
+                <span class="s4">)</span>
+            <span class="s1">beg</span><span class="s4">, </span><span class="s1">num_feat</span><span class="s4">, </span><span class="s1">num_saved </span><span class="s4">= (</span><span class="s5">0</span><span class="s4">, </span><span class="s5">0</span><span class="s4">, </span><span class="s5">0</span><span class="s4">)</span>
+            <span class="s1">indices </span><span class="s4">= </span><span class="s1">range</span><span class="s4">(</span><span class="s1">step</span><span class="s4">, </span><span class="s1">nfeat</span><span class="s4">, </span><span class="s1">step</span><span class="s4">)</span>
+            <span class="s1">n_i </span><span class="s4">= </span><span class="s1">len</span><span class="s4">(</span><span class="s1">indices</span><span class="s4">)</span>
+
+            <span class="s3">for </span><span class="s1">i</span><span class="s4">, </span><span class="s1">end </span><span class="s3">in </span><span class="s1">enumerate</span><span class="s4">(</span><span class="s1">indices</span><span class="s4">):</span>
+                <span class="s0"># Constructing the slice to use for this step; the last slice is</span>
+                <span class="s0"># special (e.g, [100:] instead of [90:100]).</span>
+                <span class="s3">if </span><span class="s1">i </span><span class="s4">+ </span><span class="s5">1 </span><span class="s4">== </span><span class="s1">n_i</span><span class="s4">:</span>
+                    <span class="s1">step_slice </span><span class="s4">= </span><span class="s1">slice</span><span class="s4">(</span><span class="s1">beg</span><span class="s4">, </span><span class="s3">None</span><span class="s4">)</span>
+                <span class="s3">else</span><span class="s4">:</span>
+                    <span class="s1">step_slice </span><span class="s4">= </span><span class="s1">slice</span><span class="s4">(</span><span class="s1">beg</span><span class="s4">, </span><span class="s1">end</span><span class="s4">)</span>
+
+                <span class="s3">try</span><span class="s4">:</span>
+                    <span class="s1">num_feat</span><span class="s4">, </span><span class="s1">num_saved </span><span class="s4">= </span><span class="s1">_save</span><span class="s4">(</span><span class="s1">step_slice</span><span class="s4">, </span><span class="s1">num_feat</span><span class="s4">, </span><span class="s1">num_saved</span><span class="s4">)</span>
+                    <span class="s1">beg </span><span class="s4">= </span><span class="s1">end</span>
+                <span class="s3">except </span><span class="s1">Exception</span><span class="s4">:  </span><span class="s0"># Deliberately catch everything</span>
+                    <span class="s1">stream</span><span class="s4">.</span><span class="s1">write</span><span class="s4">(</span>
+                        <span class="s6">&quot;%s</span><span class="s3">\n</span><span class="s6">Failed to save slice: %s</span><span class="s3">\n</span><span class="s6">&quot; </span><span class="s4">% (</span><span class="s6">&quot;=-&quot; </span><span class="s4">* </span><span class="s5">20</span><span class="s4">, </span><span class="s1">step_slice</span><span class="s4">)</span>
+                    <span class="s4">)</span>
+                    <span class="s3">raise</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s0"># Otherwise, just calling the previously defined _save() function.</span>
+            <span class="s1">_save</span><span class="s4">()</span>
+</pre>
+</body>
+</html>

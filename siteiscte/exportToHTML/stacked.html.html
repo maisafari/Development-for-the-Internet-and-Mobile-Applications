@@ -1,0 +1,49 @@
+<html>
+<head>
+<title>stacked.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #bcbec4;}
+.s1 { color: #d5b778;}
+.s2 { color: #bababa;}
+.s3 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+stacked.html</font>
+</center></td></tr></table>
+<pre><span class="s0">{% load i18n admin_urls %}</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;js-inline-admin-formset inline-group&quot;</span>
+     <span class="s2">id</span><span class="s3">=&quot;{{ inline_admin_formset.formset.prefix }}-group&quot;</span>
+     <span class="s2">data-inline-type</span><span class="s3">=&quot;stacked&quot;</span>
+     <span class="s2">data-inline-formset</span><span class="s3">=&quot;{{ inline_admin_formset.inline_formset_data }}&quot;</span><span class="s1">&gt;</span>
+<span class="s1">&lt;fieldset </span><span class="s2">class</span><span class="s3">=&quot;module {{ inline_admin_formset.classes }}&quot;</span><span class="s1">&gt;</span>
+  <span class="s0">{% if inline_admin_formset.formset.max_num == 1 %}</span>
+    <span class="s1">&lt;h2&gt;</span><span class="s0">{{ inline_admin_formset.opts.verbose_name|capfirst }}</span><span class="s1">&lt;/h2&gt;</span>
+  <span class="s0">{% else %}</span>
+    <span class="s1">&lt;h2&gt;</span><span class="s0">{{ inline_admin_formset.opts.verbose_name_plural|capfirst }}</span><span class="s1">&lt;/h2&gt;</span>
+  <span class="s0">{% endif %}</span>
+<span class="s0">{{ inline_admin_formset.formset.management_form }}</span>
+<span class="s0">{{ inline_admin_formset.formset.non_form_errors }}</span>
+
+<span class="s0">{% for inline_admin_form in inline_admin_formset %}</span><span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;inline-related{% if inline_admin_form.original or inline_admin_form.show_url %} has_original{% endif %}{% if forloop.last and inline_admin_formset.has_add_permission %} empty-form last-related{% endif %}&quot; </span><span class="s2">id</span><span class="s3">=&quot;{{ inline_admin_formset.formset.prefix }}-{% if forloop.last and inline_admin_formset.has_add_permission %}empty{% else %}{{ forloop.counter0 }}{% endif %}&quot;</span><span class="s1">&gt;</span>
+  <span class="s1">&lt;h3&gt;&lt;b&gt;</span><span class="s0">{{ inline_admin_formset.opts.verbose_name|capfirst }}:</span><span class="s1">&lt;/b&gt; &lt;span </span><span class="s2">class</span><span class="s3">=&quot;inline_label&quot;</span><span class="s1">&gt;</span><span class="s0">{% if inline_admin_form.original %}{{ inline_admin_form.original }}{% if inline_admin_form.model_admin.show_change_link and inline_admin_form.model_admin.has_registered_model %} </span><span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url inline_admin_form.model_admin.opts|admin_urlname:'change' inline_admin_form.original.pk|admin_urlquote %}&quot; </span><span class="s2">class</span><span class="s3">=&quot;{{ inline_admin_formset.has_change_permission|yesno:'inlinechangelink,inlineviewlink' }}&quot;</span><span class="s1">&gt;</span><span class="s0">{% if inline_admin_formset.has_change_permission %}{% translate &quot;Change&quot; %}{% else %}{% translate &quot;View&quot; %}{% endif %}</span><span class="s1">&lt;/a&gt;</span><span class="s0">{% endif %}</span>
+<span class="s0">{% else %}#{{ forloop.counter }}{% endif %}</span><span class="s1">&lt;/span&gt;</span>
+      <span class="s0">{% if inline_admin_form.show_url %}</span><span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{{ inline_admin_form.absolute_url }}&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate &quot;View on site&quot; %}</span><span class="s1">&lt;/a&gt;</span><span class="s0">{% endif %}</span>
+    <span class="s0">{% if inline_admin_formset.formset.can_delete and inline_admin_formset.has_delete_permission and inline_admin_form.original %}</span><span class="s1">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;delete&quot;</span><span class="s1">&gt;</span><span class="s0">{{ inline_admin_form.deletion_field.field }} {{ inline_admin_form.deletion_field.label_tag }}</span><span class="s1">&lt;/span&gt;</span><span class="s0">{% endif %}</span>
+  <span class="s1">&lt;/h3&gt;</span>
+  <span class="s0">{% if inline_admin_form.form.non_field_errors %}{{ inline_admin_form.form.non_field_errors }}{% endif %}</span>
+  <span class="s0">{% for fieldset in inline_admin_form %}</span>
+    <span class="s0">{% include &quot;admin/includes/fieldset.html&quot; %}</span>
+  <span class="s0">{% endfor %}</span>
+  <span class="s0">{% if inline_admin_form.needs_explicit_pk_field %}{{ inline_admin_form.pk_field.field }}{% endif %}</span>
+  <span class="s0">{% if inline_admin_form.fk_field %}{{ inline_admin_form.fk_field.field }}{% endif %}</span>
+<span class="s1">&lt;/div&gt;</span><span class="s0">{% endfor %}</span>
+<span class="s1">&lt;/fieldset&gt;</span>
+<span class="s1">&lt;/div&gt;</span>
+</pre>
+</body>
+</html>

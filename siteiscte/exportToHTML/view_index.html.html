@@ -1,0 +1,80 @@
+<html>
+<head>
+<title>view_index.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #bcbec4;}
+.s1 { color: #d5b778;}
+.s2 { color: #bababa;}
+.s3 { color: #6aab73;}
+.s4 { color: #56a8f5;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+view_index.html</font>
+</center></td></tr></table>
+<pre><span class="s0">{% extends &quot;admin/base_site.html&quot; %}</span>
+<span class="s0">{% load i18n %}</span>
+
+<span class="s0">{% block coltype %}colSM{% endblock %}</span>
+<span class="s0">{% block breadcrumbs %}</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;breadcrumbs&quot;</span><span class="s1">&gt;</span>
+<span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url 'admin:index' %}&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'Home' %}</span><span class="s1">&lt;/a&gt;</span>
+<span class="s4">&amp;rsaquo; </span><span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url 'django-admindocs-docroot' %}&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'Documentation' %}</span><span class="s1">&lt;/a&gt;</span>
+<span class="s4">&amp;rsaquo; </span><span class="s0">{% translate 'Views' %}</span>
+<span class="s1">&lt;/div&gt;</span>
+<span class="s0">{% endblock %}</span>
+<span class="s0">{% block title %}{% translate 'Views' %}{% endblock %}</span>
+
+<span class="s0">{% block content %}</span>
+
+<span class="s1">&lt;h1&gt;</span><span class="s0">{% translate 'View documentation' %}</span><span class="s1">&lt;/h1&gt;</span>
+
+<span class="s0">{% regroup views|dictsort:'namespace' by namespace as views_by_ns %}</span>
+
+<span class="s1">&lt;div </span><span class="s2">id</span><span class="s3">=&quot;content-related&quot; </span><span class="s2">class</span><span class="s3">=&quot;sidebar&quot;</span><span class="s1">&gt;</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;module&quot;</span><span class="s1">&gt;</span>
+<span class="s1">&lt;h2&gt;</span><span class="s0">{% translate 'Jump to namespace' %}</span><span class="s1">&lt;/h2&gt;</span>
+<span class="s1">&lt;ul&gt;</span>
+<span class="s0">{% for ns_views in views_by_ns %}</span>
+    <span class="s1">&lt;li&gt;&lt;a </span><span class="s2">href</span><span class="s3">=&quot;#ns|{{ ns_views.grouper }}&quot;</span><span class="s1">&gt;</span>
+    <span class="s0">{% if ns_views.grouper %}{{ ns_views.grouper }}</span>
+    <span class="s0">{% else %}{% translate &quot;Empty namespace&quot; %}{% endif %}</span>
+    <span class="s1">&lt;/a&gt;&lt;/li&gt;</span>
+<span class="s0">{% endfor %}</span>
+<span class="s1">&lt;/ul&gt;</span>
+<span class="s1">&lt;/div&gt;</span>
+<span class="s1">&lt;/div&gt;</span>
+
+<span class="s1">&lt;div </span><span class="s2">id</span><span class="s3">=&quot;content-main&quot;</span><span class="s1">&gt;</span>
+
+<span class="s0">{% for ns_views in views_by_ns %}</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;module&quot;</span><span class="s1">&gt;</span>
+<span class="s1">&lt;h2 </span><span class="s2">id</span><span class="s3">=&quot;ns|{{ ns_views.grouper }}&quot;</span><span class="s1">&gt;</span>
+<span class="s0">{% if ns_views.grouper %}</span>
+    <span class="s0">{% blocktranslate with ns_views.grouper as name %}Views by namespace {{ name }}{% endblocktranslate %}</span>
+<span class="s0">{% else %}</span>
+    <span class="s0">{% blocktranslate %}Views by empty namespace{% endblocktranslate %}</span>
+<span class="s0">{% endif %}</span>
+<span class="s1">&lt;/h2&gt;</span>
+
+<span class="s0">{% for view in ns_views.list|dictsort:&quot;url&quot; %}</span>
+<span class="s0">{% ifchanged %}</span>
+<span class="s1">&lt;h3&gt;&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url 'django-admindocs-views-detail' view=view.full_name %}&quot;</span><span class="s1">&gt;</span><span class="s0">{{ view.url }}</span><span class="s1">&lt;/a&gt;&lt;/h3&gt;</span>
+<span class="s1">&lt;p </span><span class="s2">class</span><span class="s3">=&quot;small quiet&quot;</span><span class="s1">&gt;</span><span class="s0">{% blocktranslate with view.full_name as full_name and view.url_name as url_name %}</span>
+    <span class="s0">View function: </span><span class="s1">&lt;code&gt;</span><span class="s0">{{ full_name }}</span><span class="s1">&lt;/code&gt;</span><span class="s0">. Name: </span><span class="s1">&lt;code&gt;</span><span class="s0">{{ url_name }}</span><span class="s1">&lt;/code&gt;</span><span class="s0">.</span>
+<span class="s0">{% endblocktranslate %}</span><span class="s1">&lt;/p&gt;</span>
+<span class="s1">&lt;p&gt;</span><span class="s0">{{ view.title }}</span><span class="s1">&lt;/p&gt;</span>
+<span class="s1">&lt;hr&gt;</span>
+<span class="s0">{% endifchanged %}</span>
+<span class="s0">{% endfor %}</span>
+<span class="s1">&lt;/div&gt;</span>
+<span class="s0">{% endfor %}</span>
+<span class="s1">&lt;/div&gt;</span>
+<span class="s0">{% endblock %}</span>
+</pre>
+</body>
+</html>

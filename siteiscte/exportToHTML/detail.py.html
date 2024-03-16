@@ -1,0 +1,203 @@
+<html>
+<head>
+<title>detail.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+detail.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">models</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">Http404</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">translation </span><span class="s0">import </span><span class="s1">gettext </span><span class="s0">as </span><span class="s1">_</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">views</span><span class="s2">.</span><span class="s1">generic</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">ContextMixin</span><span class="s2">, </span><span class="s1">TemplateResponseMixin</span><span class="s2">, </span><span class="s1">View</span>
+
+
+<span class="s0">class </span><span class="s1">SingleObjectMixin</span><span class="s2">(</span><span class="s1">ContextMixin</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Provide the ability to retrieve a single object for further manipulation. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">model </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">queryset </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">slug_field </span><span class="s2">= </span><span class="s4">&quot;slug&quot;</span>
+    <span class="s1">context_object_name </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">slug_url_kwarg </span><span class="s2">= </span><span class="s4">&quot;slug&quot;</span>
+    <span class="s1">pk_url_kwarg </span><span class="s2">= </span><span class="s4">&quot;pk&quot;</span>
+    <span class="s1">query_pk_and_slug </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s0">def </span><span class="s1">get_object</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">queryset</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the object the view is displaying. 
+ 
+        Require `self.queryset` and a `pk` or `slug` argument in the URLconf. 
+        Subclasses can override this to return any object. 
+        &quot;&quot;&quot;</span>
+        <span class="s5"># Use a custom queryset if provided; this is required for subclasses</span>
+        <span class="s5"># like DateDetailView</span>
+        <span class="s0">if </span><span class="s1">queryset </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">queryset </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_queryset</span><span class="s2">()</span>
+
+        <span class="s5"># Next, try looking up by primary key.</span>
+        <span class="s1">pk </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">kwargs</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">pk_url_kwarg</span><span class="s2">)</span>
+        <span class="s1">slug </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">kwargs</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">slug_url_kwarg</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">pk </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">queryset </span><span class="s2">= </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">pk</span><span class="s2">=</span><span class="s1">pk</span><span class="s2">)</span>
+
+        <span class="s5"># Next, try looking up by slug.</span>
+        <span class="s0">if </span><span class="s1">slug </span><span class="s0">is not None and </span><span class="s2">(</span><span class="s1">pk </span><span class="s0">is None or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">query_pk_and_slug</span><span class="s2">):</span>
+            <span class="s1">slug_field </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_slug_field</span><span class="s2">()</span>
+            <span class="s1">queryset </span><span class="s2">= </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(**{</span><span class="s1">slug_field</span><span class="s2">: </span><span class="s1">slug</span><span class="s2">})</span>
+
+        <span class="s5"># If none of those are defined, it's an error.</span>
+        <span class="s0">if </span><span class="s1">pk </span><span class="s0">is None and </span><span class="s1">slug </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">AttributeError</span><span class="s2">(</span>
+                <span class="s4">&quot;Generic detail view %s must be called with either an object &quot;</span>
+                <span class="s4">&quot;pk or a slug in the URLconf.&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span>
+            <span class="s2">)</span>
+
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s5"># Get the single item from the filtered queryset</span>
+            <span class="s1">obj </span><span class="s2">= </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">get</span><span class="s2">()</span>
+        <span class="s0">except </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">DoesNotExist</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">Http404</span><span class="s2">(</span>
+                <span class="s1">_</span><span class="s2">(</span><span class="s4">&quot;No %(verbose_name)s found matching the query&quot;</span><span class="s2">)</span>
+                <span class="s2">% {</span><span class="s4">&quot;verbose_name&quot;</span><span class="s2">: </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">verbose_name</span><span class="s2">}</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">obj</span>
+
+    <span class="s0">def </span><span class="s1">get_queryset</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the `QuerySet` that will be used to look up the object. 
+ 
+        This method is called by the default implementation of get_object() and 
+        may not be called if get_object() is overridden. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">queryset </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">.</span><span class="s1">all</span><span class="s2">()</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                    <span class="s4">&quot;%(cls)s is missing a QuerySet. Define &quot;</span>
+                    <span class="s4">&quot;%(cls)s.model, %(cls)s.queryset, or override &quot;</span>
+                    <span class="s4">&quot;%(cls)s.get_queryset().&quot; </span><span class="s2">% {</span><span class="s4">&quot;cls&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">}</span>
+                <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">all</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">get_slug_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Get the name of a slug field to be used to look up by slug.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">slug_field</span>
+
+    <span class="s0">def </span><span class="s1">get_context_object_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Get the name to use for the object.&quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">context_object_name</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">context_object_name</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">Model</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return None</span>
+
+    <span class="s0">def </span><span class="s1">get_context_data</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Insert the single object into the context dict.&quot;&quot;&quot;</span>
+        <span class="s1">context </span><span class="s2">= {}</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">object</span><span class="s2">:</span>
+            <span class="s1">context</span><span class="s2">[</span><span class="s4">&quot;object&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">object</span>
+            <span class="s1">context_object_name </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_context_object_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">object</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">context_object_name</span><span class="s2">:</span>
+                <span class="s1">context</span><span class="s2">[</span><span class="s1">context_object_name</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">object</span>
+        <span class="s1">context</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_context_data</span><span class="s2">(**</span><span class="s1">context</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">BaseDetailView</span><span class="s2">(</span><span class="s1">SingleObjectMixin</span><span class="s2">, </span><span class="s1">View</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;A base view for displaying a single object.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">get</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">object </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_object</span><span class="s2">()</span>
+        <span class="s1">context </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_context_data</span><span class="s2">(</span><span class="s1">object</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">object</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">render_to_response</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">SingleObjectTemplateResponseMixin</span><span class="s2">(</span><span class="s1">TemplateResponseMixin</span><span class="s2">):</span>
+    <span class="s1">template_name_field </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">template_name_suffix </span><span class="s2">= </span><span class="s4">&quot;_detail&quot;</span>
+
+    <span class="s0">def </span><span class="s1">get_template_names</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return a list of template names to be used for the request. May not be 
+        called if render_to_response() is overridden. Return the following list: 
+ 
+        * the value of ``template_name`` on the view (if provided) 
+        * the contents of the ``template_name_field`` field on the 
+          object instance that the view is operating upon (if available) 
+        * ``&lt;app_label&gt;/&lt;model_name&gt;&lt;template_name_suffix&gt;.html`` 
+        &quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">names </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_template_names</span><span class="s2">()</span>
+        <span class="s0">except </span><span class="s1">ImproperlyConfigured</span><span class="s2">:</span>
+            <span class="s5"># If template_name isn't specified, it's not a problem --</span>
+            <span class="s5"># we just start with an empty list.</span>
+            <span class="s1">names </span><span class="s2">= []</span>
+
+            <span class="s5"># If self.template_name_field is set, grab the value of the field</span>
+            <span class="s5"># of that name from the object; this is the most specific template</span>
+            <span class="s5"># name, if given.</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">object </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">template_name_field</span><span class="s2">:</span>
+                <span class="s1">name </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">object</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">template_name_field</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">name</span><span class="s2">:</span>
+                    <span class="s1">names</span><span class="s2">.</span><span class="s1">insert</span><span class="s2">(</span><span class="s6">0</span><span class="s2">, </span><span class="s1">name</span><span class="s2">)</span>
+
+            <span class="s5"># The least-specific option is the default &lt;app&gt;/&lt;model&gt;_detail.html;</span>
+            <span class="s5"># only use this if the object in question is a model.</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">object</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">Model</span><span class="s2">):</span>
+                <span class="s1">object_meta </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">object</span><span class="s2">.</span><span class="s1">_meta</span>
+                <span class="s1">names</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s4">&quot;%s/%s%s.html&quot;</span>
+                    <span class="s2">% (</span>
+                        <span class="s1">object_meta</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">,</span>
+                        <span class="s1">object_meta</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">,</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">template_name_suffix</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+            <span class="s0">elif </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s4">&quot;model&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">) </span><span class="s0">is not None and </span><span class="s1">issubclass</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">Model</span>
+            <span class="s2">):</span>
+                <span class="s1">names</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                    <span class="s4">&quot;%s/%s%s.html&quot;</span>
+                    <span class="s2">% (</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">,</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">,</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">template_name_suffix</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+
+            <span class="s5"># If we still haven't managed to find any template names, we should</span>
+            <span class="s5"># re-raise the ImproperlyConfigured to alert the user.</span>
+            <span class="s0">if not </span><span class="s1">names</span><span class="s2">:</span>
+                <span class="s0">raise</span>
+
+        <span class="s0">return </span><span class="s1">names</span>
+
+
+<span class="s0">class </span><span class="s1">DetailView</span><span class="s2">(</span><span class="s1">SingleObjectTemplateResponseMixin</span><span class="s2">, </span><span class="s1">BaseDetailView</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Render a &quot;detail&quot; view of an object. 
+ 
+    By default this is a model instance looked up from `self.queryset`, but the 
+    view will support display of *any* object by overriding `self.get_object()`. 
+    &quot;&quot;&quot;</span>
+</pre>
+</body>
+</html>

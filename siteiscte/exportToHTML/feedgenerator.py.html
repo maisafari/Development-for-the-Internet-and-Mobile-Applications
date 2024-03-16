@@ -1,0 +1,471 @@
+<html>
+<head>
+<title>feedgenerator.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+feedgenerator.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Syndication feed generation library -- used for generating RSS, etc. 
+ 
+Sample usage: 
+ 
+&gt;&gt;&gt; from django.utils import feedgenerator 
+&gt;&gt;&gt; feed = feedgenerator.Rss201rev2Feed( 
+...     title=&quot;Poynter E-Media Tidbits&quot;, 
+...     link=&quot;http://www.poynter.org/column.asp?id=31&quot;, 
+...     description=&quot;A group blog by the sharpest minds in online journalism.&quot;, 
+...     language=&quot;en&quot;, 
+... ) 
+&gt;&gt;&gt; feed.add_item( 
+...     title=&quot;Hello&quot;, 
+...     link=&quot;http://www.holovaty.com/test/&quot;, 
+...     description=&quot;Testing.&quot; 
+... ) 
+&gt;&gt;&gt; with open('test.rss', 'w') as fp: 
+...     feed.write(fp, 'utf-8') 
+ 
+For definitions of the different versions of RSS, see: 
+https://web.archive.org/web/20110718035220/http://diveintomark.org/archives/2004/02/04/incompatible-rss 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">datetime</span>
+<span class="s2">import </span><span class="s1">email</span>
+<span class="s2">from </span><span class="s1">io </span><span class="s2">import </span><span class="s1">StringIO</span>
+<span class="s2">from </span><span class="s1">urllib</span><span class="s3">.</span><span class="s1">parse </span><span class="s2">import </span><span class="s1">urlparse</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">encoding </span><span class="s2">import </span><span class="s1">iri_to_uri</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">xmlutils </span><span class="s2">import </span><span class="s1">SimplerXMLGenerator</span>
+
+
+<span class="s2">def </span><span class="s1">rfc2822_date</span><span class="s3">(</span><span class="s1">date</span><span class="s3">):</span>
+    <span class="s2">if not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">date</span><span class="s3">, </span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">datetime</span><span class="s3">):</span>
+        <span class="s1">date </span><span class="s3">= </span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">combine</span><span class="s3">(</span><span class="s1">date</span><span class="s3">, </span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">time</span><span class="s3">())</span>
+    <span class="s2">return </span><span class="s1">email</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">format_datetime</span><span class="s3">(</span><span class="s1">date</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">rfc3339_date</span><span class="s3">(</span><span class="s1">date</span><span class="s3">):</span>
+    <span class="s2">if not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">date</span><span class="s3">, </span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">datetime</span><span class="s3">):</span>
+        <span class="s1">date </span><span class="s3">= </span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">combine</span><span class="s3">(</span><span class="s1">date</span><span class="s3">, </span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">time</span><span class="s3">())</span>
+    <span class="s2">return </span><span class="s1">date</span><span class="s3">.</span><span class="s1">isoformat</span><span class="s3">() + (</span><span class="s4">&quot;Z&quot; </span><span class="s2">if </span><span class="s1">date</span><span class="s3">.</span><span class="s1">utcoffset</span><span class="s3">() </span><span class="s2">is None else </span><span class="s4">&quot;&quot;</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">get_tag_uri</span><span class="s3">(</span><span class="s1">url</span><span class="s3">, </span><span class="s1">date</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Create a TagURI. 
+ 
+    See 
+    https://web.archive.org/web/20110514113830/http://diveintomark.org/archives/2004/05/28/howto-atom-id 
+    &quot;&quot;&quot;</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">urlparse</span><span class="s3">(</span><span class="s1">url</span><span class="s3">)</span>
+    <span class="s1">d </span><span class="s3">= </span><span class="s4">&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">date </span><span class="s2">is not None</span><span class="s3">:</span>
+        <span class="s1">d </span><span class="s3">= </span><span class="s4">&quot;,%s&quot; </span><span class="s3">% </span><span class="s1">date</span><span class="s3">.</span><span class="s1">strftime</span><span class="s3">(</span><span class="s4">&quot;%Y-%m-%d&quot;</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s4">&quot;tag:%s%s:%s/%s&quot; </span><span class="s3">% (</span><span class="s1">bits</span><span class="s3">.</span><span class="s1">hostname</span><span class="s3">, </span><span class="s1">d</span><span class="s3">, </span><span class="s1">bits</span><span class="s3">.</span><span class="s1">path</span><span class="s3">, </span><span class="s1">bits</span><span class="s3">.</span><span class="s1">fragment</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">SyndicationFeed</span><span class="s3">:</span>
+    <span class="s0">&quot;Base class for all syndication feeds. Subclasses should provide write()&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">title</span><span class="s3">,</span>
+        <span class="s1">link</span><span class="s3">,</span>
+        <span class="s1">description</span><span class="s3">,</span>
+        <span class="s1">language</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">author_email</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">author_name</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">author_link</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">subtitle</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">categories</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">feed_url</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">feed_copyright</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">feed_guid</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">ttl</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s3">**</span><span class="s1">kwargs</span><span class="s3">,</span>
+    <span class="s3">):</span>
+        <span class="s2">def </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">s</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">str</span><span class="s3">(</span><span class="s1">s</span><span class="s3">) </span><span class="s2">if </span><span class="s1">s </span><span class="s2">is not None else </span><span class="s1">s</span>
+
+        <span class="s1">categories </span><span class="s3">= </span><span class="s1">categories </span><span class="s2">and </span><span class="s3">[</span><span class="s1">str</span><span class="s3">(</span><span class="s1">c</span><span class="s3">) </span><span class="s2">for </span><span class="s1">c </span><span class="s2">in </span><span class="s1">categories</span><span class="s3">]</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">feed </span><span class="s3">= {</span>
+            <span class="s4">&quot;title&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">title</span><span class="s3">),</span>
+            <span class="s4">&quot;link&quot;</span><span class="s3">: </span><span class="s1">iri_to_uri</span><span class="s3">(</span><span class="s1">link</span><span class="s3">),</span>
+            <span class="s4">&quot;description&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">description</span><span class="s3">),</span>
+            <span class="s4">&quot;language&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">language</span><span class="s3">),</span>
+            <span class="s4">&quot;author_email&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">author_email</span><span class="s3">),</span>
+            <span class="s4">&quot;author_name&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">author_name</span><span class="s3">),</span>
+            <span class="s4">&quot;author_link&quot;</span><span class="s3">: </span><span class="s1">iri_to_uri</span><span class="s3">(</span><span class="s1">author_link</span><span class="s3">),</span>
+            <span class="s4">&quot;subtitle&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">subtitle</span><span class="s3">),</span>
+            <span class="s4">&quot;categories&quot;</span><span class="s3">: </span><span class="s1">categories </span><span class="s2">or </span><span class="s3">(),</span>
+            <span class="s4">&quot;feed_url&quot;</span><span class="s3">: </span><span class="s1">iri_to_uri</span><span class="s3">(</span><span class="s1">feed_url</span><span class="s3">),</span>
+            <span class="s4">&quot;feed_copyright&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">feed_copyright</span><span class="s3">),</span>
+            <span class="s4">&quot;id&quot;</span><span class="s3">: </span><span class="s1">feed_guid </span><span class="s2">or </span><span class="s1">link</span><span class="s3">,</span>
+            <span class="s4">&quot;ttl&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">ttl</span><span class="s3">),</span>
+            <span class="s3">**</span><span class="s1">kwargs</span><span class="s3">,</span>
+        <span class="s3">}</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">items </span><span class="s3">= []</span>
+
+    <span class="s2">def </span><span class="s1">add_item</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">title</span><span class="s3">,</span>
+        <span class="s1">link</span><span class="s3">,</span>
+        <span class="s1">description</span><span class="s3">,</span>
+        <span class="s1">author_email</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">author_name</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">author_link</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">pubdate</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">comments</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">unique_id</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">unique_id_is_permalink</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">categories</span><span class="s3">=(),</span>
+        <span class="s1">item_copyright</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">ttl</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">updateddate</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">enclosures</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s3">**</span><span class="s1">kwargs</span><span class="s3">,</span>
+    <span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Add an item to the feed. All args are expected to be strings except 
+        pubdate and updateddate, which are datetime.datetime objects, and 
+        enclosures, which is an iterable of instances of the Enclosure class. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s2">def </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">s</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">str</span><span class="s3">(</span><span class="s1">s</span><span class="s3">) </span><span class="s2">if </span><span class="s1">s </span><span class="s2">is not None else </span><span class="s1">s</span>
+
+        <span class="s1">categories </span><span class="s3">= </span><span class="s1">categories </span><span class="s2">and </span><span class="s3">[</span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">c</span><span class="s3">) </span><span class="s2">for </span><span class="s1">c </span><span class="s2">in </span><span class="s1">categories</span><span class="s3">]</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">items</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span>
+            <span class="s3">{</span>
+                <span class="s4">&quot;title&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">title</span><span class="s3">),</span>
+                <span class="s4">&quot;link&quot;</span><span class="s3">: </span><span class="s1">iri_to_uri</span><span class="s3">(</span><span class="s1">link</span><span class="s3">),</span>
+                <span class="s4">&quot;description&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">description</span><span class="s3">),</span>
+                <span class="s4">&quot;author_email&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">author_email</span><span class="s3">),</span>
+                <span class="s4">&quot;author_name&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">author_name</span><span class="s3">),</span>
+                <span class="s4">&quot;author_link&quot;</span><span class="s3">: </span><span class="s1">iri_to_uri</span><span class="s3">(</span><span class="s1">author_link</span><span class="s3">),</span>
+                <span class="s4">&quot;pubdate&quot;</span><span class="s3">: </span><span class="s1">pubdate</span><span class="s3">,</span>
+                <span class="s4">&quot;updateddate&quot;</span><span class="s3">: </span><span class="s1">updateddate</span><span class="s3">,</span>
+                <span class="s4">&quot;comments&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">comments</span><span class="s3">),</span>
+                <span class="s4">&quot;unique_id&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">unique_id</span><span class="s3">),</span>
+                <span class="s4">&quot;unique_id_is_permalink&quot;</span><span class="s3">: </span><span class="s1">unique_id_is_permalink</span><span class="s3">,</span>
+                <span class="s4">&quot;enclosures&quot;</span><span class="s3">: </span><span class="s1">enclosures </span><span class="s2">or </span><span class="s3">(),</span>
+                <span class="s4">&quot;categories&quot;</span><span class="s3">: </span><span class="s1">categories </span><span class="s2">or </span><span class="s3">(),</span>
+                <span class="s4">&quot;item_copyright&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">item_copyright</span><span class="s3">),</span>
+                <span class="s4">&quot;ttl&quot;</span><span class="s3">: </span><span class="s1">to_str</span><span class="s3">(</span><span class="s1">ttl</span><span class="s3">),</span>
+                <span class="s3">**</span><span class="s1">kwargs</span><span class="s3">,</span>
+            <span class="s3">}</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">num_items</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">items</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">root_attributes</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return extra attributes to place on the root (i.e. feed/channel) element. 
+        Called from write(). 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s3">{}</span>
+
+    <span class="s2">def </span><span class="s1">add_root_elements</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">handler</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Add elements in the root (i.e. feed/channel) element. Called 
+        from write(). 
+        &quot;&quot;&quot;</span>
+        <span class="s2">pass</span>
+
+    <span class="s2">def </span><span class="s1">item_attributes</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">item</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return extra attributes to place on each item (i.e. item/entry) element. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s3">{}</span>
+
+    <span class="s2">def </span><span class="s1">add_item_elements</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">handler</span><span class="s3">, </span><span class="s1">item</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Add elements on each item (i.e. item/entry) element. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">pass</span>
+
+    <span class="s2">def </span><span class="s1">write</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">outfile</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Output the feed in the given encoding to outfile, which is a file-like 
+        object. Subclasses should override this. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError</span><span class="s3">(</span>
+            <span class="s4">&quot;subclasses of SyndicationFeed must provide a write() method&quot;</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">writeString</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the feed in the given encoding as a string. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">s </span><span class="s3">= </span><span class="s1">StringIO</span><span class="s3">()</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">write</span><span class="s3">(</span><span class="s1">s</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">s</span><span class="s3">.</span><span class="s1">getvalue</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">latest_post_date</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the latest item's pubdate or updateddate. If no items 
+        have either of these attributes this return the current UTC date/time. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">latest_date </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s1">date_keys </span><span class="s3">= (</span><span class="s4">&quot;updateddate&quot;</span><span class="s3">, </span><span class="s4">&quot;pubdate&quot;</span><span class="s3">)</span>
+
+        <span class="s2">for </span><span class="s1">item </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">items</span><span class="s3">:</span>
+            <span class="s2">for </span><span class="s1">date_key </span><span class="s2">in </span><span class="s1">date_keys</span><span class="s3">:</span>
+                <span class="s1">item_date </span><span class="s3">= </span><span class="s1">item</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">date_key</span><span class="s3">)</span>
+                <span class="s2">if </span><span class="s1">item_date</span><span class="s3">:</span>
+                    <span class="s2">if </span><span class="s1">latest_date </span><span class="s2">is None or </span><span class="s1">item_date </span><span class="s3">&gt; </span><span class="s1">latest_date</span><span class="s3">:</span>
+                        <span class="s1">latest_date </span><span class="s3">= </span><span class="s1">item_date</span>
+
+        <span class="s2">return </span><span class="s1">latest_date </span><span class="s2">or </span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">now</span><span class="s3">(</span><span class="s1">tz</span><span class="s3">=</span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">timezone</span><span class="s3">.</span><span class="s1">utc</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">Enclosure</span><span class="s3">:</span>
+    <span class="s0">&quot;&quot;&quot;An RSS enclosure&quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">url</span><span class="s3">, </span><span class="s1">length</span><span class="s3">, </span><span class="s1">mime_type</span><span class="s3">):</span>
+        <span class="s0">&quot;All args are expected to be strings&quot;</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">length</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">mime_type </span><span class="s3">= </span><span class="s1">length</span><span class="s3">, </span><span class="s1">mime_type</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">url </span><span class="s3">= </span><span class="s1">iri_to_uri</span><span class="s3">(</span><span class="s1">url</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">RssFeed</span><span class="s3">(</span><span class="s1">SyndicationFeed</span><span class="s3">):</span>
+    <span class="s1">content_type </span><span class="s3">= </span><span class="s4">&quot;application/rss+xml; charset=utf-8&quot;</span>
+
+    <span class="s2">def </span><span class="s1">write</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">outfile</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">):</span>
+        <span class="s1">handler </span><span class="s3">= </span><span class="s1">SimplerXMLGenerator</span><span class="s3">(</span><span class="s1">outfile</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">, </span><span class="s1">short_empty_elements</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">startDocument</span><span class="s3">()</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">startElement</span><span class="s3">(</span><span class="s4">&quot;rss&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">rss_attributes</span><span class="s3">())</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">startElement</span><span class="s3">(</span><span class="s4">&quot;channel&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">root_attributes</span><span class="s3">())</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">add_root_elements</span><span class="s3">(</span><span class="s1">handler</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">write_items</span><span class="s3">(</span><span class="s1">handler</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">endChannelElement</span><span class="s3">(</span><span class="s1">handler</span><span class="s3">)</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">endElement</span><span class="s3">(</span><span class="s4">&quot;rss&quot;</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">rss_attributes</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">{</span>
+            <span class="s4">&quot;version&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_version</span><span class="s3">,</span>
+            <span class="s4">&quot;xmlns:atom&quot;</span><span class="s3">: </span><span class="s4">&quot;http://www.w3.org/2005/Atom&quot;</span><span class="s3">,</span>
+        <span class="s3">}</span>
+
+    <span class="s2">def </span><span class="s1">write_items</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">handler</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">item </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">items</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">startElement</span><span class="s3">(</span><span class="s4">&quot;item&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">item_attributes</span><span class="s3">(</span><span class="s1">item</span><span class="s3">))</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">add_item_elements</span><span class="s3">(</span><span class="s1">handler</span><span class="s3">, </span><span class="s1">item</span><span class="s3">)</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">endElement</span><span class="s3">(</span><span class="s4">&quot;item&quot;</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">add_root_elements</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">handler</span><span class="s3">):</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;title&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;title&quot;</span><span class="s3">])</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;link&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;link&quot;</span><span class="s3">])</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;description&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;description&quot;</span><span class="s3">])</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;feed_url&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span>
+                <span class="s4">&quot;atom:link&quot;</span><span class="s3">, </span><span class="s2">None</span><span class="s3">, {</span><span class="s4">&quot;rel&quot;</span><span class="s3">: </span><span class="s4">&quot;self&quot;</span><span class="s3">, </span><span class="s4">&quot;href&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;feed_url&quot;</span><span class="s3">]}</span>
+            <span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;language&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;language&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;language&quot;</span><span class="s3">])</span>
+        <span class="s2">for </span><span class="s1">cat </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;categories&quot;</span><span class="s3">]:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;category&quot;</span><span class="s3">, </span><span class="s1">cat</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;feed_copyright&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;copyright&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;feed_copyright&quot;</span><span class="s3">])</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;lastBuildDate&quot;</span><span class="s3">, </span><span class="s1">rfc2822_date</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">latest_post_date</span><span class="s3">()))</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;ttl&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;ttl&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;ttl&quot;</span><span class="s3">])</span>
+
+    <span class="s2">def </span><span class="s1">endChannelElement</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">handler</span><span class="s3">):</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">endElement</span><span class="s3">(</span><span class="s4">&quot;channel&quot;</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">RssUserland091Feed</span><span class="s3">(</span><span class="s1">RssFeed</span><span class="s3">):</span>
+    <span class="s1">_version </span><span class="s3">= </span><span class="s4">&quot;0.91&quot;</span>
+
+    <span class="s2">def </span><span class="s1">add_item_elements</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">handler</span><span class="s3">, </span><span class="s1">item</span><span class="s3">):</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;title&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;title&quot;</span><span class="s3">])</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;link&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;link&quot;</span><span class="s3">])</span>
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;description&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;description&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;description&quot;</span><span class="s3">])</span>
+
+
+<span class="s2">class </span><span class="s1">Rss201rev2Feed</span><span class="s3">(</span><span class="s1">RssFeed</span><span class="s3">):</span>
+    <span class="s5"># Spec: https://cyber.harvard.edu/rss/rss.html</span>
+    <span class="s1">_version </span><span class="s3">= </span><span class="s4">&quot;2.0&quot;</span>
+
+    <span class="s2">def </span><span class="s1">add_item_elements</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">handler</span><span class="s3">, </span><span class="s1">item</span><span class="s3">):</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;title&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;title&quot;</span><span class="s3">])</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;link&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;link&quot;</span><span class="s3">])</span>
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;description&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;description&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;description&quot;</span><span class="s3">])</span>
+
+        <span class="s5"># Author information.</span>
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_name&quot;</span><span class="s3">] </span><span class="s2">and </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_email&quot;</span><span class="s3">]:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span>
+                <span class="s4">&quot;author&quot;</span><span class="s3">, </span><span class="s4">&quot;%s (%s)&quot; </span><span class="s3">% (</span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_email&quot;</span><span class="s3">], </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_name&quot;</span><span class="s3">])</span>
+            <span class="s3">)</span>
+        <span class="s2">elif </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_email&quot;</span><span class="s3">]:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;author&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_email&quot;</span><span class="s3">])</span>
+        <span class="s2">elif </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_name&quot;</span><span class="s3">]:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span>
+                <span class="s4">&quot;dc:creator&quot;</span><span class="s3">,</span>
+                <span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_name&quot;</span><span class="s3">],</span>
+                <span class="s3">{</span><span class="s4">&quot;xmlns:dc&quot;</span><span class="s3">: </span><span class="s4">&quot;http://purl.org/dc/elements/1.1/&quot;</span><span class="s3">},</span>
+            <span class="s3">)</span>
+
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;pubdate&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;pubDate&quot;</span><span class="s3">, </span><span class="s1">rfc2822_date</span><span class="s3">(</span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;pubdate&quot;</span><span class="s3">]))</span>
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;comments&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;comments&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;comments&quot;</span><span class="s3">])</span>
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;unique_id&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">guid_attrs </span><span class="s3">= {}</span>
+            <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">item</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;unique_id_is_permalink&quot;</span><span class="s3">), </span><span class="s1">bool</span><span class="s3">):</span>
+                <span class="s1">guid_attrs</span><span class="s3">[</span><span class="s4">&quot;isPermaLink&quot;</span><span class="s3">] = </span><span class="s1">str</span><span class="s3">(</span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;unique_id_is_permalink&quot;</span><span class="s3">]).</span><span class="s1">lower</span><span class="s3">()</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;guid&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;unique_id&quot;</span><span class="s3">], </span><span class="s1">guid_attrs</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;ttl&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;ttl&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;ttl&quot;</span><span class="s3">])</span>
+
+        <span class="s5"># Enclosure.</span>
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;enclosures&quot;</span><span class="s3">]:</span>
+            <span class="s1">enclosures </span><span class="s3">= </span><span class="s1">list</span><span class="s3">(</span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;enclosures&quot;</span><span class="s3">])</span>
+            <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">enclosures</span><span class="s3">) &gt; </span><span class="s6">1</span><span class="s3">:</span>
+                <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span>
+                    <span class="s4">&quot;RSS feed items may only have one enclosure, see &quot;</span>
+                    <span class="s4">&quot;http://www.rssboard.org/rss-profile#element-channel-item-enclosure&quot;</span>
+                <span class="s3">)</span>
+            <span class="s1">enclosure </span><span class="s3">= </span><span class="s1">enclosures</span><span class="s3">[</span><span class="s6">0</span><span class="s3">]</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span>
+                <span class="s4">&quot;enclosure&quot;</span><span class="s3">,</span>
+                <span class="s4">&quot;&quot;</span><span class="s3">,</span>
+                <span class="s3">{</span>
+                    <span class="s4">&quot;url&quot;</span><span class="s3">: </span><span class="s1">enclosure</span><span class="s3">.</span><span class="s1">url</span><span class="s3">,</span>
+                    <span class="s4">&quot;length&quot;</span><span class="s3">: </span><span class="s1">enclosure</span><span class="s3">.</span><span class="s1">length</span><span class="s3">,</span>
+                    <span class="s4">&quot;type&quot;</span><span class="s3">: </span><span class="s1">enclosure</span><span class="s3">.</span><span class="s1">mime_type</span><span class="s3">,</span>
+                <span class="s3">},</span>
+            <span class="s3">)</span>
+
+        <span class="s5"># Categories.</span>
+        <span class="s2">for </span><span class="s1">cat </span><span class="s2">in </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;categories&quot;</span><span class="s3">]:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;category&quot;</span><span class="s3">, </span><span class="s1">cat</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">Atom1Feed</span><span class="s3">(</span><span class="s1">SyndicationFeed</span><span class="s3">):</span>
+    <span class="s5"># Spec: https://tools.ietf.org/html/rfc4287</span>
+    <span class="s1">content_type </span><span class="s3">= </span><span class="s4">&quot;application/atom+xml; charset=utf-8&quot;</span>
+    <span class="s1">ns </span><span class="s3">= </span><span class="s4">&quot;http://www.w3.org/2005/Atom&quot;</span>
+
+    <span class="s2">def </span><span class="s1">write</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">outfile</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">):</span>
+        <span class="s1">handler </span><span class="s3">= </span><span class="s1">SimplerXMLGenerator</span><span class="s3">(</span><span class="s1">outfile</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">, </span><span class="s1">short_empty_elements</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">startDocument</span><span class="s3">()</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">startElement</span><span class="s3">(</span><span class="s4">&quot;feed&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">root_attributes</span><span class="s3">())</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">add_root_elements</span><span class="s3">(</span><span class="s1">handler</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">write_items</span><span class="s3">(</span><span class="s1">handler</span><span class="s3">)</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">endElement</span><span class="s3">(</span><span class="s4">&quot;feed&quot;</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">root_attributes</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;language&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s3">{</span><span class="s4">&quot;xmlns&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">ns</span><span class="s3">, </span><span class="s4">&quot;xml:lang&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;language&quot;</span><span class="s3">]}</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s3">{</span><span class="s4">&quot;xmlns&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">ns</span><span class="s3">}</span>
+
+    <span class="s2">def </span><span class="s1">add_root_elements</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">handler</span><span class="s3">):</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;title&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;title&quot;</span><span class="s3">])</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span>
+            <span class="s4">&quot;link&quot;</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s3">, {</span><span class="s4">&quot;rel&quot;</span><span class="s3">: </span><span class="s4">&quot;alternate&quot;</span><span class="s3">, </span><span class="s4">&quot;href&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;link&quot;</span><span class="s3">]}</span>
+        <span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;feed_url&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span>
+                <span class="s4">&quot;link&quot;</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s3">, {</span><span class="s4">&quot;rel&quot;</span><span class="s3">: </span><span class="s4">&quot;self&quot;</span><span class="s3">, </span><span class="s4">&quot;href&quot;</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;feed_url&quot;</span><span class="s3">]}</span>
+            <span class="s3">)</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;id&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;id&quot;</span><span class="s3">])</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;updated&quot;</span><span class="s3">, </span><span class="s1">rfc3339_date</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">latest_post_date</span><span class="s3">()))</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;author_name&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">startElement</span><span class="s3">(</span><span class="s4">&quot;author&quot;</span><span class="s3">, {})</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;name&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;author_name&quot;</span><span class="s3">])</span>
+            <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;author_email&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+                <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;email&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;author_email&quot;</span><span class="s3">])</span>
+            <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;author_link&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+                <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;uri&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;author_link&quot;</span><span class="s3">])</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">endElement</span><span class="s3">(</span><span class="s4">&quot;author&quot;</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;subtitle&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;subtitle&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;subtitle&quot;</span><span class="s3">])</span>
+        <span class="s2">for </span><span class="s1">cat </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;categories&quot;</span><span class="s3">]:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;category&quot;</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s3">, {</span><span class="s4">&quot;term&quot;</span><span class="s3">: </span><span class="s1">cat</span><span class="s3">})</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;feed_copyright&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;rights&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">feed</span><span class="s3">[</span><span class="s4">&quot;feed_copyright&quot;</span><span class="s3">])</span>
+
+    <span class="s2">def </span><span class="s1">write_items</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">handler</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">item </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">items</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">startElement</span><span class="s3">(</span><span class="s4">&quot;entry&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">item_attributes</span><span class="s3">(</span><span class="s1">item</span><span class="s3">))</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">add_item_elements</span><span class="s3">(</span><span class="s1">handler</span><span class="s3">, </span><span class="s1">item</span><span class="s3">)</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">endElement</span><span class="s3">(</span><span class="s4">&quot;entry&quot;</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">add_item_elements</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">handler</span><span class="s3">, </span><span class="s1">item</span><span class="s3">):</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;title&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;title&quot;</span><span class="s3">])</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;link&quot;</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s3">, {</span><span class="s4">&quot;href&quot;</span><span class="s3">: </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;link&quot;</span><span class="s3">], </span><span class="s4">&quot;rel&quot;</span><span class="s3">: </span><span class="s4">&quot;alternate&quot;</span><span class="s3">})</span>
+
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;pubdate&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;published&quot;</span><span class="s3">, </span><span class="s1">rfc3339_date</span><span class="s3">(</span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;pubdate&quot;</span><span class="s3">]))</span>
+
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;updateddate&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;updated&quot;</span><span class="s3">, </span><span class="s1">rfc3339_date</span><span class="s3">(</span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;updateddate&quot;</span><span class="s3">]))</span>
+
+        <span class="s5"># Author information.</span>
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_name&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">startElement</span><span class="s3">(</span><span class="s4">&quot;author&quot;</span><span class="s3">, {})</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;name&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_name&quot;</span><span class="s3">])</span>
+            <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_email&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+                <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;email&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_email&quot;</span><span class="s3">])</span>
+            <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_link&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+                <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;uri&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;author_link&quot;</span><span class="s3">])</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">endElement</span><span class="s3">(</span><span class="s4">&quot;author&quot;</span><span class="s3">)</span>
+
+        <span class="s5"># Unique ID.</span>
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;unique_id&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">unique_id </span><span class="s3">= </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;unique_id&quot;</span><span class="s3">]</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">unique_id </span><span class="s3">= </span><span class="s1">get_tag_uri</span><span class="s3">(</span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;link&quot;</span><span class="s3">], </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;pubdate&quot;</span><span class="s3">])</span>
+        <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;id&quot;</span><span class="s3">, </span><span class="s1">unique_id</span><span class="s3">)</span>
+
+        <span class="s5"># Summary.</span>
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;description&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;summary&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;description&quot;</span><span class="s3">], {</span><span class="s4">&quot;type&quot;</span><span class="s3">: </span><span class="s4">&quot;html&quot;</span><span class="s3">})</span>
+
+        <span class="s5"># Enclosures.</span>
+        <span class="s2">for </span><span class="s1">enclosure </span><span class="s2">in </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;enclosures&quot;</span><span class="s3">]:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span>
+                <span class="s4">&quot;link&quot;</span><span class="s3">,</span>
+                <span class="s4">&quot;&quot;</span><span class="s3">,</span>
+                <span class="s3">{</span>
+                    <span class="s4">&quot;rel&quot;</span><span class="s3">: </span><span class="s4">&quot;enclosure&quot;</span><span class="s3">,</span>
+                    <span class="s4">&quot;href&quot;</span><span class="s3">: </span><span class="s1">enclosure</span><span class="s3">.</span><span class="s1">url</span><span class="s3">,</span>
+                    <span class="s4">&quot;length&quot;</span><span class="s3">: </span><span class="s1">enclosure</span><span class="s3">.</span><span class="s1">length</span><span class="s3">,</span>
+                    <span class="s4">&quot;type&quot;</span><span class="s3">: </span><span class="s1">enclosure</span><span class="s3">.</span><span class="s1">mime_type</span><span class="s3">,</span>
+                <span class="s3">},</span>
+            <span class="s3">)</span>
+
+        <span class="s5"># Categories.</span>
+        <span class="s2">for </span><span class="s1">cat </span><span class="s2">in </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;categories&quot;</span><span class="s3">]:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;category&quot;</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s3">, {</span><span class="s4">&quot;term&quot;</span><span class="s3">: </span><span class="s1">cat</span><span class="s3">})</span>
+
+        <span class="s5"># Rights.</span>
+        <span class="s2">if </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;item_copyright&quot;</span><span class="s3">] </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">handler</span><span class="s3">.</span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s4">&quot;rights&quot;</span><span class="s3">, </span><span class="s1">item</span><span class="s3">[</span><span class="s4">&quot;item_copyright&quot;</span><span class="s3">])</span>
+
+
+<span class="s5"># This isolates the decision of what the system default is, so calling code can</span>
+<span class="s5"># do &quot;feedgenerator.DefaultFeed&quot; instead of &quot;feedgenerator.Rss201rev2Feed&quot;.</span>
+<span class="s1">DefaultFeed </span><span class="s3">= </span><span class="s1">Rss201rev2Feed</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<html>
+<head>
+<title>ds.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+ds.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+ This module houses the ctypes function prototypes for OGR DataSource 
+ related data structures. OGR_Dr_*, OGR_DS_*, OGR_L_*, OGR_F_*, 
+ OGR_Fld_* routines are relevant here. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">POINTER</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">c_long</span><span class="s3">, </span><span class="s1">c_void_p</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">envelope </span><span class="s2">import </span><span class="s1">OGREnvelope</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">libgdal </span><span class="s2">import </span><span class="s1">lgdal</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">prototypes</span><span class="s3">.</span><span class="s1">generation </span><span class="s2">import </span><span class="s3">(</span>
+    <span class="s1">bool_output</span><span class="s3">,</span>
+    <span class="s1">const_string_output</span><span class="s3">,</span>
+    <span class="s1">double_output</span><span class="s3">,</span>
+    <span class="s1">geom_output</span><span class="s3">,</span>
+    <span class="s1">int64_output</span><span class="s3">,</span>
+    <span class="s1">int_output</span><span class="s3">,</span>
+    <span class="s1">srs_output</span><span class="s3">,</span>
+    <span class="s1">void_output</span><span class="s3">,</span>
+    <span class="s1">voidptr_output</span><span class="s3">,</span>
+<span class="s3">)</span>
+
+<span class="s1">c_int_p </span><span class="s3">= </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_int</span><span class="s3">)  </span><span class="s4"># shortcut type</span>
+
+<span class="s4"># Driver Routines</span>
+<span class="s1">register_all </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGRRegisterAll</span><span class="s3">, [], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s1">cleanup_all </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGRCleanupAll</span><span class="s3">, [], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s1">get_driver </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGRGetDriver</span><span class="s3">, [</span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">get_driver_by_name </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span>
+    <span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGRGetDriverByName</span><span class="s3">, [</span><span class="s1">c_char_p</span><span class="s3">], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span>
+<span class="s3">)</span>
+<span class="s1">get_driver_count </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGRGetDriverCount</span><span class="s3">, [])</span>
+<span class="s1">get_driver_name </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span>
+    <span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_Dr_GetName</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">], </span><span class="s1">decoding</span><span class="s3">=</span><span class="s5">&quot;ascii&quot;</span>
+<span class="s3">)</span>
+
+<span class="s4"># DataSource</span>
+<span class="s1">open_ds </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGROpen</span><span class="s3">, [</span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_void_p</span><span class="s3">)])</span>
+<span class="s1">destroy_ds </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_DS_Destroy</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s1">release_ds </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGRReleaseDataSource</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_ds_name </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_DS_GetName</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_layer </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_DS_GetLayer</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">get_layer_by_name </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_DS_GetLayerByName</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">])</span>
+<span class="s1">get_layer_count </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_DS_GetLayerCount</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+
+<span class="s4"># Layer Routines</span>
+<span class="s1">get_extent </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_L_GetExtent</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">OGREnvelope</span><span class="s3">), </span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">get_feature </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_L_GetFeature</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_long</span><span class="s3">])</span>
+<span class="s1">get_feature_count </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_L_GetFeatureCount</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">get_layer_defn </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_L_GetLayerDefn</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_layer_srs </span><span class="s3">= </span><span class="s1">srs_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_L_GetSpatialRef</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_next_feature </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_L_GetNextFeature</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">reset_reading </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_L_ResetReading</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s1">test_capability </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_L_TestCapability</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">])</span>
+<span class="s1">get_spatial_filter </span><span class="s3">= </span><span class="s1">geom_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_L_GetSpatialFilter</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">set_spatial_filter </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span>
+    <span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_L_SetSpatialFilter</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_void_p</span><span class="s3">], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span>
+<span class="s3">)</span>
+<span class="s1">set_spatial_filter_rect </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span>
+    <span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_L_SetSpatialFilterRect</span><span class="s3">,</span>
+    <span class="s3">[</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">],</span>
+    <span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span><span class="s3">,</span>
+<span class="s3">)</span>
+
+<span class="s4"># Feature Definition Routines</span>
+<span class="s1">get_fd_geom_type </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_FD_GetGeomType</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_fd_name </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_FD_GetName</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_feat_name </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_FD_GetName</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_field_count </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_FD_GetFieldCount</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_field_defn </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_FD_GetFieldDefn</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">])</span>
+
+<span class="s4"># Feature Routines</span>
+<span class="s1">clone_feature </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_Clone</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">destroy_feature </span><span class="s3">= </span><span class="s1">void_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_Destroy</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">], </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s1">feature_equal </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_Equal</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_feat_geom_ref </span><span class="s3">= </span><span class="s1">geom_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_GetGeometryRef</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_feat_field_count </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_GetFieldCount</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_feat_field_defn </span><span class="s3">= </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_GetFieldDefnRef</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">get_fid </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_GetFID</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_field_as_datetime </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span>
+    <span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_GetFieldAsDateTime</span><span class="s3">,</span>
+    <span class="s3">[</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">c_int_p</span><span class="s3">, </span><span class="s1">c_int_p</span><span class="s3">, </span><span class="s1">c_int_p</span><span class="s3">, </span><span class="s1">c_int_p</span><span class="s3">, </span><span class="s1">c_int_p</span><span class="s3">, </span><span class="s1">c_int_p</span><span class="s3">],</span>
+<span class="s3">)</span>
+<span class="s1">get_field_as_double </span><span class="s3">= </span><span class="s1">double_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_GetFieldAsDouble</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">get_field_as_integer </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_GetFieldAsInteger</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">get_field_as_integer64 </span><span class="s3">= </span><span class="s1">int64_output</span><span class="s3">(</span>
+    <span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_GetFieldAsInteger64</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">is_field_set </span><span class="s3">= </span><span class="s1">bool_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_IsFieldSetAndNotNull</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">get_field_as_string </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span>
+    <span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_GetFieldAsString</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">get_field_index </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_F_GetFieldIndex</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">])</span>
+
+<span class="s4"># Field Routines</span>
+<span class="s1">get_field_name </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_Fld_GetNameRef</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_field_precision </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_Fld_GetPrecision</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_field_type </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_Fld_GetType</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+<span class="s1">get_field_type_name </span><span class="s3">= </span><span class="s1">const_string_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_GetFieldTypeName</span><span class="s3">, [</span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">get_field_width </span><span class="s3">= </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">lgdal</span><span class="s3">.</span><span class="s1">OGR_Fld_GetWidth</span><span class="s3">, [</span><span class="s1">c_void_p</span><span class="s3">])</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<html>
+<head>
+<title>testserver.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+testserver.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management </span><span class="s0">import </span><span class="s1">call_command</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">connection</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= </span><span class="s3">&quot;Runs a development server with data from the given fixture(s).&quot;</span>
+
+    <span class="s1">requires_system_checks </span><span class="s2">= []</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;args&quot;</span><span class="s2">,</span>
+            <span class="s1">metavar</span><span class="s2">=</span><span class="s3">&quot;fixture&quot;</span><span class="s2">,</span>
+            <span class="s1">nargs</span><span class="s2">=</span><span class="s3">&quot;*&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Path(s) to fixtures to load before running the server.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--noinput&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--no-input&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_false&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;interactive&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Tells Django to NOT prompt the user for input of any kind.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--addrport&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s3">&quot;&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Port number or ipaddr:port to run the server on.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--ipv6&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;-6&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;use_ipv6&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Tells Django to use an IPv6 address.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">fixture_labels</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">verbosity </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;verbosity&quot;</span><span class="s2">]</span>
+        <span class="s1">interactive </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;interactive&quot;</span><span class="s2">]</span>
+
+        <span class="s4"># Create a test database.</span>
+        <span class="s1">db_name </span><span class="s2">= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">creation</span><span class="s2">.</span><span class="s1">create_test_db</span><span class="s2">(</span>
+            <span class="s1">verbosity</span><span class="s2">=</span><span class="s1">verbosity</span><span class="s2">, </span><span class="s1">autoclobber</span><span class="s2">=</span><span class="s0">not </span><span class="s1">interactive</span><span class="s2">, </span><span class="s1">serialize</span><span class="s2">=</span><span class="s0">False</span>
+        <span class="s2">)</span>
+
+        <span class="s4"># Import the fixture data into the test database.</span>
+        <span class="s1">call_command</span><span class="s2">(</span><span class="s3">&quot;loaddata&quot;</span><span class="s2">, *</span><span class="s1">fixture_labels</span><span class="s2">, </span><span class="s1">verbosity</span><span class="s2">=</span><span class="s1">verbosity</span><span class="s2">)</span>
+
+        <span class="s4"># Run the development server. Turn off auto-reloading because it causes</span>
+        <span class="s4"># a strange error -- it causes this handle() method to be called</span>
+        <span class="s4"># multiple times.</span>
+        <span class="s1">shutdown_message </span><span class="s2">= (</span>
+            <span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">Server stopped.</span><span class="s0">\n</span><span class="s3">Note that the test database, %r, has not been &quot;</span>
+            <span class="s3">&quot;deleted. You can explore it on your own.&quot; </span><span class="s2">% </span><span class="s1">db_name</span>
+        <span class="s2">)</span>
+        <span class="s1">use_threading </span><span class="s2">= </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">features</span><span class="s2">.</span><span class="s1">test_db_allows_multiple_connections</span>
+        <span class="s1">call_command</span><span class="s2">(</span>
+            <span class="s3">&quot;runserver&quot;</span><span class="s2">,</span>
+            <span class="s1">addrport</span><span class="s2">=</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;addrport&quot;</span><span class="s2">],</span>
+            <span class="s1">shutdown_message</span><span class="s2">=</span><span class="s1">shutdown_message</span><span class="s2">,</span>
+            <span class="s1">use_reloader</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+            <span class="s1">use_ipv6</span><span class="s2">=</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;use_ipv6&quot;</span><span class="s2">],</span>
+            <span class="s1">use_threading</span><span class="s2">=</span><span class="s1">use_threading</span><span class="s2">,</span>
+        <span class="s2">)</span>
+</pre>
+</body>
+</html>

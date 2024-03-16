@@ -1,0 +1,163 @@
+<html>
+<head>
+<title>libgdal.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #5f826b; font-style: italic;}
+.s6 { color: #a5c261;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+libgdal.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">logging</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">re</span>
+<span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">CDLL</span><span class="s2">, </span><span class="s1">CFUNCTYPE</span><span class="s2">, </span><span class="s1">c_char_p</span><span class="s2">, </span><span class="s1">c_int</span>
+<span class="s0">from </span><span class="s1">ctypes</span><span class="s2">.</span><span class="s1">util </span><span class="s0">import </span><span class="s1">find_library</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">error </span><span class="s0">import </span><span class="s1">GDALException</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span>
+
+<span class="s1">logger </span><span class="s2">= </span><span class="s1">logging</span><span class="s2">.</span><span class="s1">getLogger</span><span class="s2">(</span><span class="s3">&quot;django.contrib.gis&quot;</span><span class="s2">)</span>
+
+<span class="s4"># Custom library path set?</span>
+<span class="s0">try</span><span class="s2">:</span>
+    <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+
+    <span class="s1">lib_path </span><span class="s2">= </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">GDAL_LIBRARY_PATH</span>
+<span class="s0">except </span><span class="s2">(</span><span class="s1">AttributeError</span><span class="s2">, </span><span class="s1">ImportError</span><span class="s2">, </span><span class="s1">ImproperlyConfigured</span><span class="s2">, </span><span class="s1">OSError</span><span class="s2">):</span>
+    <span class="s1">lib_path </span><span class="s2">= </span><span class="s0">None</span>
+
+<span class="s0">if </span><span class="s1">lib_path</span><span class="s2">:</span>
+    <span class="s1">lib_names </span><span class="s2">= </span><span class="s0">None</span>
+<span class="s0">elif </span><span class="s1">os</span><span class="s2">.</span><span class="s1">name </span><span class="s2">== </span><span class="s3">&quot;nt&quot;</span><span class="s2">:</span>
+    <span class="s4"># Windows NT shared libraries</span>
+    <span class="s1">lib_names </span><span class="s2">= [</span>
+        <span class="s3">&quot;gdal307&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal306&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal305&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal304&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal303&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal302&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal301&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal300&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal204&quot;</span><span class="s2">,</span>
+    <span class="s2">]</span>
+<span class="s0">elif </span><span class="s1">os</span><span class="s2">.</span><span class="s1">name </span><span class="s2">== </span><span class="s3">&quot;posix&quot;</span><span class="s2">:</span>
+    <span class="s4"># *NIX library names.</span>
+    <span class="s1">lib_names </span><span class="s2">= [</span>
+        <span class="s3">&quot;gdal&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;GDAL&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal3.7.0&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal3.6.0&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal3.5.0&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal3.4.0&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal3.3.0&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal3.2.0&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal3.1.0&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal3.0.0&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;gdal2.4.0&quot;</span><span class="s2">,</span>
+    <span class="s2">]</span>
+<span class="s0">else</span><span class="s2">:</span>
+    <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span><span class="s3">'GDAL is unsupported on OS &quot;%s&quot;.' </span><span class="s2">% </span><span class="s1">os</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+
+<span class="s4"># Using the ctypes `find_library` utility  to find the</span>
+<span class="s4"># path to the GDAL library from the list of library names.</span>
+<span class="s0">if </span><span class="s1">lib_names</span><span class="s2">:</span>
+    <span class="s0">for </span><span class="s1">lib_name </span><span class="s0">in </span><span class="s1">lib_names</span><span class="s2">:</span>
+        <span class="s1">lib_path </span><span class="s2">= </span><span class="s1">find_library</span><span class="s2">(</span><span class="s1">lib_name</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">lib_path </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">break</span>
+
+<span class="s0">if </span><span class="s1">lib_path </span><span class="s0">is None</span><span class="s2">:</span>
+    <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+        <span class="s3">'Could not find the GDAL library (tried &quot;%s&quot;). Is GDAL installed? '</span>
+        <span class="s3">&quot;If it is, try setting GDAL_LIBRARY_PATH in your settings.&quot;</span>
+        <span class="s2">% </span><span class="s3">'&quot;, &quot;'</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">lib_names</span><span class="s2">)</span>
+    <span class="s2">)</span>
+
+<span class="s4"># This loads the GDAL/OGR C library</span>
+<span class="s1">lgdal </span><span class="s2">= </span><span class="s1">CDLL</span><span class="s2">(</span><span class="s1">lib_path</span><span class="s2">)</span>
+
+<span class="s4"># On Windows, the GDAL binaries have some OSR routines exported with</span>
+<span class="s4"># STDCALL, while others are not.  Thus, the library will also need to</span>
+<span class="s4"># be loaded up as WinDLL for said OSR functions that require the</span>
+<span class="s4"># different calling convention.</span>
+<span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">name </span><span class="s2">== </span><span class="s3">&quot;nt&quot;</span><span class="s2">:</span>
+    <span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">WinDLL</span>
+
+    <span class="s1">lwingdal </span><span class="s2">= </span><span class="s1">WinDLL</span><span class="s2">(</span><span class="s1">lib_path</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">std_call</span><span class="s2">(</span><span class="s1">func</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Return the correct STDCALL function for certain OSR routines on Win32 
+    platforms. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">name </span><span class="s2">== </span><span class="s3">&quot;nt&quot;</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">lwingdal</span><span class="s2">[</span><span class="s1">func</span><span class="s2">]</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">lgdal</span><span class="s2">[</span><span class="s1">func</span><span class="s2">]</span>
+
+
+<span class="s4"># #### Version-information functions. ####</span>
+
+<span class="s4"># Return GDAL library version information with the given key.</span>
+<span class="s1">_version_info </span><span class="s2">= </span><span class="s1">std_call</span><span class="s2">(</span><span class="s3">&quot;GDALVersionInfo&quot;</span><span class="s2">)</span>
+<span class="s1">_version_info</span><span class="s2">.</span><span class="s1">argtypes </span><span class="s2">= [</span><span class="s1">c_char_p</span><span class="s2">]</span>
+<span class="s1">_version_info</span><span class="s2">.</span><span class="s1">restype </span><span class="s2">= </span><span class="s1">c_char_p</span>
+
+
+<span class="s0">def </span><span class="s1">gdal_version</span><span class="s2">():</span>
+    <span class="s5">&quot;Return only the GDAL version number information.&quot;</span>
+    <span class="s0">return </span><span class="s1">_version_info</span><span class="s2">(</span><span class="s6">b&quot;RELEASE_NAME&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">gdal_full_version</span><span class="s2">():</span>
+    <span class="s5">&quot;Return the full GDAL version information.&quot;</span>
+    <span class="s0">return </span><span class="s1">_version_info</span><span class="s2">(</span><span class="s6">b&quot;&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">gdal_version_info</span><span class="s2">():</span>
+    <span class="s1">ver </span><span class="s2">= </span><span class="s1">gdal_version</span><span class="s2">()</span>
+    <span class="s1">m </span><span class="s2">= </span><span class="s1">re</span><span class="s2">.</span><span class="s1">match</span><span class="s2">(</span><span class="s6">rb&quot;^(?P&lt;major&gt;\d+)\.(?P&lt;minor&gt;\d+)(?:\.(?P&lt;subminor&gt;\d+))?&quot;</span><span class="s2">, </span><span class="s1">ver</span><span class="s2">)</span>
+    <span class="s0">if not </span><span class="s1">m</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">GDALException</span><span class="s2">(</span><span class="s3">'Could not parse GDAL version string &quot;%s&quot;' </span><span class="s2">% </span><span class="s1">ver</span><span class="s2">)</span>
+    <span class="s1">major</span><span class="s2">, </span><span class="s1">minor</span><span class="s2">, </span><span class="s1">subminor </span><span class="s2">= </span><span class="s1">m</span><span class="s2">.</span><span class="s1">groups</span><span class="s2">()</span>
+    <span class="s0">return </span><span class="s2">(</span><span class="s1">int</span><span class="s2">(</span><span class="s1">major</span><span class="s2">), </span><span class="s1">int</span><span class="s2">(</span><span class="s1">minor</span><span class="s2">), </span><span class="s1">subminor </span><span class="s0">and </span><span class="s1">int</span><span class="s2">(</span><span class="s1">subminor</span><span class="s2">))</span>
+
+
+<span class="s1">GDAL_VERSION </span><span class="s2">= </span><span class="s1">gdal_version_info</span><span class="s2">()</span>
+
+<span class="s4"># Set library error handling so as errors are logged</span>
+<span class="s1">CPLErrorHandler </span><span class="s2">= </span><span class="s1">CFUNCTYPE</span><span class="s2">(</span><span class="s0">None</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s1">c_int</span><span class="s2">, </span><span class="s1">c_char_p</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">err_handler</span><span class="s2">(</span><span class="s1">error_class</span><span class="s2">, </span><span class="s1">error_number</span><span class="s2">, </span><span class="s1">message</span><span class="s2">):</span>
+    <span class="s1">logger</span><span class="s2">.</span><span class="s1">error</span><span class="s2">(</span><span class="s3">&quot;GDAL_ERROR %d: %s&quot;</span><span class="s2">, </span><span class="s1">error_number</span><span class="s2">, </span><span class="s1">message</span><span class="s2">)</span>
+
+
+<span class="s1">err_handler </span><span class="s2">= </span><span class="s1">CPLErrorHandler</span><span class="s2">(</span><span class="s1">err_handler</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">function</span><span class="s2">(</span><span class="s1">name</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">restype</span><span class="s2">):</span>
+    <span class="s1">func </span><span class="s2">= </span><span class="s1">std_call</span><span class="s2">(</span><span class="s1">name</span><span class="s2">)</span>
+    <span class="s1">func</span><span class="s2">.</span><span class="s1">argtypes </span><span class="s2">= </span><span class="s1">args</span>
+    <span class="s1">func</span><span class="s2">.</span><span class="s1">restype </span><span class="s2">= </span><span class="s1">restype</span>
+    <span class="s0">return </span><span class="s1">func</span>
+
+
+<span class="s1">set_error_handler </span><span class="s2">= </span><span class="s1">function</span><span class="s2">(</span><span class="s3">&quot;CPLSetErrorHandler&quot;</span><span class="s2">, [</span><span class="s1">CPLErrorHandler</span><span class="s2">], </span><span class="s1">CPLErrorHandler</span><span class="s2">)</span>
+<span class="s1">set_error_handler</span><span class="s2">(</span><span class="s1">err_handler</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

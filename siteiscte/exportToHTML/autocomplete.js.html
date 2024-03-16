@@ -1,0 +1,54 @@
+<html>
+<head>
+<title>autocomplete.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #6aab73;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #cf8e6d;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+autocomplete.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+<span class="s1">{</span>
+    <span class="s3">const </span><span class="s2">$ </span><span class="s1">= </span><span class="s2">django</span><span class="s1">.</span><span class="s2">jQuery</span><span class="s1">;</span>
+
+    <span class="s2">$</span><span class="s1">.</span><span class="s2">fn</span><span class="s1">.</span><span class="s2">djangoAdminSelect2 </span><span class="s1">= </span><span class="s3">function</span><span class="s1">() {</span>
+        <span class="s2">$</span><span class="s1">.</span><span class="s2">each</span><span class="s1">(</span><span class="s3">this</span><span class="s1">, </span><span class="s3">function</span><span class="s1">(</span><span class="s2">i</span><span class="s1">, </span><span class="s2">element</span><span class="s1">) {</span>
+            <span class="s2">$</span><span class="s1">(</span><span class="s2">element</span><span class="s1">).</span><span class="s2">select2</span><span class="s1">({</span>
+                <span class="s2">ajax</span><span class="s1">: {</span>
+                    <span class="s2">data</span><span class="s1">: (</span><span class="s2">params</span><span class="s1">) =&gt; {</span>
+                        <span class="s3">return </span><span class="s1">{</span>
+                            <span class="s2">term</span><span class="s1">: </span><span class="s2">params</span><span class="s1">.</span><span class="s2">term</span><span class="s1">,</span>
+                            <span class="s2">page</span><span class="s1">: </span><span class="s2">params</span><span class="s1">.</span><span class="s2">page</span><span class="s1">,</span>
+                            <span class="s2">app_label</span><span class="s1">: </span><span class="s2">element</span><span class="s1">.</span><span class="s2">dataset</span><span class="s1">.</span><span class="s2">appLabel</span><span class="s1">,</span>
+                            <span class="s2">model_name</span><span class="s1">: </span><span class="s2">element</span><span class="s1">.</span><span class="s2">dataset</span><span class="s1">.</span><span class="s2">modelName</span><span class="s1">,</span>
+                            <span class="s2">field_name</span><span class="s1">: </span><span class="s2">element</span><span class="s1">.</span><span class="s2">dataset</span><span class="s1">.</span><span class="s2">fieldName</span>
+                        <span class="s1">};</span>
+                    <span class="s1">}</span>
+                <span class="s1">}</span>
+            <span class="s1">});</span>
+        <span class="s1">});</span>
+        <span class="s3">return this</span><span class="s1">;</span>
+    <span class="s1">};</span>
+
+    <span class="s2">$</span><span class="s1">(</span><span class="s3">function</span><span class="s1">() {</span>
+        <span class="s4">// Initialize all autocomplete widgets except the one in the template</span>
+        <span class="s4">// form used when a new formset is added.</span>
+        <span class="s2">$</span><span class="s1">(</span><span class="s0">'.admin-autocomplete'</span><span class="s1">).</span><span class="s2">not</span><span class="s1">(</span><span class="s0">'[name*=__prefix__]'</span><span class="s1">).</span><span class="s2">djangoAdminSelect2</span><span class="s1">();</span>
+    <span class="s1">});</span>
+
+    <span class="s2">document</span><span class="s1">.</span><span class="s2">addEventListener</span><span class="s1">(</span><span class="s0">'formset:added'</span><span class="s1">, (</span><span class="s2">event</span><span class="s1">) =&gt; {</span>
+        <span class="s2">$</span><span class="s1">(</span><span class="s2">event</span><span class="s1">.</span><span class="s2">target</span><span class="s1">).</span><span class="s2">find</span><span class="s1">(</span><span class="s0">'.admin-autocomplete'</span><span class="s1">).</span><span class="s2">djangoAdminSelect2</span><span class="s1">();</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

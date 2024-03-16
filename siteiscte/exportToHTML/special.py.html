@@ -1,0 +1,231 @@
+<html>
+<head>
+<title>special.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+special.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">router</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">Operation</span>
+
+
+<span class="s0">class </span><span class="s1">SeparateDatabaseAndState</span><span class="s2">(</span><span class="s1">Operation</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Take two lists of operations - ones that will be used for the database, 
+    and ones that will be used for the state change. This allows operations 
+    that don't support state change to have it applied, or have operations 
+    that affect the state or not the database, or so on. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">serialization_expand_args </span><span class="s2">= [</span><span class="s4">&quot;database_operations&quot;</span><span class="s2">, </span><span class="s4">&quot;state_operations&quot;</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">database_operations</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">state_operations</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">database_operations </span><span class="s2">= </span><span class="s1">database_operations </span><span class="s0">or </span><span class="s2">[]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">state_operations </span><span class="s2">= </span><span class="s1">state_operations </span><span class="s0">or </span><span class="s2">[]</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">kwargs </span><span class="s2">= {}</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">database_operations</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s4">&quot;database_operations&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">database_operations</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">state_operations</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s4">&quot;state_operations&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">state_operations</span>
+        <span class="s0">return </span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s2">, [], </span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">state_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">state</span><span class="s2">):</span>
+        <span class="s0">for </span><span class="s1">state_operation </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">state_operations</span><span class="s2">:</span>
+            <span class="s1">state_operation</span><span class="s2">.</span><span class="s1">state_forwards</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">state</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s5"># We calculate state separately in here since our state functions aren't useful</span>
+        <span class="s0">for </span><span class="s1">database_operation </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">database_operations</span><span class="s2">:</span>
+            <span class="s1">to_state </span><span class="s2">= </span><span class="s1">from_state</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">()</span>
+            <span class="s1">database_operation</span><span class="s2">.</span><span class="s1">state_forwards</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">)</span>
+            <span class="s1">database_operation</span><span class="s2">.</span><span class="s1">database_forwards</span><span class="s2">(</span>
+                <span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span>
+            <span class="s2">)</span>
+            <span class="s1">from_state </span><span class="s2">= </span><span class="s1">to_state</span>
+
+    <span class="s0">def </span><span class="s1">database_backwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s5"># We calculate state separately in here since our state functions aren't useful</span>
+        <span class="s1">to_states </span><span class="s2">= {}</span>
+        <span class="s0">for </span><span class="s1">dbop </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">database_operations</span><span class="s2">:</span>
+            <span class="s1">to_states</span><span class="s2">[</span><span class="s1">dbop</span><span class="s2">] = </span><span class="s1">to_state</span>
+            <span class="s1">to_state </span><span class="s2">= </span><span class="s1">to_state</span><span class="s2">.</span><span class="s1">clone</span><span class="s2">()</span>
+            <span class="s1">dbop</span><span class="s2">.</span><span class="s1">state_forwards</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">)</span>
+        <span class="s5"># to_state now has the states of all the database_operations applied</span>
+        <span class="s5"># which is the from_state for the backwards migration of the last</span>
+        <span class="s5"># operation.</span>
+        <span class="s0">for </span><span class="s1">database_operation </span><span class="s0">in </span><span class="s1">reversed</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">database_operations</span><span class="s2">):</span>
+            <span class="s1">from_state </span><span class="s2">= </span><span class="s1">to_state</span>
+            <span class="s1">to_state </span><span class="s2">= </span><span class="s1">to_states</span><span class="s2">[</span><span class="s1">database_operation</span><span class="s2">]</span>
+            <span class="s1">database_operation</span><span class="s2">.</span><span class="s1">database_backwards</span><span class="s2">(</span>
+                <span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span>
+            <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">describe</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s4">&quot;Custom state/database change combination&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">RunSQL</span><span class="s2">(</span><span class="s1">Operation</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Run some raw SQL. A reverse SQL statement may be provided. 
+ 
+    Also accept a list of operations that represent the state change effected 
+    by this SQL change, in case it's custom column/table creation/deletion. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">noop </span><span class="s2">= </span><span class="s4">&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">sql</span><span class="s2">, </span><span class="s1">reverse_sql</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">state_operations</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">hints</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">elidable</span><span class="s2">=</span><span class="s0">False</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">sql </span><span class="s2">= </span><span class="s1">sql</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reverse_sql </span><span class="s2">= </span><span class="s1">reverse_sql</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">state_operations </span><span class="s2">= </span><span class="s1">state_operations </span><span class="s0">or </span><span class="s2">[]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">hints </span><span class="s2">= </span><span class="s1">hints </span><span class="s0">or </span><span class="s2">{}</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">elidable </span><span class="s2">= </span><span class="s1">elidable</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">kwargs </span><span class="s2">= {</span>
+            <span class="s4">&quot;sql&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">sql</span><span class="s2">,</span>
+        <span class="s2">}</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">reverse_sql </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s4">&quot;reverse_sql&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">reverse_sql</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">state_operations</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s4">&quot;state_operations&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">state_operations</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">hints</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s4">&quot;hints&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">hints</span>
+        <span class="s0">return </span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s2">, [], </span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">reversible</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">reverse_sql </span><span class="s0">is not None</span>
+
+    <span class="s0">def </span><span class="s1">state_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">state</span><span class="s2">):</span>
+        <span class="s0">for </span><span class="s1">state_operation </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">state_operations</span><span class="s2">:</span>
+            <span class="s1">state_operation</span><span class="s2">.</span><span class="s1">state_forwards</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">state</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate</span><span class="s2">(</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, **</span><span class="s1">self</span><span class="s2">.</span><span class="s1">hints</span>
+        <span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_run_sql</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">sql</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_backwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">reverse_sql </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">NotImplementedError</span><span class="s2">(</span><span class="s4">&quot;You cannot reverse this operation&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate</span><span class="s2">(</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, **</span><span class="s1">self</span><span class="s2">.</span><span class="s1">hints</span>
+        <span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_run_sql</span><span class="s2">(</span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">reverse_sql</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">describe</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s4">&quot;Raw SQL operation&quot;</span>
+
+    <span class="s0">def </span><span class="s1">_run_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">sqls</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">sqls</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+            <span class="s0">for </span><span class="s1">sql </span><span class="s0">in </span><span class="s1">sqls</span><span class="s2">:</span>
+                <span class="s1">params </span><span class="s2">= </span><span class="s0">None</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">sql</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+                    <span class="s1">elements </span><span class="s2">= </span><span class="s1">len</span><span class="s2">(</span><span class="s1">sql</span><span class="s2">)</span>
+                    <span class="s0">if </span><span class="s1">elements </span><span class="s2">== </span><span class="s6">2</span><span class="s2">:</span>
+                        <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">sql</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s4">&quot;Expected a 2-tuple but got %d&quot; </span><span class="s2">% </span><span class="s1">elements</span><span class="s2">)</span>
+                <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span><span class="s1">sql</span><span class="s2">, </span><span class="s1">params</span><span class="s2">=</span><span class="s1">params</span><span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">sqls </span><span class="s2">!= </span><span class="s1">RunSQL</span><span class="s2">.</span><span class="s1">noop</span><span class="s2">:</span>
+            <span class="s1">statements </span><span class="s2">= </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">prepare_sql_script</span><span class="s2">(</span><span class="s1">sqls</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">statement </span><span class="s0">in </span><span class="s1">statements</span><span class="s2">:</span>
+                <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span><span class="s1">statement</span><span class="s2">, </span><span class="s1">params</span><span class="s2">=</span><span class="s0">None</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">RunPython</span><span class="s2">(</span><span class="s1">Operation</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Run Python code in a context suitable for doing versioned ORM operations. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">reduces_to_sql </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">code</span><span class="s2">, </span><span class="s1">reverse_code</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">atomic</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">hints</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">elidable</span><span class="s2">=</span><span class="s0">False</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">atomic </span><span class="s2">= </span><span class="s1">atomic</span>
+        <span class="s5"># Forwards code</span>
+        <span class="s0">if not </span><span class="s1">callable</span><span class="s2">(</span><span class="s1">code</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s4">&quot;RunPython must be supplied with a callable&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">code </span><span class="s2">= </span><span class="s1">code</span>
+        <span class="s5"># Reverse code</span>
+        <span class="s0">if </span><span class="s1">reverse_code </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">reverse_code </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">callable</span><span class="s2">(</span><span class="s1">reverse_code</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s4">&quot;RunPython must be supplied with callable arguments&quot;</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">reverse_code </span><span class="s2">= </span><span class="s1">reverse_code</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">hints </span><span class="s2">= </span><span class="s1">hints </span><span class="s0">or </span><span class="s2">{}</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">elidable </span><span class="s2">= </span><span class="s1">elidable</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">kwargs </span><span class="s2">= {</span>
+            <span class="s4">&quot;code&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">code</span><span class="s2">,</span>
+        <span class="s2">}</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">reverse_code </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s4">&quot;reverse_code&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">reverse_code</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">atomic </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s4">&quot;atomic&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">atomic</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">hints</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s4">&quot;hints&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">hints</span>
+        <span class="s0">return </span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s2">, [], </span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">reversible</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">reverse_code </span><span class="s0">is not None</span>
+
+    <span class="s0">def </span><span class="s1">state_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">state</span><span class="s2">):</span>
+        <span class="s5"># RunPython objects have no state effect. To add some, combine this</span>
+        <span class="s5"># with SeparateDatabaseAndState.</span>
+        <span class="s0">pass</span>
+
+    <span class="s0">def </span><span class="s1">database_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s5"># RunPython has access to all models. Ensure that all models are</span>
+        <span class="s5"># reloaded in case any are delayed.</span>
+        <span class="s1">from_state</span><span class="s2">.</span><span class="s1">clear_delayed_apps_cache</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate</span><span class="s2">(</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, **</span><span class="s1">self</span><span class="s2">.</span><span class="s1">hints</span>
+        <span class="s2">):</span>
+            <span class="s5"># We now execute the Python code in a context that contains a 'models'</span>
+            <span class="s5"># object, representing the versioned models as an app registry.</span>
+            <span class="s5"># We could try to override the global cache, but then people will still</span>
+            <span class="s5"># use direct imports, so we go with a documentation approach instead.</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">code</span><span class="s2">(</span><span class="s1">from_state</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">database_backwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">from_state</span><span class="s2">, </span><span class="s1">to_state</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">reverse_code </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">NotImplementedError</span><span class="s2">(</span><span class="s4">&quot;You cannot reverse this operation&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate</span><span class="s2">(</span>
+            <span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, **</span><span class="s1">self</span><span class="s2">.</span><span class="s1">hints</span>
+        <span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">reverse_code</span><span class="s2">(</span><span class="s1">from_state</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">describe</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s4">&quot;Raw Python operation&quot;</span>
+
+    <span class="s2">@</span><span class="s1">staticmethod</span>
+    <span class="s0">def </span><span class="s1">noop</span><span class="s2">(</span><span class="s1">apps</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">):</span>
+        <span class="s0">return None</span>
+</pre>
+</body>
+</html>

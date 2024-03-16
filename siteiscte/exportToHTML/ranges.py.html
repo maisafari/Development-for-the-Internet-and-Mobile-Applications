@@ -1,0 +1,406 @@
+<html>
+<head>
+<title>ranges.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+ranges.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">datetime</span>
+<span class="s0">import </span><span class="s1">json</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">postgres </span><span class="s0">import </span><span class="s1">forms</span><span class="s2">, </span><span class="s1">lookups</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">models</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">postgresql</span><span class="s2">.</span><span class="s1">psycopg_any </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">DateRange</span><span class="s2">,</span>
+    <span class="s1">DateTimeTZRange</span><span class="s2">,</span>
+    <span class="s1">NumericRange</span><span class="s2">,</span>
+    <span class="s1">Range</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">functions </span><span class="s0">import </span><span class="s1">Cast</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">lookups </span><span class="s0">import </span><span class="s1">PostgresOperatorLookup</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">AttributeSetter</span>
+
+<span class="s1">__all__ </span><span class="s2">= [</span>
+    <span class="s3">&quot;RangeField&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;IntegerRangeField&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;BigIntegerRangeField&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;DecimalRangeField&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;DateTimeRangeField&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;DateRangeField&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;RangeBoundary&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;RangeOperators&quot;</span><span class="s2">,</span>
+<span class="s2">]</span>
+
+
+<span class="s0">class </span><span class="s1">RangeBoundary</span><span class="s2">(</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Expression</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot;A class that represents range boundaries.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">inclusive_lower</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">inclusive_upper</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">lower </span><span class="s2">= </span><span class="s3">&quot;[&quot; </span><span class="s0">if </span><span class="s1">inclusive_lower </span><span class="s0">else </span><span class="s3">&quot;(&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">upper </span><span class="s2">= </span><span class="s3">&quot;]&quot; </span><span class="s0">if </span><span class="s1">inclusive_upper </span><span class="s0">else </span><span class="s3">&quot;)&quot;</span>
+
+    <span class="s0">def </span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;'%s%s'&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">upper</span><span class="s2">), []</span>
+
+
+<span class="s0">class </span><span class="s1">RangeOperators</span><span class="s2">:</span>
+    <span class="s5"># https://www.postgresql.org/docs/current/functions-range.html#RANGE-OPERATORS-TABLE</span>
+    <span class="s1">EQUAL </span><span class="s2">= </span><span class="s3">&quot;=&quot;</span>
+    <span class="s1">NOT_EQUAL </span><span class="s2">= </span><span class="s3">&quot;&lt;&gt;&quot;</span>
+    <span class="s1">CONTAINS </span><span class="s2">= </span><span class="s3">&quot;@&gt;&quot;</span>
+    <span class="s1">CONTAINED_BY </span><span class="s2">= </span><span class="s3">&quot;&lt;@&quot;</span>
+    <span class="s1">OVERLAPS </span><span class="s2">= </span><span class="s3">&quot;&amp;&amp;&quot;</span>
+    <span class="s1">FULLY_LT </span><span class="s2">= </span><span class="s3">&quot;&lt;&lt;&quot;</span>
+    <span class="s1">FULLY_GT </span><span class="s2">= </span><span class="s3">&quot;&gt;&gt;&quot;</span>
+    <span class="s1">NOT_LT </span><span class="s2">= </span><span class="s3">&quot;&amp;&gt;&quot;</span>
+    <span class="s1">NOT_GT </span><span class="s2">= </span><span class="s3">&quot;&amp;&lt;&quot;</span>
+    <span class="s1">ADJACENT_TO </span><span class="s2">= </span><span class="s3">&quot;-|-&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">RangeField</span><span class="s2">(</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Field</span><span class="s2">):</span>
+    <span class="s1">empty_strings_allowed </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s3">&quot;default_bounds&quot; </span><span class="s0">in </span><span class="s1">kwargs</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                <span class="s3">f&quot;Cannot use 'default_bounds' with </span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s0">}</span><span class="s3">.&quot;</span>
+            <span class="s2">)</span>
+        <span class="s5"># Initializing base_field here ensures that its model matches the model</span>
+        <span class="s5"># for self.</span>
+        <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s3">&quot;base_field&quot;</span><span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">base_field </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">base_field</span><span class="s2">()</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">[</span><span class="s3">&quot;model&quot;</span><span class="s2">]</span>
+        <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">AttributeError</span><span class="s2">(</span>
+                <span class="s3">&quot;'%s' object has no attribute 'model'&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span>
+            <span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">model</span><span class="s2">.</span><span class="s1">setter</span>
+    <span class="s0">def </span><span class="s1">model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">[</span><span class="s3">&quot;model&quot;</span><span class="s2">] = </span><span class="s1">model</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">base_field</span><span class="s2">.</span><span class="s1">model </span><span class="s2">= </span><span class="s1">model</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">_choices_is_value</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">value</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)) </span><span class="s0">or </span><span class="s1">super</span><span class="s2">().</span><span class="s1">_choices_is_value</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_placeholder</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;%s::{}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">db_type</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">))</span>
+
+    <span class="s0">def </span><span class="s1">get_prep_value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">value</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">value </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">return None</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">Range</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">value</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">range_type</span><span class="s2">(</span><span class="s1">value</span><span class="s2">[</span><span class="s6">0</span><span class="s2">], </span><span class="s1">value</span><span class="s2">[</span><span class="s6">1</span><span class="s2">])</span>
+        <span class="s0">return </span><span class="s1">value</span>
+
+    <span class="s0">def </span><span class="s1">to_python</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">value</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">str</span><span class="s2">):</span>
+            <span class="s5"># Assume we're deserializing</span>
+            <span class="s1">vals </span><span class="s2">= </span><span class="s1">json</span><span class="s2">.</span><span class="s1">loads</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">end </span><span class="s0">in </span><span class="s2">(</span><span class="s3">&quot;lower&quot;</span><span class="s2">, </span><span class="s3">&quot;upper&quot;</span><span class="s2">):</span>
+                <span class="s0">if </span><span class="s1">end </span><span class="s0">in </span><span class="s1">vals</span><span class="s2">:</span>
+                    <span class="s1">vals</span><span class="s2">[</span><span class="s1">end</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">base_field</span><span class="s2">.</span><span class="s1">to_python</span><span class="s2">(</span><span class="s1">vals</span><span class="s2">[</span><span class="s1">end</span><span class="s2">])</span>
+            <span class="s1">value </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">range_type</span><span class="s2">(**</span><span class="s1">vals</span><span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+            <span class="s1">value </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">range_type</span><span class="s2">(</span><span class="s1">value</span><span class="s2">[</span><span class="s6">0</span><span class="s2">], </span><span class="s1">value</span><span class="s2">[</span><span class="s6">1</span><span class="s2">])</span>
+        <span class="s0">return </span><span class="s1">value</span>
+
+    <span class="s0">def </span><span class="s1">set_attributes_from_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">set_attributes_from_name</span><span class="s2">(</span><span class="s1">name</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">base_field</span><span class="s2">.</span><span class="s1">set_attributes_from_name</span><span class="s2">(</span><span class="s1">name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">value_to_string</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">):</span>
+        <span class="s1">value </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">value_from_object</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">value </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">return None</span>
+        <span class="s0">if </span><span class="s1">value</span><span class="s2">.</span><span class="s1">isempty</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">json</span><span class="s2">.</span><span class="s1">dumps</span><span class="s2">({</span><span class="s3">&quot;empty&quot;</span><span class="s2">: </span><span class="s0">True</span><span class="s2">})</span>
+        <span class="s1">base_field </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">base_field</span>
+        <span class="s1">result </span><span class="s2">= {</span><span class="s3">&quot;bounds&quot;</span><span class="s2">: </span><span class="s1">value</span><span class="s2">.</span><span class="s1">_bounds</span><span class="s2">}</span>
+        <span class="s0">for </span><span class="s1">end </span><span class="s0">in </span><span class="s2">(</span><span class="s3">&quot;lower&quot;</span><span class="s2">, </span><span class="s3">&quot;upper&quot;</span><span class="s2">):</span>
+            <span class="s1">val </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">end</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">val </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s1">result</span><span class="s2">[</span><span class="s1">end</span><span class="s2">] = </span><span class="s0">None</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">obj </span><span class="s2">= </span><span class="s1">AttributeSetter</span><span class="s2">(</span><span class="s1">base_field</span><span class="s2">.</span><span class="s1">attname</span><span class="s2">, </span><span class="s1">val</span><span class="s2">)</span>
+                <span class="s1">result</span><span class="s2">[</span><span class="s1">end</span><span class="s2">] = </span><span class="s1">base_field</span><span class="s2">.</span><span class="s1">value_to_string</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">json</span><span class="s2">.</span><span class="s1">dumps</span><span class="s2">(</span><span class="s1">result</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">formfield</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">kwargs</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span><span class="s3">&quot;form_class&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">form_field</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">formfield</span><span class="s2">(**</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+
+<span class="s1">CANONICAL_RANGE_BOUNDS </span><span class="s2">= </span><span class="s3">&quot;[)&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ContinuousRangeField</span><span class="s2">(</span><span class="s1">RangeField</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Continuous range field. It allows specifying default bounds for list and 
+    tuple inputs. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, </span><span class="s1">default_bounds</span><span class="s2">=</span><span class="s1">CANONICAL_RANGE_BOUNDS</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">default_bounds </span><span class="s0">not in </span><span class="s2">(</span><span class="s3">&quot;[)&quot;</span><span class="s2">, </span><span class="s3">&quot;(]&quot;</span><span class="s2">, </span><span class="s3">&quot;()&quot;</span><span class="s2">, </span><span class="s3">&quot;[]&quot;</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;default_bounds must be one of '[)', '(]', '()', or '[]'.&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">default_bounds </span><span class="s2">= </span><span class="s1">default_bounds</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_prep_value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">value</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">range_type</span><span class="s2">(</span><span class="s1">value</span><span class="s2">[</span><span class="s6">0</span><span class="s2">], </span><span class="s1">value</span><span class="s2">[</span><span class="s6">1</span><span class="s2">], </span><span class="s1">self</span><span class="s2">.</span><span class="s1">default_bounds</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_prep_value</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">formfield</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">kwargs</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span><span class="s3">&quot;default_bounds&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">default_bounds</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">formfield</span><span class="s2">(**</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">deconstruct</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">name</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">deconstruct</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">default_bounds </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">default_bounds </span><span class="s2">!= </span><span class="s1">CANONICAL_RANGE_BOUNDS</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;default_bounds&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">default_bounds</span>
+        <span class="s0">return </span><span class="s1">name</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">args</span><span class="s2">, </span><span class="s1">kwargs</span>
+
+
+<span class="s0">class </span><span class="s1">IntegerRangeField</span><span class="s2">(</span><span class="s1">RangeField</span><span class="s2">):</span>
+    <span class="s1">base_field </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">IntegerField</span>
+    <span class="s1">range_type </span><span class="s2">= </span><span class="s1">NumericRange</span>
+    <span class="s1">form_field </span><span class="s2">= </span><span class="s1">forms</span><span class="s2">.</span><span class="s1">IntegerRangeField</span>
+
+    <span class="s0">def </span><span class="s1">db_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;int4range&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">BigIntegerRangeField</span><span class="s2">(</span><span class="s1">RangeField</span><span class="s2">):</span>
+    <span class="s1">base_field </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">BigIntegerField</span>
+    <span class="s1">range_type </span><span class="s2">= </span><span class="s1">NumericRange</span>
+    <span class="s1">form_field </span><span class="s2">= </span><span class="s1">forms</span><span class="s2">.</span><span class="s1">IntegerRangeField</span>
+
+    <span class="s0">def </span><span class="s1">db_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;int8range&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">DecimalRangeField</span><span class="s2">(</span><span class="s1">ContinuousRangeField</span><span class="s2">):</span>
+    <span class="s1">base_field </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">DecimalField</span>
+    <span class="s1">range_type </span><span class="s2">= </span><span class="s1">NumericRange</span>
+    <span class="s1">form_field </span><span class="s2">= </span><span class="s1">forms</span><span class="s2">.</span><span class="s1">DecimalRangeField</span>
+
+    <span class="s0">def </span><span class="s1">db_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;numrange&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">DateTimeRangeField</span><span class="s2">(</span><span class="s1">ContinuousRangeField</span><span class="s2">):</span>
+    <span class="s1">base_field </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">DateTimeField</span>
+    <span class="s1">range_type </span><span class="s2">= </span><span class="s1">DateTimeTZRange</span>
+    <span class="s1">form_field </span><span class="s2">= </span><span class="s1">forms</span><span class="s2">.</span><span class="s1">DateTimeRangeField</span>
+
+    <span class="s0">def </span><span class="s1">db_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;tstzrange&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">DateRangeField</span><span class="s2">(</span><span class="s1">RangeField</span><span class="s2">):</span>
+    <span class="s1">base_field </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">DateField</span>
+    <span class="s1">range_type </span><span class="s2">= </span><span class="s1">DateRange</span>
+    <span class="s1">form_field </span><span class="s2">= </span><span class="s1">forms</span><span class="s2">.</span><span class="s1">DateRangeField</span>
+
+    <span class="s0">def </span><span class="s1">db_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;daterange&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">RangeContains</span><span class="s2">(</span><span class="s1">lookups</span><span class="s2">.</span><span class="s1">DataContains</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">get_prep_lookup</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">rhs</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">, </span><span class="s1">Range</span><span class="s2">)):</span>
+            <span class="s0">return </span><span class="s1">Cast</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">rhs</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">.</span><span class="s1">field</span><span class="s2">.</span><span class="s1">base_field</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_prep_lookup</span><span class="s2">()</span>
+
+
+<span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">RangeContains</span><span class="s2">)</span>
+<span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">lookups</span><span class="s2">.</span><span class="s1">ContainedBy</span><span class="s2">)</span>
+<span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">lookups</span><span class="s2">.</span><span class="s1">Overlap</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">DateTimeRangeContains</span><span class="s2">(</span><span class="s1">PostgresOperatorLookup</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Lookup for Date/DateTimeRange containment to cast the rhs to the correct 
+    type. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;contains&quot;</span>
+    <span class="s1">postgres_operator </span><span class="s2">= </span><span class="s1">RangeOperators</span><span class="s2">.</span><span class="s1">CONTAINS</span>
+
+    <span class="s0">def </span><span class="s1">process_rhs</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s5"># Transform rhs value for db lookup.</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">rhs</span><span class="s2">, </span><span class="s1">datetime</span><span class="s2">.</span><span class="s1">date</span><span class="s2">):</span>
+            <span class="s1">value </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">Value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">rhs</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">rhs </span><span class="s2">= </span><span class="s1">value</span><span class="s2">.</span><span class="s1">resolve_expression</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">.</span><span class="s1">query</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">process_rhs</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_postgresql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s1">sql</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">as_postgresql</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">)</span>
+        <span class="s5"># Cast the rhs if needed.</span>
+        <span class="s1">cast_sql </span><span class="s2">= </span><span class="s3">&quot;&quot;</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">rhs</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">Expression</span><span class="s2">)</span>
+            <span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">rhs</span><span class="s2">.</span><span class="s1">_output_field_or_none</span>
+            <span class="s0">and</span>
+            <span class="s5"># Skip cast if rhs has a matching range type.</span>
+            <span class="s0">not </span><span class="s1">isinstance</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">rhs</span><span class="s2">.</span><span class="s1">_output_field_or_none</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">.</span><span class="s1">__class__</span>
+            <span class="s2">)</span>
+        <span class="s2">):</span>
+            <span class="s1">cast_internal_type </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">.</span><span class="s1">base_field</span><span class="s2">.</span><span class="s1">get_internal_type</span><span class="s2">()</span>
+            <span class="s1">cast_sql </span><span class="s2">= </span><span class="s3">&quot;::{}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">data_types</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">cast_internal_type</span><span class="s2">))</span>
+        <span class="s0">return </span><span class="s3">&quot;%s%s&quot; </span><span class="s2">% (</span><span class="s1">sql</span><span class="s2">, </span><span class="s1">cast_sql</span><span class="s2">), </span><span class="s1">params</span>
+
+
+<span class="s1">DateRangeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">DateTimeRangeContains</span><span class="s2">)</span>
+<span class="s1">DateTimeRangeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">DateTimeRangeContains</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">RangeContainedBy</span><span class="s2">(</span><span class="s1">PostgresOperatorLookup</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;contained_by&quot;</span>
+    <span class="s1">type_mapping </span><span class="s2">= {</span>
+        <span class="s3">&quot;smallint&quot;</span><span class="s2">: </span><span class="s3">&quot;int4range&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;integer&quot;</span><span class="s2">: </span><span class="s3">&quot;int4range&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;bigint&quot;</span><span class="s2">: </span><span class="s3">&quot;int8range&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;double precision&quot;</span><span class="s2">: </span><span class="s3">&quot;numrange&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;numeric&quot;</span><span class="s2">: </span><span class="s3">&quot;numrange&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;date&quot;</span><span class="s2">: </span><span class="s3">&quot;daterange&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;timestamp with time zone&quot;</span><span class="s2">: </span><span class="s3">&quot;tstzrange&quot;</span><span class="s2">,</span>
+    <span class="s2">}</span>
+    <span class="s1">postgres_operator </span><span class="s2">= </span><span class="s1">RangeOperators</span><span class="s2">.</span><span class="s1">CONTAINED_BY</span>
+
+    <span class="s0">def </span><span class="s1">process_rhs</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s1">rhs</span><span class="s2">, </span><span class="s1">rhs_params </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">process_rhs</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">)</span>
+        <span class="s5"># Ignore precision for DecimalFields.</span>
+        <span class="s1">db_type </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">.</span><span class="s1">cast_db_type</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">).</span><span class="s1">split</span><span class="s2">(</span><span class="s3">&quot;(&quot;</span><span class="s2">)[</span><span class="s6">0</span><span class="s2">]</span>
+        <span class="s1">cast_type </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">type_mapping</span><span class="s2">[</span><span class="s1">db_type</span><span class="s2">]</span>
+        <span class="s0">return </span><span class="s3">&quot;%s::%s&quot; </span><span class="s2">% (</span><span class="s1">rhs</span><span class="s2">, </span><span class="s1">cast_type</span><span class="s2">), </span><span class="s1">rhs_params</span>
+
+    <span class="s0">def </span><span class="s1">process_lhs</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s1">lhs</span><span class="s2">, </span><span class="s1">lhs_params </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">process_lhs</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">FloatField</span><span class="s2">):</span>
+            <span class="s1">lhs </span><span class="s2">= </span><span class="s3">&quot;%s::numeric&quot; </span><span class="s2">% </span><span class="s1">lhs</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">SmallIntegerField</span><span class="s2">):</span>
+            <span class="s1">lhs </span><span class="s2">= </span><span class="s3">&quot;%s::integer&quot; </span><span class="s2">% </span><span class="s1">lhs</span>
+        <span class="s0">return </span><span class="s1">lhs</span><span class="s2">, </span><span class="s1">lhs_params</span>
+
+    <span class="s0">def </span><span class="s1">get_prep_lookup</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">RangeField</span><span class="s2">().</span><span class="s1">get_prep_value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">rhs</span><span class="s2">)</span>
+
+
+<span class="s1">models</span><span class="s2">.</span><span class="s1">DateField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">RangeContainedBy</span><span class="s2">)</span>
+<span class="s1">models</span><span class="s2">.</span><span class="s1">DateTimeField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">RangeContainedBy</span><span class="s2">)</span>
+<span class="s1">models</span><span class="s2">.</span><span class="s1">IntegerField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">RangeContainedBy</span><span class="s2">)</span>
+<span class="s1">models</span><span class="s2">.</span><span class="s1">FloatField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">RangeContainedBy</span><span class="s2">)</span>
+<span class="s1">models</span><span class="s2">.</span><span class="s1">DecimalField</span><span class="s2">.</span><span class="s1">register_lookup</span><span class="s2">(</span><span class="s1">RangeContainedBy</span><span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span>
+<span class="s0">class </span><span class="s1">FullyLessThan</span><span class="s2">(</span><span class="s1">PostgresOperatorLookup</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;fully_lt&quot;</span>
+    <span class="s1">postgres_operator </span><span class="s2">= </span><span class="s1">RangeOperators</span><span class="s2">.</span><span class="s1">FULLY_LT</span>
+
+
+<span class="s2">@</span><span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span>
+<span class="s0">class </span><span class="s1">FullGreaterThan</span><span class="s2">(</span><span class="s1">PostgresOperatorLookup</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;fully_gt&quot;</span>
+    <span class="s1">postgres_operator </span><span class="s2">= </span><span class="s1">RangeOperators</span><span class="s2">.</span><span class="s1">FULLY_GT</span>
+
+
+<span class="s2">@</span><span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span>
+<span class="s0">class </span><span class="s1">NotLessThan</span><span class="s2">(</span><span class="s1">PostgresOperatorLookup</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;not_lt&quot;</span>
+    <span class="s1">postgres_operator </span><span class="s2">= </span><span class="s1">RangeOperators</span><span class="s2">.</span><span class="s1">NOT_LT</span>
+
+
+<span class="s2">@</span><span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span>
+<span class="s0">class </span><span class="s1">NotGreaterThan</span><span class="s2">(</span><span class="s1">PostgresOperatorLookup</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;not_gt&quot;</span>
+    <span class="s1">postgres_operator </span><span class="s2">= </span><span class="s1">RangeOperators</span><span class="s2">.</span><span class="s1">NOT_GT</span>
+
+
+<span class="s2">@</span><span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span>
+<span class="s0">class </span><span class="s1">AdjacentToLookup</span><span class="s2">(</span><span class="s1">PostgresOperatorLookup</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;adjacent_to&quot;</span>
+    <span class="s1">postgres_operator </span><span class="s2">= </span><span class="s1">RangeOperators</span><span class="s2">.</span><span class="s1">ADJACENT_TO</span>
+
+
+<span class="s2">@</span><span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span>
+<span class="s0">class </span><span class="s1">RangeStartsWith</span><span class="s2">(</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;startswith&quot;</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;lower&quot;</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">output_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">.</span><span class="s1">base_field</span>
+
+
+<span class="s2">@</span><span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span>
+<span class="s0">class </span><span class="s1">RangeEndsWith</span><span class="s2">(</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;endswith&quot;</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;upper&quot;</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">output_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lhs</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">.</span><span class="s1">base_field</span>
+
+
+<span class="s2">@</span><span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span>
+<span class="s0">class </span><span class="s1">IsEmpty</span><span class="s2">(</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;isempty&quot;</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;isempty&quot;</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">BooleanField</span><span class="s2">()</span>
+
+
+<span class="s2">@</span><span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span>
+<span class="s0">class </span><span class="s1">LowerInclusive</span><span class="s2">(</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;lower_inc&quot;</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;LOWER_INC&quot;</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">BooleanField</span><span class="s2">()</span>
+
+
+<span class="s2">@</span><span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span>
+<span class="s0">class </span><span class="s1">LowerInfinite</span><span class="s2">(</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;lower_inf&quot;</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;LOWER_INF&quot;</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">BooleanField</span><span class="s2">()</span>
+
+
+<span class="s2">@</span><span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span>
+<span class="s0">class </span><span class="s1">UpperInclusive</span><span class="s2">(</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;upper_inc&quot;</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;UPPER_INC&quot;</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">BooleanField</span><span class="s2">()</span>
+
+
+<span class="s2">@</span><span class="s1">RangeField</span><span class="s2">.</span><span class="s1">register_lookup</span>
+<span class="s0">class </span><span class="s1">UpperInfinite</span><span class="s2">(</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;upper_inf&quot;</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;UPPER_INF&quot;</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">BooleanField</span><span class="s2">()</span>
+</pre>
+</body>
+</html>

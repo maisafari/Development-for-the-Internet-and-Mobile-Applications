@@ -1,0 +1,57 @@
+<html>
+<head>
+<title>reloader.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+reloader.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">pathlib </span><span class="s0">import </span><span class="s1">Path</span>
+
+<span class="s0">from </span><span class="s1">asgiref</span><span class="s2">.</span><span class="s1">local </span><span class="s0">import </span><span class="s1">Local</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">autoreload </span><span class="s0">import </span><span class="s1">is_django_module</span>
+
+
+<span class="s0">def </span><span class="s1">watch_for_translation_changes</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;Register file watchers for .mo files in potential locale paths.&quot;&quot;&quot;</span>
+    <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+
+    <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">USE_I18N</span><span class="s2">:</span>
+        <span class="s1">directories </span><span class="s2">= [</span><span class="s1">Path</span><span class="s2">(</span><span class="s4">&quot;locale&quot;</span><span class="s2">)]</span>
+        <span class="s1">directories</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span>
+            <span class="s1">Path</span><span class="s2">(</span><span class="s1">config</span><span class="s2">.</span><span class="s1">path</span><span class="s2">) / </span><span class="s4">&quot;locale&quot;</span>
+            <span class="s0">for </span><span class="s1">config </span><span class="s0">in </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_configs</span><span class="s2">()</span>
+            <span class="s0">if not </span><span class="s1">is_django_module</span><span class="s2">(</span><span class="s1">config</span><span class="s2">.</span><span class="s1">module</span><span class="s2">)</span>
+        <span class="s2">)</span>
+        <span class="s1">directories</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">Path</span><span class="s2">(</span><span class="s1">p</span><span class="s2">) </span><span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">LOCALE_PATHS</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">path </span><span class="s0">in </span><span class="s1">directories</span><span class="s2">:</span>
+            <span class="s1">sender</span><span class="s2">.</span><span class="s1">watch_dir</span><span class="s2">(</span><span class="s1">path</span><span class="s2">, </span><span class="s4">&quot;**/*.mo&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">translation_file_changed</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">, </span><span class="s1">file_path</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;Clear the internal translations cache if a .mo file is modified.&quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">file_path</span><span class="s2">.</span><span class="s1">suffix </span><span class="s2">== </span><span class="s4">&quot;.mo&quot;</span><span class="s2">:</span>
+        <span class="s0">import </span><span class="s1">gettext</span>
+
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">translation </span><span class="s0">import </span><span class="s1">trans_real</span>
+
+        <span class="s1">gettext</span><span class="s2">.</span><span class="s1">_translations </span><span class="s2">= {}</span>
+        <span class="s1">trans_real</span><span class="s2">.</span><span class="s1">_translations </span><span class="s2">= {}</span>
+        <span class="s1">trans_real</span><span class="s2">.</span><span class="s1">_default </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">trans_real</span><span class="s2">.</span><span class="s1">_active </span><span class="s2">= </span><span class="s1">Local</span><span class="s2">()</span>
+        <span class="s0">return True</span>
+</pre>
+</body>
+</html>

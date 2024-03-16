@@ -1,0 +1,62 @@
+<html>
+<head>
+<title>http.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+http.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">cache </span><span class="s0">import </span><span class="s1">cc_delim_re</span><span class="s2">, </span><span class="s1">get_conditional_response</span><span class="s2">, </span><span class="s1">set_response_etag</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">deprecation </span><span class="s0">import </span><span class="s1">MiddlewareMixin</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">parse_http_date_safe</span>
+
+
+<span class="s0">class </span><span class="s1">ConditionalGetMiddleware</span><span class="s2">(</span><span class="s1">MiddlewareMixin</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Handle conditional GET operations. If the response has an ETag or 
+    Last-Modified header and the request has If-None-Match or If-Modified-Since, 
+    replace the response with HttpNotModified. Add an ETag header if needed. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">process_response</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">response</span><span class="s2">):</span>
+        <span class="s4"># It's too late to prevent an unsafe request with a 412 response, and</span>
+        <span class="s4"># for a HEAD request, the response body is always empty so computing</span>
+        <span class="s4"># an accurate ETag isn't possible.</span>
+        <span class="s0">if </span><span class="s1">request</span><span class="s2">.</span><span class="s1">method </span><span class="s2">!= </span><span class="s5">&quot;GET&quot;</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">response</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">needs_etag</span><span class="s2">(</span><span class="s1">response</span><span class="s2">) </span><span class="s0">and not </span><span class="s1">response</span><span class="s2">.</span><span class="s1">has_header</span><span class="s2">(</span><span class="s5">&quot;ETag&quot;</span><span class="s2">):</span>
+            <span class="s1">set_response_etag</span><span class="s2">(</span><span class="s1">response</span><span class="s2">)</span>
+
+        <span class="s1">etag </span><span class="s2">= </span><span class="s1">response</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;ETag&quot;</span><span class="s2">)</span>
+        <span class="s1">last_modified </span><span class="s2">= </span><span class="s1">response</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;Last-Modified&quot;</span><span class="s2">)</span>
+        <span class="s1">last_modified </span><span class="s2">= </span><span class="s1">last_modified </span><span class="s0">and </span><span class="s1">parse_http_date_safe</span><span class="s2">(</span><span class="s1">last_modified</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">etag </span><span class="s0">or </span><span class="s1">last_modified</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">get_conditional_response</span><span class="s2">(</span>
+                <span class="s1">request</span><span class="s2">,</span>
+                <span class="s1">etag</span><span class="s2">=</span><span class="s1">etag</span><span class="s2">,</span>
+                <span class="s1">last_modified</span><span class="s2">=</span><span class="s1">last_modified</span><span class="s2">,</span>
+                <span class="s1">response</span><span class="s2">=</span><span class="s1">response</span><span class="s2">,</span>
+            <span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s1">response</span>
+
+    <span class="s0">def </span><span class="s1">needs_etag</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">response</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Return True if an ETag header should be added to response.&quot;&quot;&quot;</span>
+        <span class="s1">cache_control_headers </span><span class="s2">= </span><span class="s1">cc_delim_re</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s1">response</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;Cache-Control&quot;</span><span class="s2">, </span><span class="s5">&quot;&quot;</span><span class="s2">))</span>
+        <span class="s0">return </span><span class="s1">all</span><span class="s2">(</span><span class="s1">header</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">() != </span><span class="s5">&quot;no-store&quot; </span><span class="s0">for </span><span class="s1">header </span><span class="s0">in </span><span class="s1">cache_control_headers</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

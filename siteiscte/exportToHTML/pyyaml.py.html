@@ -1,0 +1,104 @@
+<html>
+<head>
+<title>pyyaml.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+pyyaml.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+YAML serializer. 
+ 
+Requires PyYaml (https://pyyaml.org/), but that's checked for in __init__. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">collections</span>
+<span class="s2">import </span><span class="s1">decimal</span>
+<span class="s2">from </span><span class="s1">io </span><span class="s2">import </span><span class="s1">StringIO</span>
+
+<span class="s2">import </span><span class="s1">yaml</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">serializers</span><span class="s3">.</span><span class="s1">base </span><span class="s2">import </span><span class="s1">DeserializationError</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">serializers</span><span class="s3">.</span><span class="s1">python </span><span class="s2">import </span><span class="s1">Deserializer </span><span class="s2">as </span><span class="s1">PythonDeserializer</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">serializers</span><span class="s3">.</span><span class="s1">python </span><span class="s2">import </span><span class="s1">Serializer </span><span class="s2">as </span><span class="s1">PythonSerializer</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db </span><span class="s2">import </span><span class="s1">models</span>
+
+<span class="s4"># Use the C (faster) implementation if possible</span>
+<span class="s2">try</span><span class="s3">:</span>
+    <span class="s2">from </span><span class="s1">yaml </span><span class="s2">import </span><span class="s1">CSafeDumper </span><span class="s2">as </span><span class="s1">SafeDumper</span>
+    <span class="s2">from </span><span class="s1">yaml </span><span class="s2">import </span><span class="s1">CSafeLoader </span><span class="s2">as </span><span class="s1">SafeLoader</span>
+<span class="s2">except </span><span class="s1">ImportError</span><span class="s3">:</span>
+    <span class="s2">from </span><span class="s1">yaml </span><span class="s2">import </span><span class="s1">SafeDumper</span><span class="s3">, </span><span class="s1">SafeLoader</span>
+
+
+<span class="s2">class </span><span class="s1">DjangoSafeDumper</span><span class="s3">(</span><span class="s1">SafeDumper</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">represent_decimal</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">data</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">represent_scalar</span><span class="s3">(</span><span class="s5">&quot;tag:yaml.org,2002:str&quot;</span><span class="s3">, </span><span class="s1">str</span><span class="s3">(</span><span class="s1">data</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">represent_ordered_dict</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">data</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">represent_mapping</span><span class="s3">(</span><span class="s5">&quot;tag:yaml.org,2002:map&quot;</span><span class="s3">, </span><span class="s1">data</span><span class="s3">.</span><span class="s1">items</span><span class="s3">())</span>
+
+
+<span class="s1">DjangoSafeDumper</span><span class="s3">.</span><span class="s1">add_representer</span><span class="s3">(</span><span class="s1">decimal</span><span class="s3">.</span><span class="s1">Decimal</span><span class="s3">, </span><span class="s1">DjangoSafeDumper</span><span class="s3">.</span><span class="s1">represent_decimal</span><span class="s3">)</span>
+<span class="s1">DjangoSafeDumper</span><span class="s3">.</span><span class="s1">add_representer</span><span class="s3">(</span>
+    <span class="s1">collections</span><span class="s3">.</span><span class="s1">OrderedDict</span><span class="s3">, </span><span class="s1">DjangoSafeDumper</span><span class="s3">.</span><span class="s1">represent_ordered_dict</span>
+<span class="s3">)</span>
+<span class="s4"># Workaround to represent dictionaries in insertion order.</span>
+<span class="s4"># See https://github.com/yaml/pyyaml/pull/143.</span>
+<span class="s1">DjangoSafeDumper</span><span class="s3">.</span><span class="s1">add_representer</span><span class="s3">(</span><span class="s1">dict</span><span class="s3">, </span><span class="s1">DjangoSafeDumper</span><span class="s3">.</span><span class="s1">represent_ordered_dict</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">Serializer</span><span class="s3">(</span><span class="s1">PythonSerializer</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Convert a queryset to YAML.&quot;&quot;&quot;</span>
+
+    <span class="s1">internal_use_only </span><span class="s3">= </span><span class="s2">False</span>
+
+    <span class="s2">def </span><span class="s1">handle_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">):</span>
+        <span class="s4"># A nasty special case: base YAML doesn't support serialization of time</span>
+        <span class="s4"># types (as opposed to dates or datetimes, which it does support). Since</span>
+        <span class="s4"># we want to use the &quot;safe&quot; serializer for better interoperability, we</span>
+        <span class="s4"># need to do something with those pesky times. Converting 'em to strings</span>
+        <span class="s4"># isn't perfect, but it's better than a &quot;!!python/time&quot; type which would</span>
+        <span class="s4"># halt deserialization under any other language.</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">field</span><span class="s3">, </span><span class="s1">models</span><span class="s3">.</span><span class="s1">TimeField</span><span class="s3">) </span><span class="s2">and </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">) </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_current</span><span class="s3">[</span><span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">] = </span><span class="s1">str</span><span class="s3">(</span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">.</span><span class="s1">name</span><span class="s3">))</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">super</span><span class="s3">().</span><span class="s1">handle_field</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">field</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">end_serialization</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">setdefault</span><span class="s3">(</span><span class="s5">&quot;allow_unicode&quot;</span><span class="s3">, </span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s1">yaml</span><span class="s3">.</span><span class="s1">dump</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">objects</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">stream</span><span class="s3">, </span><span class="s1">Dumper</span><span class="s3">=</span><span class="s1">DjangoSafeDumper</span><span class="s3">, **</span><span class="s1">self</span><span class="s3">.</span><span class="s1">options</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">getvalue</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s4"># Grandparent super</span>
+        <span class="s2">return </span><span class="s1">super</span><span class="s3">(</span><span class="s1">PythonSerializer</span><span class="s3">, </span><span class="s1">self</span><span class="s3">).</span><span class="s1">getvalue</span><span class="s3">()</span>
+
+
+<span class="s2">def </span><span class="s1">Deserializer</span><span class="s3">(</span><span class="s1">stream_or_string</span><span class="s3">, **</span><span class="s1">options</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Deserialize a stream or string of YAML data.&quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">stream_or_string</span><span class="s3">, </span><span class="s1">bytes</span><span class="s3">):</span>
+        <span class="s1">stream_or_string </span><span class="s3">= </span><span class="s1">stream_or_string</span><span class="s3">.</span><span class="s1">decode</span><span class="s3">()</span>
+    <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">stream_or_string</span><span class="s3">, </span><span class="s1">str</span><span class="s3">):</span>
+        <span class="s1">stream </span><span class="s3">= </span><span class="s1">StringIO</span><span class="s3">(</span><span class="s1">stream_or_string</span><span class="s3">)</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">stream </span><span class="s3">= </span><span class="s1">stream_or_string</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">yield from </span><span class="s1">PythonDeserializer</span><span class="s3">(</span><span class="s1">yaml</span><span class="s3">.</span><span class="s1">load</span><span class="s3">(</span><span class="s1">stream</span><span class="s3">, </span><span class="s1">Loader</span><span class="s3">=</span><span class="s1">SafeLoader</span><span class="s3">), **</span><span class="s1">options</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">GeneratorExit</span><span class="s3">, </span><span class="s1">DeserializationError</span><span class="s3">):</span>
+        <span class="s2">raise</span>
+    <span class="s2">except </span><span class="s1">Exception </span><span class="s2">as </span><span class="s1">exc</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">DeserializationError</span><span class="s3">() </span><span class="s2">from </span><span class="s1">exc</span>
+</pre>
+</body>
+</html>

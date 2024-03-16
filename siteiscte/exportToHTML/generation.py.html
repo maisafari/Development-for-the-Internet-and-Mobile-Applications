@@ -1,0 +1,200 @@
+<html>
+<head>
+<title>generation.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+generation.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+ This module contains functions that generate ctypes prototypes for the 
+ GDAL routines. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">POINTER</span><span class="s3">, </span><span class="s1">c_bool</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">c_int64</span><span class="s3">, </span><span class="s1">c_void_p</span>
+<span class="s2">from </span><span class="s1">functools </span><span class="s2">import </span><span class="s1">partial</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">gdal</span><span class="s3">.</span><span class="s1">prototypes</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s2">import </span><span class="s3">(</span>
+    <span class="s1">check_arg_errcode</span><span class="s3">,</span>
+    <span class="s1">check_const_string</span><span class="s3">,</span>
+    <span class="s1">check_errcode</span><span class="s3">,</span>
+    <span class="s1">check_geom</span><span class="s3">,</span>
+    <span class="s1">check_geom_offset</span><span class="s3">,</span>
+    <span class="s1">check_pointer</span><span class="s3">,</span>
+    <span class="s1">check_srs</span><span class="s3">,</span>
+    <span class="s1">check_str_arg</span><span class="s3">,</span>
+    <span class="s1">check_string</span><span class="s3">,</span>
+<span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">gdal_char_p</span><span class="s3">(</span><span class="s1">c_char_p</span><span class="s3">):</span>
+    <span class="s2">pass</span>
+
+
+<span class="s2">def </span><span class="s1">bool_output</span><span class="s3">(</span><span class="s1">func</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">, </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Generate a ctypes function that returns a boolean value.&quot;&quot;&quot;</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= </span><span class="s1">argtypes</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">c_bool</span>
+    <span class="s2">if </span><span class="s1">errcheck</span><span class="s3">:</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">errcheck</span>
+    <span class="s2">return </span><span class="s1">func</span>
+
+
+<span class="s2">def </span><span class="s1">double_output</span><span class="s3">(</span><span class="s1">func</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">, </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">False</span><span class="s3">, </span><span class="s1">strarg</span><span class="s3">=</span><span class="s2">False</span><span class="s3">, </span><span class="s1">cpl</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+    <span class="s0">&quot;Generate a ctypes function that returns a double value.&quot;</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= </span><span class="s1">argtypes</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">c_double</span>
+    <span class="s2">if </span><span class="s1">errcheck</span><span class="s3">:</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">partial</span><span class="s3">(</span><span class="s1">check_arg_errcode</span><span class="s3">, </span><span class="s1">cpl</span><span class="s3">=</span><span class="s1">cpl</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">strarg</span><span class="s3">:</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">check_str_arg</span>
+    <span class="s2">return </span><span class="s1">func</span>
+
+
+<span class="s2">def </span><span class="s1">geom_output</span><span class="s3">(</span><span class="s1">func</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">, </span><span class="s1">offset</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Generate a function that returns a Geometry either by reference 
+    or directly (if the return_geom keyword is set to True). 
+    &quot;&quot;&quot;</span>
+    <span class="s4"># Setting the argument types</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= </span><span class="s1">argtypes</span>
+
+    <span class="s2">if not </span><span class="s1">offset</span><span class="s3">:</span>
+        <span class="s4"># When a geometry pointer is directly returned.</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">c_void_p</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">check_geom</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s4"># Error code returned, geometry is returned by-reference.</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">c_int</span>
+
+        <span class="s2">def </span><span class="s1">geomerrcheck</span><span class="s3">(</span><span class="s1">result</span><span class="s3">, </span><span class="s1">func</span><span class="s3">, </span><span class="s1">cargs</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">check_geom_offset</span><span class="s3">(</span><span class="s1">result</span><span class="s3">, </span><span class="s1">func</span><span class="s3">, </span><span class="s1">cargs</span><span class="s3">, </span><span class="s1">offset</span><span class="s3">)</span>
+
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">geomerrcheck</span>
+
+    <span class="s2">return </span><span class="s1">func</span>
+
+
+<span class="s2">def </span><span class="s1">int_output</span><span class="s3">(</span><span class="s1">func</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">, </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s0">&quot;Generate a ctypes function that returns an integer value.&quot;</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= </span><span class="s1">argtypes</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">c_int</span>
+    <span class="s2">if </span><span class="s1">errcheck</span><span class="s3">:</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">errcheck</span>
+    <span class="s2">return </span><span class="s1">func</span>
+
+
+<span class="s2">def </span><span class="s1">int64_output</span><span class="s3">(</span><span class="s1">func</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">):</span>
+    <span class="s0">&quot;Generate a ctypes function that returns a 64-bit integer value.&quot;</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= </span><span class="s1">argtypes</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">c_int64</span>
+    <span class="s2">return </span><span class="s1">func</span>
+
+
+<span class="s2">def </span><span class="s1">srs_output</span><span class="s3">(</span><span class="s1">func</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Generate a ctypes prototype for the given function with 
+    the given C arguments that returns a pointer to an OGR 
+    Spatial Reference System. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= </span><span class="s1">argtypes</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">c_void_p</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">check_srs</span>
+    <span class="s2">return </span><span class="s1">func</span>
+
+
+<span class="s2">def </span><span class="s1">const_string_output</span><span class="s3">(</span><span class="s1">func</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">, </span><span class="s1">offset</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">decoding</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">cpl</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= </span><span class="s1">argtypes</span>
+    <span class="s2">if </span><span class="s1">offset</span><span class="s3">:</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">c_int</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">c_char_p</span>
+
+    <span class="s2">def </span><span class="s1">_check_const</span><span class="s3">(</span><span class="s1">result</span><span class="s3">, </span><span class="s1">func</span><span class="s3">, </span><span class="s1">cargs</span><span class="s3">):</span>
+        <span class="s1">res </span><span class="s3">= </span><span class="s1">check_const_string</span><span class="s3">(</span><span class="s1">result</span><span class="s3">, </span><span class="s1">func</span><span class="s3">, </span><span class="s1">cargs</span><span class="s3">, </span><span class="s1">offset</span><span class="s3">=</span><span class="s1">offset</span><span class="s3">, </span><span class="s1">cpl</span><span class="s3">=</span><span class="s1">cpl</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">res </span><span class="s2">and </span><span class="s1">decoding</span><span class="s3">:</span>
+            <span class="s1">res </span><span class="s3">= </span><span class="s1">res</span><span class="s3">.</span><span class="s1">decode</span><span class="s3">(</span><span class="s1">decoding</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">res</span>
+
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">_check_const</span>
+
+    <span class="s2">return </span><span class="s1">func</span>
+
+
+<span class="s2">def </span><span class="s1">string_output</span><span class="s3">(</span><span class="s1">func</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">, </span><span class="s1">offset</span><span class="s3">=-</span><span class="s5">1</span><span class="s3">, </span><span class="s1">str_result</span><span class="s3">=</span><span class="s2">False</span><span class="s3">, </span><span class="s1">decoding</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Generate a ctypes prototype for the given function with the 
+    given argument types that returns a string from a GDAL pointer. 
+    The `const` flag indicates whether the allocated pointer should 
+    be freed via the GDAL library routine VSIFree -- but only applies 
+    only when `str_result` is True. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= </span><span class="s1">argtypes</span>
+    <span class="s2">if </span><span class="s1">str_result</span><span class="s3">:</span>
+        <span class="s4"># Use subclass of c_char_p so the error checking routine</span>
+        <span class="s4"># can free the memory at the pointer's address.</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">gdal_char_p</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s4"># Error code is returned</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">c_int</span>
+
+    <span class="s4"># Dynamically defining our error-checking function with the</span>
+    <span class="s4"># given offset.</span>
+    <span class="s2">def </span><span class="s1">_check_str</span><span class="s3">(</span><span class="s1">result</span><span class="s3">, </span><span class="s1">func</span><span class="s3">, </span><span class="s1">cargs</span><span class="s3">):</span>
+        <span class="s1">res </span><span class="s3">= </span><span class="s1">check_string</span><span class="s3">(</span><span class="s1">result</span><span class="s3">, </span><span class="s1">func</span><span class="s3">, </span><span class="s1">cargs</span><span class="s3">, </span><span class="s1">offset</span><span class="s3">=</span><span class="s1">offset</span><span class="s3">, </span><span class="s1">str_result</span><span class="s3">=</span><span class="s1">str_result</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">res </span><span class="s2">and </span><span class="s1">decoding</span><span class="s3">:</span>
+            <span class="s1">res </span><span class="s3">= </span><span class="s1">res</span><span class="s3">.</span><span class="s1">decode</span><span class="s3">(</span><span class="s1">decoding</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">res</span>
+
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">_check_str</span>
+    <span class="s2">return </span><span class="s1">func</span>
+
+
+<span class="s2">def </span><span class="s1">void_output</span><span class="s3">(</span><span class="s1">func</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">, </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">cpl</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    For functions that don't only return an error code that needs to 
+    be examined. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">argtypes</span><span class="s3">:</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= </span><span class="s1">argtypes</span>
+    <span class="s2">if </span><span class="s1">errcheck</span><span class="s3">:</span>
+        <span class="s4"># `errcheck` keyword may be set to False for routines that</span>
+        <span class="s4"># return void, rather than a status code.</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">c_int</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">partial</span><span class="s3">(</span><span class="s1">check_errcode</span><span class="s3">, </span><span class="s1">cpl</span><span class="s3">=</span><span class="s1">cpl</span><span class="s3">)</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s2">None</span>
+
+    <span class="s2">return </span><span class="s1">func</span>
+
+
+<span class="s2">def </span><span class="s1">voidptr_output</span><span class="s3">(</span><span class="s1">func</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">, </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">True</span><span class="s3">):</span>
+    <span class="s0">&quot;For functions that return c_void_p.&quot;</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= </span><span class="s1">argtypes</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">c_void_p</span>
+    <span class="s2">if </span><span class="s1">errcheck</span><span class="s3">:</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">check_pointer</span>
+    <span class="s2">return </span><span class="s1">func</span>
+
+
+<span class="s2">def </span><span class="s1">chararray_output</span><span class="s3">(</span><span class="s1">func</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">, </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">True</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;For functions that return a c_char_p array.&quot;&quot;&quot;</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= </span><span class="s1">argtypes</span>
+    <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_char_p</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">errcheck</span><span class="s3">:</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">check_pointer</span>
+    <span class="s2">return </span><span class="s1">func</span>
+</pre>
+</body>
+</html>

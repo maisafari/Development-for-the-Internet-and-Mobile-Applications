@@ -1,0 +1,47 @@
+<html>
+<head>
+<title>prepared.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+prepared.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">c_byte</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos</span><span class="s2">.</span><span class="s1">libgeos </span><span class="s0">import </span><span class="s1">GEOM_PTR</span><span class="s2">, </span><span class="s1">PREPGEOM_PTR</span><span class="s2">, </span><span class="s1">GEOSFuncFactory</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">geos</span><span class="s2">.</span><span class="s1">prototypes</span><span class="s2">.</span><span class="s1">errcheck </span><span class="s0">import </span><span class="s1">check_predicate</span>
+
+<span class="s3"># Prepared geometry constructor and destructors.</span>
+<span class="s1">geos_prepare </span><span class="s2">= </span><span class="s1">GEOSFuncFactory</span><span class="s2">(</span><span class="s4">&quot;GEOSPrepare&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">GEOM_PTR</span><span class="s2">], </span><span class="s1">restype</span><span class="s2">=</span><span class="s1">PREPGEOM_PTR</span><span class="s2">)</span>
+<span class="s1">prepared_destroy </span><span class="s2">= </span><span class="s1">GEOSFuncFactory</span><span class="s2">(</span><span class="s4">&quot;GEOSPreparedGeom_destroy&quot;</span><span class="s2">, </span><span class="s1">argtypes</span><span class="s2">=[</span><span class="s1">PREPGEOM_PTR</span><span class="s2">])</span>
+
+
+<span class="s3"># Prepared geometry binary predicate support.</span>
+<span class="s0">class </span><span class="s1">PreparedPredicate</span><span class="s2">(</span><span class="s1">GEOSFuncFactory</span><span class="s2">):</span>
+    <span class="s1">argtypes </span><span class="s2">= [</span><span class="s1">PREPGEOM_PTR</span><span class="s2">, </span><span class="s1">GEOM_PTR</span><span class="s2">]</span>
+    <span class="s1">restype </span><span class="s2">= </span><span class="s1">c_byte</span>
+    <span class="s1">errcheck </span><span class="s2">= </span><span class="s1">staticmethod</span><span class="s2">(</span><span class="s1">check_predicate</span><span class="s2">)</span>
+
+
+<span class="s1">prepared_contains </span><span class="s2">= </span><span class="s1">PreparedPredicate</span><span class="s2">(</span><span class="s4">&quot;GEOSPreparedContains&quot;</span><span class="s2">)</span>
+<span class="s1">prepared_contains_properly </span><span class="s2">= </span><span class="s1">PreparedPredicate</span><span class="s2">(</span><span class="s4">&quot;GEOSPreparedContainsProperly&quot;</span><span class="s2">)</span>
+<span class="s1">prepared_covers </span><span class="s2">= </span><span class="s1">PreparedPredicate</span><span class="s2">(</span><span class="s4">&quot;GEOSPreparedCovers&quot;</span><span class="s2">)</span>
+<span class="s1">prepared_crosses </span><span class="s2">= </span><span class="s1">PreparedPredicate</span><span class="s2">(</span><span class="s4">&quot;GEOSPreparedCrosses&quot;</span><span class="s2">)</span>
+<span class="s1">prepared_disjoint </span><span class="s2">= </span><span class="s1">PreparedPredicate</span><span class="s2">(</span><span class="s4">&quot;GEOSPreparedDisjoint&quot;</span><span class="s2">)</span>
+<span class="s1">prepared_intersects </span><span class="s2">= </span><span class="s1">PreparedPredicate</span><span class="s2">(</span><span class="s4">&quot;GEOSPreparedIntersects&quot;</span><span class="s2">)</span>
+<span class="s1">prepared_overlaps </span><span class="s2">= </span><span class="s1">PreparedPredicate</span><span class="s2">(</span><span class="s4">&quot;GEOSPreparedOverlaps&quot;</span><span class="s2">)</span>
+<span class="s1">prepared_touches </span><span class="s2">= </span><span class="s1">PreparedPredicate</span><span class="s2">(</span><span class="s4">&quot;GEOSPreparedTouches&quot;</span><span class="s2">)</span>
+<span class="s1">prepared_within </span><span class="s2">= </span><span class="s1">PreparedPredicate</span><span class="s2">(</span><span class="s4">&quot;GEOSPreparedWithin&quot;</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

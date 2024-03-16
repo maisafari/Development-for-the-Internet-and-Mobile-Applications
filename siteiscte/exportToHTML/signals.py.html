@@ -1,0 +1,103 @@
+<html>
+<head>
+<title>signals.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #2aacb8;}
+.s5 { color: #5f826b; font-style: italic;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+signals.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">functools</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">connections</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">base</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">NO_DB_ALIAS</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">postgresql</span><span class="s2">.</span><span class="s1">psycopg_any </span><span class="s0">import </span><span class="s1">is_psycopg3</span>
+
+
+<span class="s0">def </span><span class="s1">get_type_oids</span><span class="s2">(</span><span class="s1">connection_alias</span><span class="s2">, </span><span class="s1">type_name</span><span class="s2">):</span>
+    <span class="s0">with </span><span class="s1">connections</span><span class="s2">[</span><span class="s1">connection_alias</span><span class="s2">].</span><span class="s1">cursor</span><span class="s2">() </span><span class="s0">as </span><span class="s1">cursor</span><span class="s2">:</span>
+        <span class="s1">cursor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+            <span class="s3">&quot;SELECT oid, typarray FROM pg_type WHERE typname = %s&quot;</span><span class="s2">, (</span><span class="s1">type_name</span><span class="s2">,)</span>
+        <span class="s2">)</span>
+        <span class="s1">oids </span><span class="s2">= []</span>
+        <span class="s1">array_oids </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">row </span><span class="s0">in </span><span class="s1">cursor</span><span class="s2">:</span>
+            <span class="s1">oids</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">row</span><span class="s2">[</span><span class="s4">0</span><span class="s2">])</span>
+            <span class="s1">array_oids</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">row</span><span class="s2">[</span><span class="s4">1</span><span class="s2">])</span>
+        <span class="s0">return </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">oids</span><span class="s2">), </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">array_oids</span><span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">functools</span><span class="s2">.</span><span class="s1">lru_cache</span>
+<span class="s0">def </span><span class="s1">get_hstore_oids</span><span class="s2">(</span><span class="s1">connection_alias</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Return hstore and hstore array OIDs.&quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">get_type_oids</span><span class="s2">(</span><span class="s1">connection_alias</span><span class="s2">, </span><span class="s3">&quot;hstore&quot;</span><span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">functools</span><span class="s2">.</span><span class="s1">lru_cache</span>
+<span class="s0">def </span><span class="s1">get_citext_oids</span><span class="s2">(</span><span class="s1">connection_alias</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Return citext and citext array OIDs.&quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">get_type_oids</span><span class="s2">(</span><span class="s1">connection_alias</span><span class="s2">, </span><span class="s3">&quot;citext&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">if </span><span class="s1">is_psycopg3</span><span class="s2">:</span>
+    <span class="s0">from </span><span class="s1">psycopg</span><span class="s2">.</span><span class="s1">types </span><span class="s0">import </span><span class="s1">TypeInfo</span><span class="s2">, </span><span class="s1">hstore</span>
+
+    <span class="s0">def </span><span class="s1">register_type_handlers</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">vendor </span><span class="s2">!= </span><span class="s3">&quot;postgresql&quot; </span><span class="s0">or </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias </span><span class="s2">== </span><span class="s1">NO_DB_ALIAS</span><span class="s2">:</span>
+            <span class="s0">return</span>
+
+        <span class="s1">oids</span><span class="s2">, </span><span class="s1">array_oids </span><span class="s2">= </span><span class="s1">get_hstore_oids</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">oid</span><span class="s2">, </span><span class="s1">array_oid </span><span class="s0">in </span><span class="s1">zip</span><span class="s2">(</span><span class="s1">oids</span><span class="s2">, </span><span class="s1">array_oids</span><span class="s2">):</span>
+            <span class="s1">ti </span><span class="s2">= </span><span class="s1">TypeInfo</span><span class="s2">(</span><span class="s3">&quot;hstore&quot;</span><span class="s2">, </span><span class="s1">oid</span><span class="s2">, </span><span class="s1">array_oid</span><span class="s2">)</span>
+            <span class="s1">hstore</span><span class="s2">.</span><span class="s1">register_hstore</span><span class="s2">(</span><span class="s1">ti</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">)</span>
+
+        <span class="s1">_</span><span class="s2">, </span><span class="s1">citext_oids </span><span class="s2">= </span><span class="s1">get_citext_oids</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">array_oid </span><span class="s0">in </span><span class="s1">citext_oids</span><span class="s2">:</span>
+            <span class="s1">ti </span><span class="s2">= </span><span class="s1">TypeInfo</span><span class="s2">(</span><span class="s3">&quot;citext&quot;</span><span class="s2">, </span><span class="s4">0</span><span class="s2">, </span><span class="s1">array_oid</span><span class="s2">)</span>
+            <span class="s1">ti</span><span class="s2">.</span><span class="s1">register</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">)</span>
+
+<span class="s0">else</span><span class="s2">:</span>
+    <span class="s0">import </span><span class="s1">psycopg2</span>
+    <span class="s0">from </span><span class="s1">psycopg2</span><span class="s2">.</span><span class="s1">extras </span><span class="s0">import </span><span class="s1">register_hstore</span>
+
+    <span class="s0">def </span><span class="s1">register_type_handlers</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">vendor </span><span class="s2">!= </span><span class="s3">&quot;postgresql&quot; </span><span class="s0">or </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias </span><span class="s2">== </span><span class="s1">NO_DB_ALIAS</span><span class="s2">:</span>
+            <span class="s0">return</span>
+
+        <span class="s1">oids</span><span class="s2">, </span><span class="s1">array_oids </span><span class="s2">= </span><span class="s1">get_hstore_oids</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">)</span>
+        <span class="s6"># Don't register handlers when hstore is not available on the database.</span>
+        <span class="s6">#</span>
+        <span class="s6"># If someone tries to create an hstore field it will error there. This is</span>
+        <span class="s6"># necessary as someone may be using PSQL without extensions installed but</span>
+        <span class="s6"># be using other features of contrib.postgres.</span>
+        <span class="s6">#</span>
+        <span class="s6"># This is also needed in order to create the connection in order to install</span>
+        <span class="s6"># the hstore extension.</span>
+        <span class="s0">if </span><span class="s1">oids</span><span class="s2">:</span>
+            <span class="s1">register_hstore</span><span class="s2">(</span>
+                <span class="s1">connection</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">, </span><span class="s1">globally</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">oid</span><span class="s2">=</span><span class="s1">oids</span><span class="s2">, </span><span class="s1">array_oid</span><span class="s2">=</span><span class="s1">array_oids</span>
+            <span class="s2">)</span>
+
+        <span class="s1">oids</span><span class="s2">, </span><span class="s1">citext_oids </span><span class="s2">= </span><span class="s1">get_citext_oids</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">)</span>
+        <span class="s6"># Don't register handlers when citext is not available on the database.</span>
+        <span class="s6">#</span>
+        <span class="s6"># The same comments in the above call to register_hstore() also apply here.</span>
+        <span class="s0">if </span><span class="s1">oids</span><span class="s2">:</span>
+            <span class="s1">array_type </span><span class="s2">= </span><span class="s1">psycopg2</span><span class="s2">.</span><span class="s1">extensions</span><span class="s2">.</span><span class="s1">new_array_type</span><span class="s2">(</span>
+                <span class="s1">citext_oids</span><span class="s2">, </span><span class="s3">&quot;citext[]&quot;</span><span class="s2">, </span><span class="s1">psycopg2</span><span class="s2">.</span><span class="s1">STRING</span>
+            <span class="s2">)</span>
+            <span class="s1">psycopg2</span><span class="s2">.</span><span class="s1">extensions</span><span class="s2">.</span><span class="s1">register_type</span><span class="s2">(</span><span class="s1">array_type</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

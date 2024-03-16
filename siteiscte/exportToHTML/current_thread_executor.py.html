@@ -1,0 +1,138 @@
+<html>
+<head>
+<title>current_thread_executor.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #2aacb8;}
+.s4 { color: #6aab73;}
+.s5 { color: #5f826b; font-style: italic;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+current_thread_executor.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">queue</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">threading</span>
+<span class="s0">from </span><span class="s1">concurrent</span><span class="s2">.</span><span class="s1">futures </span><span class="s0">import </span><span class="s1">Executor</span><span class="s2">, </span><span class="s1">Future</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">TYPE_CHECKING</span><span class="s2">, </span><span class="s1">Any</span><span class="s2">, </span><span class="s1">Callable</span><span class="s2">, </span><span class="s1">TypeVar</span><span class="s2">, </span><span class="s1">Union</span>
+
+<span class="s0">if </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">version_info </span><span class="s2">&gt;= (</span><span class="s3">3</span><span class="s2">, </span><span class="s3">10</span><span class="s2">):</span>
+    <span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">ParamSpec</span>
+<span class="s0">else</span><span class="s2">:</span>
+    <span class="s0">from </span><span class="s1">typing_extensions </span><span class="s0">import </span><span class="s1">ParamSpec</span>
+
+<span class="s1">_T </span><span class="s2">= </span><span class="s1">TypeVar</span><span class="s2">(</span><span class="s4">&quot;_T&quot;</span><span class="s2">)</span>
+<span class="s1">_P </span><span class="s2">= </span><span class="s1">ParamSpec</span><span class="s2">(</span><span class="s4">&quot;_P&quot;</span><span class="s2">)</span>
+<span class="s1">_R </span><span class="s2">= </span><span class="s1">TypeVar</span><span class="s2">(</span><span class="s4">&quot;_R&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">_WorkItem</span><span class="s2">:</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Represents an item needing to be run in the executor. 
+    Copied from ThreadPoolExecutor (but it's private, so we're not going to rely on importing it) 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">future</span><span class="s2">: </span><span class="s4">&quot;Future[_R]&quot;</span><span class="s2">,</span>
+        <span class="s1">fn</span><span class="s2">: </span><span class="s1">Callable</span><span class="s2">[</span><span class="s1">_P</span><span class="s2">, </span><span class="s1">_R</span><span class="s2">],</span>
+        <span class="s2">*</span><span class="s1">args</span><span class="s2">: </span><span class="s1">_P</span><span class="s2">.</span><span class="s1">args</span><span class="s2">,</span>
+        <span class="s2">**</span><span class="s1">kwargs</span><span class="s2">: </span><span class="s1">_P</span><span class="s2">.</span><span class="s1">kwargs</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">future </span><span class="s2">= </span><span class="s1">future</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">fn </span><span class="s2">= </span><span class="s1">fn</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">args </span><span class="s2">= </span><span class="s1">args</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">kwargs </span><span class="s2">= </span><span class="s1">kwargs</span>
+
+    <span class="s0">def </span><span class="s1">run</span><span class="s2">(</span><span class="s1">self</span><span class="s2">) </span><span class="s1">-&gt; </span><span class="s0">None</span><span class="s2">:</span>
+        <span class="s1">__traceback_hide__ </span><span class="s2">= </span><span class="s0">True  </span><span class="s6"># noqa: F841</span>
+        <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">set_running_or_notify_cancel</span><span class="s2">():</span>
+            <span class="s0">return</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">result </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fn</span><span class="s2">(*</span><span class="s1">self</span><span class="s2">.</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">self</span><span class="s2">.</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">BaseException </span><span class="s0">as </span><span class="s1">exc</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">set_exception</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">)</span>
+            <span class="s6"># Break a reference cycle with the exception 'exc'</span>
+            <span class="s1">self </span><span class="s2">= </span><span class="s0">None  </span><span class="s6"># type: ignore[assignment]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">set_result</span><span class="s2">(</span><span class="s1">result</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">CurrentThreadExecutor</span><span class="s2">(</span><span class="s1">Executor</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    An Executor that actually runs code in the thread it is instantiated in. 
+    Passed to other threads running async code, so they can run sync code in 
+    the thread they came from. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">) </span><span class="s1">-&gt; </span><span class="s0">None</span><span class="s2">:</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_work_thread </span><span class="s2">= </span><span class="s1">threading</span><span class="s2">.</span><span class="s1">current_thread</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_work_queue</span><span class="s2">: </span><span class="s1">queue</span><span class="s2">.</span><span class="s1">Queue</span><span class="s2">[</span><span class="s1">Union</span><span class="s2">[</span><span class="s1">_WorkItem</span><span class="s2">, </span><span class="s4">&quot;Future[Any]&quot;</span><span class="s2">]] = </span><span class="s1">queue</span><span class="s2">.</span><span class="s1">Queue</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_broken </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s0">def </span><span class="s1">run_until_future</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">future</span><span class="s2">: </span><span class="s4">&quot;Future[Any]&quot;</span><span class="s2">) </span><span class="s1">-&gt; </span><span class="s0">None</span><span class="s2">:</span>
+        <span class="s5">&quot;&quot;&quot; 
+        Runs the code in the work queue until a result is available from the future. 
+        Should be run from the thread the executor is initialised in. 
+        &quot;&quot;&quot;</span>
+        <span class="s6"># Check we're in the right thread</span>
+        <span class="s0">if </span><span class="s1">threading</span><span class="s2">.</span><span class="s1">current_thread</span><span class="s2">() != </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_work_thread</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">RuntimeError</span><span class="s2">(</span>
+                <span class="s4">&quot;You cannot run CurrentThreadExecutor from a different thread&quot;</span>
+            <span class="s2">)</span>
+        <span class="s1">future</span><span class="s2">.</span><span class="s1">add_done_callback</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_work_queue</span><span class="s2">.</span><span class="s1">put</span><span class="s2">)</span>
+        <span class="s6"># Keep getting and running work items until we get the future we're waiting for</span>
+        <span class="s6"># back via the future's done callback.</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">while True</span><span class="s2">:</span>
+                <span class="s6"># Get a work item and run it</span>
+                <span class="s1">work_item </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_work_queue</span><span class="s2">.</span><span class="s1">get</span><span class="s2">()</span>
+                <span class="s0">if </span><span class="s1">work_item </span><span class="s0">is </span><span class="s1">future</span><span class="s2">:</span>
+                    <span class="s0">return</span>
+                <span class="s0">assert </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">work_item</span><span class="s2">, </span><span class="s1">_WorkItem</span><span class="s2">)</span>
+                <span class="s1">work_item</span><span class="s2">.</span><span class="s1">run</span><span class="s2">()</span>
+                <span class="s0">del </span><span class="s1">work_item</span>
+        <span class="s0">finally</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_broken </span><span class="s2">= </span><span class="s0">True</span>
+
+    <span class="s0">def </span><span class="s1">_submit</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">fn</span><span class="s2">: </span><span class="s1">Callable</span><span class="s2">[</span><span class="s1">_P</span><span class="s2">, </span><span class="s1">_R</span><span class="s2">],</span>
+        <span class="s2">*</span><span class="s1">args</span><span class="s2">: </span><span class="s1">_P</span><span class="s2">.</span><span class="s1">args</span><span class="s2">,</span>
+        <span class="s2">**</span><span class="s1">kwargs</span><span class="s2">: </span><span class="s1">_P</span><span class="s2">.</span><span class="s1">kwargs</span><span class="s2">,</span>
+    <span class="s2">) </span><span class="s1">-&gt; </span><span class="s4">&quot;Future[_R]&quot;</span><span class="s2">:</span>
+        <span class="s6"># Check they're not submitting from the same thread</span>
+        <span class="s0">if </span><span class="s1">threading</span><span class="s2">.</span><span class="s1">current_thread</span><span class="s2">() == </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_work_thread</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">RuntimeError</span><span class="s2">(</span>
+                <span class="s4">&quot;You cannot submit onto CurrentThreadExecutor from its own thread&quot;</span>
+            <span class="s2">)</span>
+        <span class="s6"># Check they're not too late or the executor errored</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_broken</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">RuntimeError</span><span class="s2">(</span><span class="s4">&quot;CurrentThreadExecutor already quit or is broken&quot;</span><span class="s2">)</span>
+        <span class="s6"># Add to work queue</span>
+        <span class="s1">f</span><span class="s2">: </span><span class="s4">&quot;Future[_R]&quot; </span><span class="s2">= </span><span class="s1">Future</span><span class="s2">()</span>
+        <span class="s1">work_item </span><span class="s2">= </span><span class="s1">_WorkItem</span><span class="s2">(</span><span class="s1">f</span><span class="s2">, </span><span class="s1">fn</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_work_queue</span><span class="s2">.</span><span class="s1">put</span><span class="s2">(</span><span class="s1">work_item</span><span class="s2">)</span>
+        <span class="s6"># Return the future</span>
+        <span class="s0">return </span><span class="s1">f</span>
+
+    <span class="s6"># Python 3.9+ has a new signature for submit with a &quot;/&quot; after `fn`, to enforce</span>
+    <span class="s6"># it to be a positional argument. If we ignore[override] mypy on 3.9+ will be</span>
+    <span class="s6"># happy but 3.7/3.8 will say that the ignore comment is unused, even when</span>
+    <span class="s6"># defining them differently based on sys.version_info.</span>
+    <span class="s6"># We should be able to remove this when we drop support for 3.7/3.8.</span>
+    <span class="s0">if not </span><span class="s1">TYPE_CHECKING</span><span class="s2">:</span>
+
+        <span class="s0">def </span><span class="s1">submit</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">fn</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_submit</span><span class="s2">(</span><span class="s1">fn</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

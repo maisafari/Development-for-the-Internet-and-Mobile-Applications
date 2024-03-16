@@ -1,0 +1,130 @@
+<html>
+<head>
+<title>module_loading.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #6aab73;}
+.s5 { color: #5f826b; font-style: italic;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+module_loading.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">copy</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">from </span><span class="s1">importlib </span><span class="s0">import </span><span class="s1">import_module</span>
+<span class="s0">from </span><span class="s1">importlib</span><span class="s2">.</span><span class="s1">util </span><span class="s0">import </span><span class="s1">find_spec </span><span class="s0">as </span><span class="s1">importlib_find</span>
+
+
+<span class="s0">def </span><span class="s1">cached_import</span><span class="s2">(</span><span class="s1">module_path</span><span class="s2">, </span><span class="s1">class_name</span><span class="s2">):</span>
+    <span class="s3"># Check whether module is loaded and fully initialized.</span>
+    <span class="s0">if not </span><span class="s2">(</span>
+        <span class="s2">(</span><span class="s1">module </span><span class="s2">:= </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">modules</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">module_path</span><span class="s2">))</span>
+        <span class="s0">and </span><span class="s2">(</span><span class="s1">spec </span><span class="s2">:= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">module</span><span class="s2">, </span><span class="s4">&quot;__spec__&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">))</span>
+        <span class="s0">and </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">spec</span><span class="s2">, </span><span class="s4">&quot;_initializing&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">) </span><span class="s0">is False</span>
+    <span class="s2">):</span>
+        <span class="s1">module </span><span class="s2">= </span><span class="s1">import_module</span><span class="s2">(</span><span class="s1">module_path</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">module</span><span class="s2">, </span><span class="s1">class_name</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">import_string</span><span class="s2">(</span><span class="s1">dotted_path</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Import a dotted module path and return the attribute/class designated by the 
+    last name in the path. Raise ImportError if the import failed. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">try</span><span class="s2">:</span>
+        <span class="s1">module_path</span><span class="s2">, </span><span class="s1">class_name </span><span class="s2">= </span><span class="s1">dotted_path</span><span class="s2">.</span><span class="s1">rsplit</span><span class="s2">(</span><span class="s4">&quot;.&quot;</span><span class="s2">, </span><span class="s6">1</span><span class="s2">)</span>
+    <span class="s0">except </span><span class="s1">ValueError </span><span class="s0">as </span><span class="s1">err</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">ImportError</span><span class="s2">(</span><span class="s4">&quot;%s doesn't look like a module path&quot; </span><span class="s2">% </span><span class="s1">dotted_path</span><span class="s2">) </span><span class="s0">from </span><span class="s1">err</span>
+
+    <span class="s0">try</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">cached_import</span><span class="s2">(</span><span class="s1">module_path</span><span class="s2">, </span><span class="s1">class_name</span><span class="s2">)</span>
+    <span class="s0">except </span><span class="s1">AttributeError </span><span class="s0">as </span><span class="s1">err</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">ImportError</span><span class="s2">(</span>
+            <span class="s4">'Module &quot;%s&quot; does not define a &quot;%s&quot; attribute/class'</span>
+            <span class="s2">% (</span><span class="s1">module_path</span><span class="s2">, </span><span class="s1">class_name</span><span class="s2">)</span>
+        <span class="s2">) </span><span class="s0">from </span><span class="s1">err</span>
+
+
+<span class="s0">def </span><span class="s1">autodiscover_modules</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Auto-discover INSTALLED_APPS modules and fail silently when 
+    not present. This forces an import on them to register any admin bits they 
+    may want. 
+ 
+    You may provide a register_to keyword parameter as a way to access a 
+    registry. This register_to object must have a _registry instance variable 
+    to access it. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+
+    <span class="s1">register_to </span><span class="s2">= </span><span class="s1">kwargs</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s4">&quot;register_to&quot;</span><span class="s2">)</span>
+    <span class="s0">for </span><span class="s1">app_config </span><span class="s0">in </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_configs</span><span class="s2">():</span>
+        <span class="s0">for </span><span class="s1">module_to_search </span><span class="s0">in </span><span class="s1">args</span><span class="s2">:</span>
+            <span class="s3"># Attempt to import the app's module.</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">register_to</span><span class="s2">:</span>
+                    <span class="s1">before_import_registry </span><span class="s2">= </span><span class="s1">copy</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">(</span><span class="s1">register_to</span><span class="s2">.</span><span class="s1">_registry</span><span class="s2">)</span>
+
+                <span class="s1">import_module</span><span class="s2">(</span><span class="s4">&quot;%s.%s&quot; </span><span class="s2">% (</span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">name</span><span class="s2">, </span><span class="s1">module_to_search</span><span class="s2">))</span>
+            <span class="s0">except </span><span class="s1">Exception</span><span class="s2">:</span>
+                <span class="s3"># Reset the registry to the state before the last import</span>
+                <span class="s3"># as this import will have to reoccur on the next request and</span>
+                <span class="s3"># this could raise NotRegistered and AlreadyRegistered</span>
+                <span class="s3"># exceptions (see #8245).</span>
+                <span class="s0">if </span><span class="s1">register_to</span><span class="s2">:</span>
+                    <span class="s1">register_to</span><span class="s2">.</span><span class="s1">_registry </span><span class="s2">= </span><span class="s1">before_import_registry</span>
+
+                <span class="s3"># Decide whether to bubble up this error. If the app just</span>
+                <span class="s3"># doesn't have the module in question, we can ignore the error</span>
+                <span class="s3"># attempting to import it, otherwise we want it to bubble up.</span>
+                <span class="s0">if </span><span class="s1">module_has_submodule</span><span class="s2">(</span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">module</span><span class="s2">, </span><span class="s1">module_to_search</span><span class="s2">):</span>
+                    <span class="s0">raise</span>
+
+
+<span class="s0">def </span><span class="s1">module_has_submodule</span><span class="s2">(</span><span class="s1">package</span><span class="s2">, </span><span class="s1">module_name</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;See if 'module' is in 'package'.&quot;&quot;&quot;</span>
+    <span class="s0">try</span><span class="s2">:</span>
+        <span class="s1">package_name </span><span class="s2">= </span><span class="s1">package</span><span class="s2">.</span><span class="s1">__name__</span>
+        <span class="s1">package_path </span><span class="s2">= </span><span class="s1">package</span><span class="s2">.</span><span class="s1">__path__</span>
+    <span class="s0">except </span><span class="s1">AttributeError</span><span class="s2">:</span>
+        <span class="s3"># package isn't a package.</span>
+        <span class="s0">return False</span>
+
+    <span class="s1">full_module_name </span><span class="s2">= </span><span class="s1">package_name </span><span class="s2">+ </span><span class="s4">&quot;.&quot; </span><span class="s2">+ </span><span class="s1">module_name</span>
+    <span class="s0">try</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">importlib_find</span><span class="s2">(</span><span class="s1">full_module_name</span><span class="s2">, </span><span class="s1">package_path</span><span class="s2">) </span><span class="s0">is not None</span>
+    <span class="s0">except </span><span class="s1">ModuleNotFoundError</span><span class="s2">:</span>
+        <span class="s3"># When module_name is an invalid dotted path, Python raises</span>
+        <span class="s3"># ModuleNotFoundError.</span>
+        <span class="s0">return False</span>
+
+
+<span class="s0">def </span><span class="s1">module_dir</span><span class="s2">(</span><span class="s1">module</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Find the name of the directory that contains a module, if possible. 
+ 
+    Raise ValueError otherwise, e.g. for namespace packages that are split 
+    over several directories. 
+    &quot;&quot;&quot;</span>
+    <span class="s3"># Convert to list because __path__ may not support indexing.</span>
+    <span class="s1">paths </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">module</span><span class="s2">, </span><span class="s4">&quot;__path__&quot;</span><span class="s2">, []))</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">paths</span><span class="s2">) == </span><span class="s6">1</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">paths</span><span class="s2">[</span><span class="s6">0</span><span class="s2">]</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">filename </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">module</span><span class="s2">, </span><span class="s4">&quot;__file__&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">filename </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">dirname</span><span class="s2">(</span><span class="s1">filename</span><span class="s2">)</span>
+    <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s4">&quot;Cannot determine directory containing %s&quot; </span><span class="s2">% </span><span class="s1">module</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

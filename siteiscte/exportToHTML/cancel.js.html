@@ -1,0 +1,50 @@
+<html>
+<head>
+<title>cancel.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #6aab73;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #cf8e6d;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+cancel.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+<span class="s1">{</span>
+    <span class="s3">// Call function fn when the DOM is loaded and ready. If it is already</span>
+    <span class="s3">// loaded, call the function now.</span>
+    <span class="s3">// http://youmightnotneedjquery.com/#ready</span>
+    <span class="s4">function </span><span class="s2">ready</span><span class="s1">(</span><span class="s2">fn</span><span class="s1">) {</span>
+        <span class="s4">if </span><span class="s1">(</span><span class="s2">document</span><span class="s1">.</span><span class="s2">readyState </span><span class="s1">!== </span><span class="s0">'loading'</span><span class="s1">) {</span>
+            <span class="s2">fn</span><span class="s1">();</span>
+        <span class="s1">} </span><span class="s4">else </span><span class="s1">{</span>
+            <span class="s2">document</span><span class="s1">.</span><span class="s2">addEventListener</span><span class="s1">(</span><span class="s0">'DOMContentLoaded'</span><span class="s1">, </span><span class="s2">fn</span><span class="s1">);</span>
+        <span class="s1">}</span>
+    <span class="s1">}</span>
+
+    <span class="s2">ready</span><span class="s1">(</span><span class="s4">function</span><span class="s1">() {</span>
+        <span class="s4">function </span><span class="s2">handleClick</span><span class="s1">(</span><span class="s2">event</span><span class="s1">) {</span>
+            <span class="s2">event</span><span class="s1">.</span><span class="s2">preventDefault</span><span class="s1">();</span>
+            <span class="s4">const </span><span class="s2">params </span><span class="s1">= </span><span class="s4">new </span><span class="s2">URLSearchParams</span><span class="s1">(</span><span class="s2">window</span><span class="s1">.</span><span class="s2">location</span><span class="s1">.</span><span class="s2">search</span><span class="s1">);</span>
+            <span class="s4">if </span><span class="s1">(</span><span class="s2">params</span><span class="s1">.</span><span class="s2">has</span><span class="s1">(</span><span class="s0">'_popup'</span><span class="s1">)) {</span>
+                <span class="s2">window</span><span class="s1">.</span><span class="s2">close</span><span class="s1">(); </span><span class="s3">// Close the popup.</span>
+            <span class="s1">} </span><span class="s4">else </span><span class="s1">{</span>
+                <span class="s2">window</span><span class="s1">.</span><span class="s2">history</span><span class="s1">.</span><span class="s2">back</span><span class="s1">(); </span><span class="s3">// Otherwise, go back.</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+
+        <span class="s2">document</span><span class="s1">.</span><span class="s2">querySelectorAll</span><span class="s1">(</span><span class="s0">'.cancel-link'</span><span class="s1">).</span><span class="s2">forEach</span><span class="s1">(</span><span class="s4">function</span><span class="s1">(</span><span class="s2">el</span><span class="s1">) {</span>
+            <span class="s2">el</span><span class="s1">.</span><span class="s2">addEventListener</span><span class="s1">(</span><span class="s0">'click'</span><span class="s1">, </span><span class="s2">handleClick</span><span class="s1">);</span>
+        <span class="s1">});</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

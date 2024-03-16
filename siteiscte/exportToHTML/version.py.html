@@ -1,0 +1,144 @@
+<html>
+<head>
+<title>version.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #2aacb8;}
+.s5 { color: #5f826b; font-style: italic;}
+.s6 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+version.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">datetime</span>
+<span class="s0">import </span><span class="s1">functools</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">subprocess</span>
+<span class="s0">import </span><span class="s1">sys</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">regex_helper </span><span class="s0">import </span><span class="s1">_lazy_re_compile</span>
+
+<span class="s3"># Private, stable API for detecting the Python version. PYXY means &quot;Python X.Y</span>
+<span class="s3"># or later&quot;. So that third-party apps can use these values, each constant</span>
+<span class="s3"># should remain as long as the oldest supported Django version supports that</span>
+<span class="s3"># Python version.</span>
+<span class="s1">PY36 </span><span class="s2">= </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">version_info </span><span class="s2">&gt;= (</span><span class="s4">3</span><span class="s2">, </span><span class="s4">6</span><span class="s2">)</span>
+<span class="s1">PY37 </span><span class="s2">= </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">version_info </span><span class="s2">&gt;= (</span><span class="s4">3</span><span class="s2">, </span><span class="s4">7</span><span class="s2">)</span>
+<span class="s1">PY38 </span><span class="s2">= </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">version_info </span><span class="s2">&gt;= (</span><span class="s4">3</span><span class="s2">, </span><span class="s4">8</span><span class="s2">)</span>
+<span class="s1">PY39 </span><span class="s2">= </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">version_info </span><span class="s2">&gt;= (</span><span class="s4">3</span><span class="s2">, </span><span class="s4">9</span><span class="s2">)</span>
+<span class="s1">PY310 </span><span class="s2">= </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">version_info </span><span class="s2">&gt;= (</span><span class="s4">3</span><span class="s2">, </span><span class="s4">10</span><span class="s2">)</span>
+<span class="s1">PY311 </span><span class="s2">= </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">version_info </span><span class="s2">&gt;= (</span><span class="s4">3</span><span class="s2">, </span><span class="s4">11</span><span class="s2">)</span>
+<span class="s1">PY312 </span><span class="s2">= </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">version_info </span><span class="s2">&gt;= (</span><span class="s4">3</span><span class="s2">, </span><span class="s4">12</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">get_version</span><span class="s2">(</span><span class="s1">version</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Return a PEP 440-compliant version number from VERSION.&quot;&quot;&quot;</span>
+    <span class="s1">version </span><span class="s2">= </span><span class="s1">get_complete_version</span><span class="s2">(</span><span class="s1">version</span><span class="s2">)</span>
+
+    <span class="s3"># Now build the two parts of the version number:</span>
+    <span class="s3"># main = X.Y[.Z]</span>
+    <span class="s3"># sub = .devN - for pre-alpha releases</span>
+    <span class="s3">#     | {a|b|rc}N - for alpha, beta, and rc releases</span>
+
+    <span class="s1">main </span><span class="s2">= </span><span class="s1">get_main_version</span><span class="s2">(</span><span class="s1">version</span><span class="s2">)</span>
+
+    <span class="s1">sub </span><span class="s2">= </span><span class="s6">&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">version</span><span class="s2">[</span><span class="s4">3</span><span class="s2">] == </span><span class="s6">&quot;alpha&quot; </span><span class="s0">and </span><span class="s1">version</span><span class="s2">[</span><span class="s4">4</span><span class="s2">] == </span><span class="s4">0</span><span class="s2">:</span>
+        <span class="s1">git_changeset </span><span class="s2">= </span><span class="s1">get_git_changeset</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">git_changeset</span><span class="s2">:</span>
+            <span class="s1">sub </span><span class="s2">= </span><span class="s6">&quot;.dev%s&quot; </span><span class="s2">% </span><span class="s1">git_changeset</span>
+
+    <span class="s0">elif </span><span class="s1">version</span><span class="s2">[</span><span class="s4">3</span><span class="s2">] != </span><span class="s6">&quot;final&quot;</span><span class="s2">:</span>
+        <span class="s1">mapping </span><span class="s2">= {</span><span class="s6">&quot;alpha&quot;</span><span class="s2">: </span><span class="s6">&quot;a&quot;</span><span class="s2">, </span><span class="s6">&quot;beta&quot;</span><span class="s2">: </span><span class="s6">&quot;b&quot;</span><span class="s2">, </span><span class="s6">&quot;rc&quot;</span><span class="s2">: </span><span class="s6">&quot;rc&quot;</span><span class="s2">}</span>
+        <span class="s1">sub </span><span class="s2">= </span><span class="s1">mapping</span><span class="s2">[</span><span class="s1">version</span><span class="s2">[</span><span class="s4">3</span><span class="s2">]] + </span><span class="s1">str</span><span class="s2">(</span><span class="s1">version</span><span class="s2">[</span><span class="s4">4</span><span class="s2">])</span>
+
+    <span class="s0">return </span><span class="s1">main </span><span class="s2">+ </span><span class="s1">sub</span>
+
+
+<span class="s0">def </span><span class="s1">get_main_version</span><span class="s2">(</span><span class="s1">version</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot;Return main version (X.Y[.Z]) from VERSION.&quot;&quot;&quot;</span>
+    <span class="s1">version </span><span class="s2">= </span><span class="s1">get_complete_version</span><span class="s2">(</span><span class="s1">version</span><span class="s2">)</span>
+    <span class="s1">parts </span><span class="s2">= </span><span class="s4">2 </span><span class="s0">if </span><span class="s1">version</span><span class="s2">[</span><span class="s4">2</span><span class="s2">] == </span><span class="s4">0 </span><span class="s0">else </span><span class="s4">3</span>
+    <span class="s0">return </span><span class="s6">&quot;.&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">str</span><span class="s2">(</span><span class="s1">x</span><span class="s2">) </span><span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">version</span><span class="s2">[:</span><span class="s1">parts</span><span class="s2">])</span>
+
+
+<span class="s0">def </span><span class="s1">get_complete_version</span><span class="s2">(</span><span class="s1">version</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Return a tuple of the django version. If version argument is non-empty, 
+    check for correctness of the tuple provided. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">version </span><span class="s0">is None</span><span class="s2">:</span>
+        <span class="s0">from </span><span class="s1">django </span><span class="s0">import </span><span class="s1">VERSION </span><span class="s0">as </span><span class="s1">version</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s0">assert </span><span class="s1">len</span><span class="s2">(</span><span class="s1">version</span><span class="s2">) == </span><span class="s4">5</span>
+        <span class="s0">assert </span><span class="s1">version</span><span class="s2">[</span><span class="s4">3</span><span class="s2">] </span><span class="s0">in </span><span class="s2">(</span><span class="s6">&quot;alpha&quot;</span><span class="s2">, </span><span class="s6">&quot;beta&quot;</span><span class="s2">, </span><span class="s6">&quot;rc&quot;</span><span class="s2">, </span><span class="s6">&quot;final&quot;</span><span class="s2">)</span>
+
+    <span class="s0">return </span><span class="s1">version</span>
+
+
+<span class="s0">def </span><span class="s1">get_docs_version</span><span class="s2">(</span><span class="s1">version</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+    <span class="s1">version </span><span class="s2">= </span><span class="s1">get_complete_version</span><span class="s2">(</span><span class="s1">version</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">version</span><span class="s2">[</span><span class="s4">3</span><span class="s2">] != </span><span class="s6">&quot;final&quot;</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s6">&quot;dev&quot;</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s6">&quot;%d.%d&quot; </span><span class="s2">% </span><span class="s1">version</span><span class="s2">[:</span><span class="s4">2</span><span class="s2">]</span>
+
+
+<span class="s2">@</span><span class="s1">functools</span><span class="s2">.</span><span class="s1">lru_cache</span>
+<span class="s0">def </span><span class="s1">get_git_changeset</span><span class="s2">():</span>
+    <span class="s5">&quot;&quot;&quot;Return a numeric identifier of the latest git changeset. 
+ 
+    The result is the UTC timestamp of the changeset in YYYYMMDDHHMMSS format. 
+    This value isn't guaranteed to be unique, but collisions are very unlikely, 
+    so it's sufficient for generating the development version numbers. 
+    &quot;&quot;&quot;</span>
+    <span class="s3"># Repository may not be found if __file__ is undefined, e.g. in a frozen</span>
+    <span class="s3"># module.</span>
+    <span class="s0">if </span><span class="s6">&quot;__file__&quot; </span><span class="s0">not in </span><span class="s1">globals</span><span class="s2">():</span>
+        <span class="s0">return None</span>
+    <span class="s1">repo_dir </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">dirname</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">dirname</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">abspath</span><span class="s2">(</span><span class="s1">__file__</span><span class="s2">)))</span>
+    <span class="s1">git_log </span><span class="s2">= </span><span class="s1">subprocess</span><span class="s2">.</span><span class="s1">run</span><span class="s2">(</span>
+        <span class="s6">&quot;git log --pretty=format:%ct --quiet -1 HEAD&quot;</span><span class="s2">,</span>
+        <span class="s1">capture_output</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+        <span class="s1">shell</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+        <span class="s1">cwd</span><span class="s2">=</span><span class="s1">repo_dir</span><span class="s2">,</span>
+        <span class="s1">text</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+    <span class="s2">)</span>
+    <span class="s1">timestamp </span><span class="s2">= </span><span class="s1">git_log</span><span class="s2">.</span><span class="s1">stdout</span>
+    <span class="s1">tz </span><span class="s2">= </span><span class="s1">datetime</span><span class="s2">.</span><span class="s1">timezone</span><span class="s2">.</span><span class="s1">utc</span>
+    <span class="s0">try</span><span class="s2">:</span>
+        <span class="s1">timestamp </span><span class="s2">= </span><span class="s1">datetime</span><span class="s2">.</span><span class="s1">datetime</span><span class="s2">.</span><span class="s1">fromtimestamp</span><span class="s2">(</span><span class="s1">int</span><span class="s2">(</span><span class="s1">timestamp</span><span class="s2">), </span><span class="s1">tz</span><span class="s2">=</span><span class="s1">tz</span><span class="s2">)</span>
+    <span class="s0">except </span><span class="s1">ValueError</span><span class="s2">:</span>
+        <span class="s0">return None</span>
+    <span class="s0">return </span><span class="s1">timestamp</span><span class="s2">.</span><span class="s1">strftime</span><span class="s2">(</span><span class="s6">&quot;%Y%m%d%H%M%S&quot;</span><span class="s2">)</span>
+
+
+<span class="s1">version_component_re </span><span class="s2">= </span><span class="s1">_lazy_re_compile</span><span class="s2">(</span><span class="s6">r&quot;(\d+|[a-z]+|\.)&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">get_version_tuple</span><span class="s2">(</span><span class="s1">version</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Return a tuple of version numbers (e.g. (1, 2, 3)) from the version 
+    string (e.g. '1.2.3'). 
+    &quot;&quot;&quot;</span>
+    <span class="s1">version_numbers </span><span class="s2">= []</span>
+    <span class="s0">for </span><span class="s1">item </span><span class="s0">in </span><span class="s1">version_component_re</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s1">version</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">item </span><span class="s0">and </span><span class="s1">item </span><span class="s2">!= </span><span class="s6">&quot;.&quot;</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">component </span><span class="s2">= </span><span class="s1">int</span><span class="s2">(</span><span class="s1">item</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">ValueError</span><span class="s2">:</span>
+                <span class="s0">break</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">version_numbers</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">component</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">version_numbers</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

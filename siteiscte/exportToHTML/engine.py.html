@@ -1,0 +1,237 @@
+<html>
+<head>
+<title>engine.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+engine.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">functools</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">module_loading </span><span class="s0">import </span><span class="s1">import_string</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">Template</span>
+<span class="s0">from </span><span class="s2">.</span><span class="s1">context </span><span class="s0">import </span><span class="s1">Context</span><span class="s2">, </span><span class="s1">_builtin_context_processors</span>
+<span class="s0">from </span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">TemplateDoesNotExist</span>
+<span class="s0">from </span><span class="s2">.</span><span class="s1">library </span><span class="s0">import </span><span class="s1">import_library</span>
+
+
+<span class="s0">class </span><span class="s1">Engine</span><span class="s2">:</span>
+    <span class="s1">default_builtins </span><span class="s2">= [</span>
+        <span class="s3">&quot;django.template.defaulttags&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;django.template.defaultfilters&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;django.template.loader_tags&quot;</span><span class="s2">,</span>
+    <span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">dirs</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">app_dirs</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">context_processors</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">debug</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">loaders</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">string_if_invalid</span><span class="s2">=</span><span class="s3">&quot;&quot;</span><span class="s2">,</span>
+        <span class="s1">file_charset</span><span class="s2">=</span><span class="s3">&quot;utf-8&quot;</span><span class="s2">,</span>
+        <span class="s1">libraries</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">builtins</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">autoescape</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">dirs </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">dirs </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">context_processors </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">context_processors </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">loaders </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">loaders </span><span class="s2">= [</span><span class="s3">&quot;django.template.loaders.filesystem.Loader&quot;</span><span class="s2">]</span>
+            <span class="s0">if </span><span class="s1">app_dirs</span><span class="s2">:</span>
+                <span class="s1">loaders </span><span class="s2">+= [</span><span class="s3">&quot;django.template.loaders.app_directories.Loader&quot;</span><span class="s2">]</span>
+            <span class="s1">loaders </span><span class="s2">= [(</span><span class="s3">&quot;django.template.loaders.cached.Loader&quot;</span><span class="s2">, </span><span class="s1">loaders</span><span class="s2">)]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">app_dirs</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                    <span class="s3">&quot;app_dirs must not be set when loaders is defined.&quot;</span>
+                <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">libraries </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">libraries </span><span class="s2">= {}</span>
+        <span class="s0">if </span><span class="s1">builtins </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">builtins </span><span class="s2">= []</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">dirs </span><span class="s2">= </span><span class="s1">dirs</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">app_dirs </span><span class="s2">= </span><span class="s1">app_dirs</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">autoescape </span><span class="s2">= </span><span class="s1">autoescape</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">context_processors </span><span class="s2">= </span><span class="s1">context_processors</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">debug </span><span class="s2">= </span><span class="s1">debug</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">loaders </span><span class="s2">= </span><span class="s1">loaders</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">string_if_invalid </span><span class="s2">= </span><span class="s1">string_if_invalid</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">file_charset </span><span class="s2">= </span><span class="s1">file_charset</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">libraries </span><span class="s2">= </span><span class="s1">libraries</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">template_libraries </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_template_libraries</span><span class="s2">(</span><span class="s1">libraries</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">builtins </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">default_builtins </span><span class="s2">+ </span><span class="s1">builtins</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">template_builtins </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_template_builtins</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">builtins</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">(</span>
+            <span class="s3">&quot;&lt;%s:%s app_dirs=%s%s debug=%s loaders=%s string_if_invalid=%s &quot;</span>
+            <span class="s3">&quot;file_charset=%s%s%s autoescape=%s&gt;&quot;</span>
+        <span class="s2">) % (</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s2">,</span>
+            <span class="s3">&quot;&quot; </span><span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">dirs </span><span class="s0">else </span><span class="s3">&quot; dirs=%s&quot; </span><span class="s2">% </span><span class="s1">repr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">dirs</span><span class="s2">),</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">app_dirs</span><span class="s2">,</span>
+            <span class="s2">(</span>
+                <span class="s3">&quot;&quot;</span>
+                <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">context_processors</span>
+                <span class="s0">else </span><span class="s3">&quot; context_processors=%s&quot; </span><span class="s2">% </span><span class="s1">repr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">context_processors</span><span class="s2">)</span>
+            <span class="s2">),</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">debug</span><span class="s2">,</span>
+            <span class="s1">repr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">loaders</span><span class="s2">),</span>
+            <span class="s1">repr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">string_if_invalid</span><span class="s2">),</span>
+            <span class="s1">repr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">file_charset</span><span class="s2">),</span>
+            <span class="s3">&quot;&quot; </span><span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">libraries </span><span class="s0">else </span><span class="s3">&quot; libraries=%s&quot; </span><span class="s2">% </span><span class="s1">repr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">libraries</span><span class="s2">),</span>
+            <span class="s3">&quot;&quot; </span><span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">builtins </span><span class="s0">else </span><span class="s3">&quot; builtins=%s&quot; </span><span class="s2">% </span><span class="s1">repr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">builtins</span><span class="s2">),</span>
+            <span class="s1">repr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">autoescape</span><span class="s2">),</span>
+        <span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">staticmethod</span>
+    <span class="s2">@</span><span class="s1">functools</span><span class="s2">.</span><span class="s1">lru_cache</span>
+    <span class="s0">def </span><span class="s1">get_default</span><span class="s2">():</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Return the first DjangoTemplates backend that's configured, or raise 
+        ImproperlyConfigured if none are configured. 
+ 
+        This is required for preserving historical APIs that rely on a 
+        globally available, implicitly configured engine such as: 
+ 
+        &gt;&gt;&gt; from django.template import Context, Template 
+        &gt;&gt;&gt; template = Template(&quot;Hello {{ name }}!&quot;) 
+        &gt;&gt;&gt; context = Context({'name': &quot;world&quot;}) 
+        &gt;&gt;&gt; template.render(context) 
+        'Hello world!' 
+        &quot;&quot;&quot;</span>
+        <span class="s5"># Since Engine is imported in django.template and since</span>
+        <span class="s5"># DjangoTemplates is a wrapper around this Engine class,</span>
+        <span class="s5"># local imports are required to avoid import loops.</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template </span><span class="s0">import </span><span class="s1">engines</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">django </span><span class="s0">import </span><span class="s1">DjangoTemplates</span>
+
+        <span class="s0">for </span><span class="s1">engine </span><span class="s0">in </span><span class="s1">engines</span><span class="s2">.</span><span class="s1">all</span><span class="s2">():</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">engine</span><span class="s2">, </span><span class="s1">DjangoTemplates</span><span class="s2">):</span>
+                <span class="s0">return </span><span class="s1">engine</span><span class="s2">.</span><span class="s1">engine</span>
+        <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span><span class="s3">&quot;No DjangoTemplates backend is configured.&quot;</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">template_context_processors</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">context_processors </span><span class="s2">= </span><span class="s1">_builtin_context_processors</span>
+        <span class="s1">context_processors </span><span class="s2">+= </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">context_processors</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">import_string</span><span class="s2">(</span><span class="s1">path</span><span class="s2">) </span><span class="s0">for </span><span class="s1">path </span><span class="s0">in </span><span class="s1">context_processors</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_template_builtins</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">builtins</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">[</span><span class="s1">import_library</span><span class="s2">(</span><span class="s1">x</span><span class="s2">) </span><span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">builtins</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">get_template_libraries</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">libraries</span><span class="s2">):</span>
+        <span class="s1">loaded </span><span class="s2">= {}</span>
+        <span class="s0">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">path </span><span class="s0">in </span><span class="s1">libraries</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s1">loaded</span><span class="s2">[</span><span class="s1">name</span><span class="s2">] = </span><span class="s1">import_library</span><span class="s2">(</span><span class="s1">path</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">loaded</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">template_loaders</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_template_loaders</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">loaders</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_template_loaders</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_loaders</span><span class="s2">):</span>
+        <span class="s1">loaders </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">template_loader </span><span class="s0">in </span><span class="s1">template_loaders</span><span class="s2">:</span>
+            <span class="s1">loader </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">find_template_loader</span><span class="s2">(</span><span class="s1">template_loader</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">loader </span><span class="s0">is not None</span><span class="s2">:</span>
+                <span class="s1">loaders</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">loader</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">loaders</span>
+
+    <span class="s0">def </span><span class="s1">find_template_loader</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">loader</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">loader</span><span class="s2">, (</span><span class="s1">tuple</span><span class="s2">, </span><span class="s1">list</span><span class="s2">)):</span>
+            <span class="s1">loader</span><span class="s2">, *</span><span class="s1">args </span><span class="s2">= </span><span class="s1">loader</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">args </span><span class="s2">= []</span>
+
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">loader</span><span class="s2">, </span><span class="s1">str</span><span class="s2">):</span>
+            <span class="s1">loader_class </span><span class="s2">= </span><span class="s1">import_string</span><span class="s2">(</span><span class="s1">loader</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">loader_class</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                <span class="s3">&quot;Invalid value in template loaders configuration: %r&quot; </span><span class="s2">% </span><span class="s1">loader</span>
+            <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">find_template</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">dirs</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">skip</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">tried </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">loader </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">template_loaders</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">template </span><span class="s2">= </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">name</span><span class="s2">, </span><span class="s1">skip</span><span class="s2">=</span><span class="s1">skip</span><span class="s2">)</span>
+                <span class="s0">return </span><span class="s1">template</span><span class="s2">, </span><span class="s1">template</span><span class="s2">.</span><span class="s1">origin</span>
+            <span class="s0">except </span><span class="s1">TemplateDoesNotExist </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+                <span class="s1">tried</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">e</span><span class="s2">.</span><span class="s1">tried</span><span class="s2">)</span>
+        <span class="s0">raise </span><span class="s1">TemplateDoesNotExist</span><span class="s2">(</span><span class="s1">name</span><span class="s2">, </span><span class="s1">tried</span><span class="s2">=</span><span class="s1">tried</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">from_string</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_code</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Return a compiled Template object for the given template code, 
+        handling template inheritance recursively. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">Template</span><span class="s2">(</span><span class="s1">template_code</span><span class="s2">, </span><span class="s1">engine</span><span class="s2">=</span><span class="s1">self</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Return a compiled Template object for the given template name, 
+        handling template inheritance recursively. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">template</span><span class="s2">, </span><span class="s1">origin </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">find_template</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">template</span><span class="s2">, </span><span class="s3">&quot;render&quot;</span><span class="s2">):</span>
+            <span class="s5"># template needs to be compiled</span>
+            <span class="s1">template </span><span class="s2">= </span><span class="s1">Template</span><span class="s2">(</span><span class="s1">template</span><span class="s2">, </span><span class="s1">origin</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">, </span><span class="s1">engine</span><span class="s2">=</span><span class="s1">self</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">template</span>
+
+    <span class="s0">def </span><span class="s1">render_to_string</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">, </span><span class="s1">context</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Render the template specified by template_name with the given context. 
+        For use in Django's test suite. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+            <span class="s1">t </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">select_template</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">t </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">)</span>
+        <span class="s5"># Django &lt; 1.8 accepted a Context in `context` even though that's</span>
+        <span class="s5"># unintended. Preserve this ability but don't rewrap `context`.</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">context</span><span class="s2">, </span><span class="s1">Context</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">t</span><span class="s2">.</span><span class="s1">render</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">t</span><span class="s2">.</span><span class="s1">render</span><span class="s2">(</span><span class="s1">Context</span><span class="s2">(</span><span class="s1">context</span><span class="s2">, </span><span class="s1">autoescape</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">autoescape</span><span class="s2">))</span>
+
+    <span class="s0">def </span><span class="s1">select_template</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_name_list</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Given a list of template names, return the first that can be loaded. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if not </span><span class="s1">template_name_list</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TemplateDoesNotExist</span><span class="s2">(</span><span class="s3">&quot;No template names provided&quot;</span><span class="s2">)</span>
+        <span class="s1">not_found </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">template_name </span><span class="s0">in </span><span class="s1">template_name_list</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">TemplateDoesNotExist </span><span class="s0">as </span><span class="s1">exc</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">exc</span><span class="s2">.</span><span class="s1">args</span><span class="s2">[</span><span class="s6">0</span><span class="s2">] </span><span class="s0">not in </span><span class="s1">not_found</span><span class="s2">:</span>
+                    <span class="s1">not_found</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">.</span><span class="s1">args</span><span class="s2">[</span><span class="s6">0</span><span class="s2">])</span>
+                <span class="s0">continue</span>
+        <span class="s5"># If we get here, none of the templates could be loaded</span>
+        <span class="s0">raise </span><span class="s1">TemplateDoesNotExist</span><span class="s2">(</span><span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">not_found</span><span class="s2">))</span>
+</pre>
+</body>
+</html>

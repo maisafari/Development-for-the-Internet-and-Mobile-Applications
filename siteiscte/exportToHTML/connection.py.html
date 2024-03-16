@@ -1,0 +1,107 @@
+<html>
+<head>
+<title>connection.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+connection.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">asgiref</span><span class="s2">.</span><span class="s1">local </span><span class="s0">import </span><span class="s1">Local</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings </span><span class="s0">as </span><span class="s1">django_settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+
+
+<span class="s0">class </span><span class="s1">ConnectionProxy</span><span class="s2">:</span>
+    <span class="s3">&quot;&quot;&quot;Proxy for accessing a connection object's attributes.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connections</span><span class="s2">, </span><span class="s1">alias</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">[</span><span class="s4">&quot;_connections&quot;</span><span class="s2">] = </span><span class="s1">connections</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">[</span><span class="s4">&quot;_alias&quot;</span><span class="s2">] = </span><span class="s1">alias</span>
+
+    <span class="s0">def </span><span class="s1">__getattr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">item</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_connections</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_alias</span><span class="s2">], </span><span class="s1">item</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__setattr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">value</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">setattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_connections</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_alias</span><span class="s2">], </span><span class="s1">name</span><span class="s2">, </span><span class="s1">value</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__delattr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">delattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_connections</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_alias</span><span class="s2">], </span><span class="s1">name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__contains__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">key </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_connections</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_alias</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">__eq__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">other</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_connections</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_alias</span><span class="s2">] == </span><span class="s1">other</span>
+
+
+<span class="s0">class </span><span class="s1">ConnectionDoesNotExist</span><span class="s2">(</span><span class="s1">Exception</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">BaseConnectionHandler</span><span class="s2">:</span>
+    <span class="s1">settings_name </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">exception_class </span><span class="s2">= </span><span class="s1">ConnectionDoesNotExist</span>
+    <span class="s1">thread_critical </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">settings</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_settings </span><span class="s2">= </span><span class="s1">settings</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_connections </span><span class="s2">= </span><span class="s1">Local</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">thread_critical</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">settings</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_settings </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">configure_settings</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_settings</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_settings</span>
+
+    <span class="s0">def </span><span class="s1">configure_settings</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">settings</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">settings </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">settings </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">django_settings</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">settings_name</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">settings</span>
+
+    <span class="s0">def </span><span class="s1">create_connection</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">alias</span><span class="s2">):</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span><span class="s2">(</span><span class="s4">&quot;Subclasses must implement create_connection().&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__getitem__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">alias</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_connections</span><span class="s2">, </span><span class="s1">alias</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">AttributeError</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">alias </span><span class="s0">not in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">settings</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">self</span><span class="s2">.</span><span class="s1">exception_class</span><span class="s2">(</span><span class="s4">f&quot;The connection '</span><span class="s0">{</span><span class="s1">alias</span><span class="s0">}</span><span class="s4">' doesn't exist.&quot;</span><span class="s2">)</span>
+        <span class="s1">conn </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">create_connection</span><span class="s2">(</span><span class="s1">alias</span><span class="s2">)</span>
+        <span class="s1">setattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_connections</span><span class="s2">, </span><span class="s1">alias</span><span class="s2">, </span><span class="s1">conn</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">conn</span>
+
+    <span class="s0">def </span><span class="s1">__setitem__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value</span><span class="s2">):</span>
+        <span class="s1">setattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_connections</span><span class="s2">, </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__delitem__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">key</span><span class="s2">):</span>
+        <span class="s1">delattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_connections</span><span class="s2">, </span><span class="s1">key</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__iter__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">iter</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">settings</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">all</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">initialized_only</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">[</span>
+            <span class="s1">self</span><span class="s2">[</span><span class="s1">alias</span><span class="s2">]</span>
+            <span class="s0">for </span><span class="s1">alias </span><span class="s0">in </span><span class="s1">self</span>
+            <span class="s5"># If initialized_only is True, return only initialized connections.</span>
+            <span class="s0">if not </span><span class="s1">initialized_only </span><span class="s0">or </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_connections</span><span class="s2">, </span><span class="s1">alias</span><span class="s2">)</span>
+        <span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">close_all</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">for </span><span class="s1">conn </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">all</span><span class="s2">(</span><span class="s1">initialized_only</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+            <span class="s1">conn</span><span class="s2">.</span><span class="s1">close</span><span class="s2">()</span>
+</pre>
+</body>
+</html>

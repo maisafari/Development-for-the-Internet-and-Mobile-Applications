@@ -1,0 +1,261 @@
+<html>
+<head>
+<title>calendar.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #6aab73;}
+.s3 { color: #bcbec4;}
+.s4 { color: #cf8e6d;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+calendar.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/*global gettext, pgettext, get_format, quickElement, removeChildren*/</span>
+<span class="s0">/* 
+calendar.js - Calendar functions by Adrian Holovaty 
+depends on core.js for utility functions like removeChildren or quickElement 
+*/</span>
+<span class="s2">'use strict'</span><span class="s3">;</span>
+<span class="s3">{</span>
+    <span class="s0">// CalendarNamespace -- Provides a collection of HTML calendar-related helper functions</span>
+    <span class="s4">const </span><span class="s1">CalendarNamespace </span><span class="s3">= {</span>
+        <span class="s1">monthsOfYear</span><span class="s3">: [</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'January'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'February'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'March'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'April'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'May'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'June'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'July'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'August'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'September'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'October'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'November'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'December'</span><span class="s3">)</span>
+        <span class="s3">],</span>
+        <span class="s1">monthsOfYearAbbrev</span><span class="s3">: [</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. month January'</span><span class="s3">, </span><span class="s2">'Jan'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. month February'</span><span class="s3">, </span><span class="s2">'Feb'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. month March'</span><span class="s3">, </span><span class="s2">'Mar'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. month April'</span><span class="s3">, </span><span class="s2">'Apr'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. month May'</span><span class="s3">, </span><span class="s2">'May'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. month June'</span><span class="s3">, </span><span class="s2">'Jun'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. month July'</span><span class="s3">, </span><span class="s2">'Jul'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. month August'</span><span class="s3">, </span><span class="s2">'Aug'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. month September'</span><span class="s3">, </span><span class="s2">'Sep'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. month October'</span><span class="s3">, </span><span class="s2">'Oct'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. month November'</span><span class="s3">, </span><span class="s2">'Nov'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. month December'</span><span class="s3">, </span><span class="s2">'Dec'</span><span class="s3">)</span>
+        <span class="s3">],</span>
+        <span class="s1">daysOfWeek</span><span class="s3">: [</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Sunday'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Monday'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Tuesday'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Wednesday'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Thursday'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Friday'</span><span class="s3">),</span>
+            <span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Saturday'</span><span class="s3">)</span>
+        <span class="s3">],</span>
+        <span class="s1">daysOfWeekAbbrev</span><span class="s3">: [</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. day Sunday'</span><span class="s3">, </span><span class="s2">'Sun'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. day Monday'</span><span class="s3">, </span><span class="s2">'Mon'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. day Tuesday'</span><span class="s3">, </span><span class="s2">'Tue'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. day Wednesday'</span><span class="s3">, </span><span class="s2">'Wed'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. day Thursday'</span><span class="s3">, </span><span class="s2">'Thur'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. day Friday'</span><span class="s3">, </span><span class="s2">'Fri'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'abbrev. day Saturday'</span><span class="s3">, </span><span class="s2">'Sat'</span><span class="s3">)</span>
+        <span class="s3">],</span>
+        <span class="s1">daysOfWeekInitial</span><span class="s3">: [</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'one letter Sunday'</span><span class="s3">, </span><span class="s2">'S'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'one letter Monday'</span><span class="s3">, </span><span class="s2">'M'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'one letter Tuesday'</span><span class="s3">, </span><span class="s2">'T'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'one letter Wednesday'</span><span class="s3">, </span><span class="s2">'W'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'one letter Thursday'</span><span class="s3">, </span><span class="s2">'T'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'one letter Friday'</span><span class="s3">, </span><span class="s2">'F'</span><span class="s3">),</span>
+            <span class="s1">pgettext</span><span class="s3">(</span><span class="s2">'one letter Saturday'</span><span class="s3">, </span><span class="s2">'S'</span><span class="s3">)</span>
+        <span class="s3">],</span>
+        <span class="s1">firstDayOfWeek</span><span class="s3">: </span><span class="s1">parseInt</span><span class="s3">(</span><span class="s1">get_format</span><span class="s3">(</span><span class="s2">'FIRST_DAY_OF_WEEK'</span><span class="s3">)),</span>
+        <span class="s1">isLeapYear</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">year</span><span class="s3">) {</span>
+            <span class="s4">return </span><span class="s3">(((</span><span class="s1">year </span><span class="s3">% </span><span class="s5">4</span><span class="s3">) === </span><span class="s5">0</span><span class="s3">) &amp;&amp; ((</span><span class="s1">year </span><span class="s3">% </span><span class="s5">100</span><span class="s3">) !== </span><span class="s5">0 </span><span class="s3">) || ((</span><span class="s1">year </span><span class="s3">% </span><span class="s5">400</span><span class="s3">) === </span><span class="s5">0</span><span class="s3">));</span>
+        <span class="s3">},</span>
+        <span class="s1">getDaysInMonth</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">month</span><span class="s3">, </span><span class="s1">year</span><span class="s3">) {</span>
+            <span class="s4">let </span><span class="s1">days</span><span class="s3">;</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">month </span><span class="s3">=== </span><span class="s5">1 </span><span class="s3">|| </span><span class="s1">month </span><span class="s3">=== </span><span class="s5">3 </span><span class="s3">|| </span><span class="s1">month </span><span class="s3">=== </span><span class="s5">5 </span><span class="s3">|| </span><span class="s1">month </span><span class="s3">=== </span><span class="s5">7 </span><span class="s3">|| </span><span class="s1">month </span><span class="s3">=== </span><span class="s5">8 </span><span class="s3">|| </span><span class="s1">month </span><span class="s3">=== </span><span class="s5">10 </span><span class="s3">|| </span><span class="s1">month </span><span class="s3">=== </span><span class="s5">12</span><span class="s3">) {</span>
+                <span class="s1">days </span><span class="s3">= </span><span class="s5">31</span><span class="s3">;</span>
+            <span class="s3">}</span>
+            <span class="s4">else if </span><span class="s3">(</span><span class="s1">month </span><span class="s3">=== </span><span class="s5">4 </span><span class="s3">|| </span><span class="s1">month </span><span class="s3">=== </span><span class="s5">6 </span><span class="s3">|| </span><span class="s1">month </span><span class="s3">=== </span><span class="s5">9 </span><span class="s3">|| </span><span class="s1">month </span><span class="s3">=== </span><span class="s5">11</span><span class="s3">) {</span>
+                <span class="s1">days </span><span class="s3">= </span><span class="s5">30</span><span class="s3">;</span>
+            <span class="s3">}</span>
+            <span class="s4">else if </span><span class="s3">(</span><span class="s1">month </span><span class="s3">=== </span><span class="s5">2 </span><span class="s3">&amp;&amp; </span><span class="s1">CalendarNamespace</span><span class="s3">.</span><span class="s1">isLeapYear</span><span class="s3">(</span><span class="s1">year</span><span class="s3">)) {</span>
+                <span class="s1">days </span><span class="s3">= </span><span class="s5">29</span><span class="s3">;</span>
+            <span class="s3">}</span>
+            <span class="s4">else </span><span class="s3">{</span>
+                <span class="s1">days </span><span class="s3">= </span><span class="s5">28</span><span class="s3">;</span>
+            <span class="s3">}</span>
+            <span class="s4">return </span><span class="s1">days</span><span class="s3">;</span>
+        <span class="s3">},</span>
+        <span class="s1">draw</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">month</span><span class="s3">, </span><span class="s1">year</span><span class="s3">, </span><span class="s1">div_id</span><span class="s3">, </span><span class="s1">callback</span><span class="s3">, </span><span class="s1">selected</span><span class="s3">) { </span><span class="s0">// month = 1-12, year = 1-9999</span>
+            <span class="s4">const </span><span class="s1">today </span><span class="s3">= </span><span class="s4">new </span><span class="s1">Date</span><span class="s3">();</span>
+            <span class="s4">const </span><span class="s1">todayDay </span><span class="s3">= </span><span class="s1">today</span><span class="s3">.</span><span class="s1">getDate</span><span class="s3">();</span>
+            <span class="s4">const </span><span class="s1">todayMonth </span><span class="s3">= </span><span class="s1">today</span><span class="s3">.</span><span class="s1">getMonth</span><span class="s3">() + </span><span class="s5">1</span><span class="s3">;</span>
+            <span class="s4">const </span><span class="s1">todayYear </span><span class="s3">= </span><span class="s1">today</span><span class="s3">.</span><span class="s1">getFullYear</span><span class="s3">();</span>
+            <span class="s4">let </span><span class="s1">todayClass </span><span class="s3">= </span><span class="s2">''</span><span class="s3">;</span>
+
+            <span class="s0">// Use UTC functions here because the date field does not contain time</span>
+            <span class="s0">// and using the UTC function variants prevent the local time offset</span>
+            <span class="s0">// from altering the date, specifically the day field.  For example:</span>
+            <span class="s0">//</span>
+            <span class="s0">// ```</span>
+            <span class="s0">// var x = new Date('2013-10-02');</span>
+            <span class="s0">// var day = x.getDate();</span>
+            <span class="s0">// ```</span>
+            <span class="s0">//</span>
+            <span class="s0">// The day variable above will be 1 instead of 2 in, say, US Pacific time</span>
+            <span class="s0">// zone.</span>
+            <span class="s4">let </span><span class="s1">isSelectedMonth </span><span class="s3">= </span><span class="s4">false</span><span class="s3">;</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s4">typeof </span><span class="s1">selected </span><span class="s3">!== </span><span class="s2">'undefined'</span><span class="s3">) {</span>
+                <span class="s1">isSelectedMonth </span><span class="s3">= (</span><span class="s1">selected</span><span class="s3">.</span><span class="s1">getUTCFullYear</span><span class="s3">() === </span><span class="s1">year </span><span class="s3">&amp;&amp; (</span><span class="s1">selected</span><span class="s3">.</span><span class="s1">getUTCMonth</span><span class="s3">() + </span><span class="s5">1</span><span class="s3">) === </span><span class="s1">month</span><span class="s3">);</span>
+            <span class="s3">}</span>
+
+            <span class="s1">month </span><span class="s3">= </span><span class="s1">parseInt</span><span class="s3">(</span><span class="s1">month</span><span class="s3">);</span>
+            <span class="s1">year </span><span class="s3">= </span><span class="s1">parseInt</span><span class="s3">(</span><span class="s1">year</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">calDiv </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">div_id</span><span class="s3">);</span>
+            <span class="s1">removeChildren</span><span class="s3">(</span><span class="s1">calDiv</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">calTable </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createElement</span><span class="s3">(</span><span class="s2">'table'</span><span class="s3">);</span>
+            <span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'caption'</span><span class="s3">, </span><span class="s1">calTable</span><span class="s3">, </span><span class="s1">CalendarNamespace</span><span class="s3">.</span><span class="s1">monthsOfYear</span><span class="s3">[</span><span class="s1">month </span><span class="s3">- </span><span class="s5">1</span><span class="s3">] + </span><span class="s2">' ' </span><span class="s3">+ </span><span class="s1">year</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">tableBody </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'tbody'</span><span class="s3">, </span><span class="s1">calTable</span><span class="s3">);</span>
+
+            <span class="s0">// Draw days-of-week header</span>
+            <span class="s4">let </span><span class="s1">tableRow </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'tr'</span><span class="s3">, </span><span class="s1">tableBody</span><span class="s3">);</span>
+            <span class="s4">for </span><span class="s3">(</span><span class="s4">let </span><span class="s1">i </span><span class="s3">= </span><span class="s5">0</span><span class="s3">; </span><span class="s1">i </span><span class="s3">&lt; </span><span class="s5">7</span><span class="s3">; </span><span class="s1">i</span><span class="s3">++) {</span>
+                <span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'th'</span><span class="s3">, </span><span class="s1">tableRow</span><span class="s3">, </span><span class="s1">CalendarNamespace</span><span class="s3">.</span><span class="s1">daysOfWeekInitial</span><span class="s3">[(</span><span class="s1">i </span><span class="s3">+ </span><span class="s1">CalendarNamespace</span><span class="s3">.</span><span class="s1">firstDayOfWeek</span><span class="s3">) % </span><span class="s5">7</span><span class="s3">]);</span>
+            <span class="s3">}</span>
+
+            <span class="s4">const </span><span class="s1">startingPos </span><span class="s3">= </span><span class="s4">new </span><span class="s1">Date</span><span class="s3">(</span><span class="s1">year</span><span class="s3">, </span><span class="s1">month </span><span class="s3">- </span><span class="s5">1</span><span class="s3">, </span><span class="s5">1 </span><span class="s3">- </span><span class="s1">CalendarNamespace</span><span class="s3">.</span><span class="s1">firstDayOfWeek</span><span class="s3">).</span><span class="s1">getDay</span><span class="s3">();</span>
+            <span class="s4">const </span><span class="s1">days </span><span class="s3">= </span><span class="s1">CalendarNamespace</span><span class="s3">.</span><span class="s1">getDaysInMonth</span><span class="s3">(</span><span class="s1">month</span><span class="s3">, </span><span class="s1">year</span><span class="s3">);</span>
+
+            <span class="s4">let </span><span class="s1">nonDayCell</span><span class="s3">;</span>
+
+            <span class="s0">// Draw blanks before first of month</span>
+            <span class="s1">tableRow </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'tr'</span><span class="s3">, </span><span class="s1">tableBody</span><span class="s3">);</span>
+            <span class="s4">for </span><span class="s3">(</span><span class="s4">let </span><span class="s1">i </span><span class="s3">= </span><span class="s5">0</span><span class="s3">; </span><span class="s1">i </span><span class="s3">&lt; </span><span class="s1">startingPos</span><span class="s3">; </span><span class="s1">i</span><span class="s3">++) {</span>
+                <span class="s1">nonDayCell </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'td'</span><span class="s3">, </span><span class="s1">tableRow</span><span class="s3">, </span><span class="s2">' '</span><span class="s3">);</span>
+                <span class="s1">nonDayCell</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s2">&quot;nonday&quot;</span><span class="s3">;</span>
+            <span class="s3">}</span>
+
+            <span class="s4">function </span><span class="s1">calendarMonth</span><span class="s3">(</span><span class="s1">y</span><span class="s3">, </span><span class="s1">m</span><span class="s3">) {</span>
+                <span class="s4">function </span><span class="s1">onClick</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+                    <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                    <span class="s1">callback</span><span class="s3">(</span><span class="s1">y</span><span class="s3">, </span><span class="s1">m</span><span class="s3">, </span><span class="s4">this</span><span class="s3">.</span><span class="s1">textContent</span><span class="s3">);</span>
+                <span class="s3">}</span>
+                <span class="s4">return </span><span class="s1">onClick</span><span class="s3">;</span>
+            <span class="s3">}</span>
+
+            <span class="s0">// Draw days of month</span>
+            <span class="s4">let </span><span class="s1">currentDay </span><span class="s3">= </span><span class="s5">1</span><span class="s3">;</span>
+            <span class="s4">for </span><span class="s3">(</span><span class="s4">let </span><span class="s1">i </span><span class="s3">= </span><span class="s1">startingPos</span><span class="s3">; </span><span class="s1">currentDay </span><span class="s3">&lt;= </span><span class="s1">days</span><span class="s3">; </span><span class="s1">i</span><span class="s3">++) {</span>
+                <span class="s4">if </span><span class="s3">(</span><span class="s1">i </span><span class="s3">% </span><span class="s5">7 </span><span class="s3">=== </span><span class="s5">0 </span><span class="s3">&amp;&amp; </span><span class="s1">currentDay </span><span class="s3">!== </span><span class="s5">1</span><span class="s3">) {</span>
+                    <span class="s1">tableRow </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'tr'</span><span class="s3">, </span><span class="s1">tableBody</span><span class="s3">);</span>
+                <span class="s3">}</span>
+                <span class="s4">if </span><span class="s3">((</span><span class="s1">currentDay </span><span class="s3">=== </span><span class="s1">todayDay</span><span class="s3">) &amp;&amp; (</span><span class="s1">month </span><span class="s3">=== </span><span class="s1">todayMonth</span><span class="s3">) &amp;&amp; (</span><span class="s1">year </span><span class="s3">=== </span><span class="s1">todayYear</span><span class="s3">)) {</span>
+                    <span class="s1">todayClass </span><span class="s3">= </span><span class="s2">'today'</span><span class="s3">;</span>
+                <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+                    <span class="s1">todayClass </span><span class="s3">= </span><span class="s2">''</span><span class="s3">;</span>
+                <span class="s3">}</span>
+
+                <span class="s0">// use UTC function; see above for explanation.</span>
+                <span class="s4">if </span><span class="s3">(</span><span class="s1">isSelectedMonth </span><span class="s3">&amp;&amp; </span><span class="s1">currentDay </span><span class="s3">=== </span><span class="s1">selected</span><span class="s3">.</span><span class="s1">getUTCDate</span><span class="s3">()) {</span>
+                    <span class="s4">if </span><span class="s3">(</span><span class="s1">todayClass </span><span class="s3">!== </span><span class="s2">''</span><span class="s3">) {</span>
+                        <span class="s1">todayClass </span><span class="s3">+= </span><span class="s2">&quot; &quot;</span><span class="s3">;</span>
+                    <span class="s3">}</span>
+                    <span class="s1">todayClass </span><span class="s3">+= </span><span class="s2">&quot;selected&quot;</span><span class="s3">;</span>
+                <span class="s3">}</span>
+
+                <span class="s4">const </span><span class="s1">cell </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'td'</span><span class="s3">, </span><span class="s1">tableRow</span><span class="s3">, </span><span class="s2">''</span><span class="s3">, </span><span class="s2">'class'</span><span class="s3">, </span><span class="s1">todayClass</span><span class="s3">);</span>
+                <span class="s4">const </span><span class="s1">link </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">, </span><span class="s1">cell</span><span class="s3">, </span><span class="s1">currentDay</span><span class="s3">, </span><span class="s2">'href'</span><span class="s3">, </span><span class="s2">'#'</span><span class="s3">);</span>
+                <span class="s1">link</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s1">calendarMonth</span><span class="s3">(</span><span class="s1">year</span><span class="s3">, </span><span class="s1">month</span><span class="s3">));</span>
+                <span class="s1">currentDay</span><span class="s3">++;</span>
+            <span class="s3">}</span>
+
+            <span class="s0">// Draw blanks after end of month (optional, but makes for valid code)</span>
+            <span class="s4">while </span><span class="s3">(</span><span class="s1">tableRow</span><span class="s3">.</span><span class="s1">childNodes</span><span class="s3">.</span><span class="s1">length </span><span class="s3">&lt; </span><span class="s5">7</span><span class="s3">) {</span>
+                <span class="s1">nonDayCell </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'td'</span><span class="s3">, </span><span class="s1">tableRow</span><span class="s3">, </span><span class="s2">' '</span><span class="s3">);</span>
+                <span class="s1">nonDayCell</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s2">&quot;nonday&quot;</span><span class="s3">;</span>
+            <span class="s3">}</span>
+
+            <span class="s1">calDiv</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">calTable</span><span class="s3">);</span>
+        <span class="s3">}</span>
+    <span class="s3">};</span>
+
+    <span class="s0">// Calendar -- A calendar instance</span>
+    <span class="s4">function </span><span class="s1">Calendar</span><span class="s3">(</span><span class="s1">div_id</span><span class="s3">, </span><span class="s1">callback</span><span class="s3">, </span><span class="s1">selected</span><span class="s3">) {</span>
+        <span class="s0">// div_id (string) is the ID of the element in which the calendar will</span>
+        <span class="s0">//     be displayed</span>
+        <span class="s0">// callback (string) is the name of a JavaScript function that will be</span>
+        <span class="s0">//     called with the parameters (year, month, day) when a day in the</span>
+        <span class="s0">//     calendar is clicked</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">div_id </span><span class="s3">= </span><span class="s1">div_id</span><span class="s3">;</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">callback </span><span class="s3">= </span><span class="s1">callback</span><span class="s3">;</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">today </span><span class="s3">= </span><span class="s4">new </span><span class="s1">Date</span><span class="s3">();</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">currentMonth </span><span class="s3">= </span><span class="s4">this</span><span class="s3">.</span><span class="s1">today</span><span class="s3">.</span><span class="s1">getMonth</span><span class="s3">() + </span><span class="s5">1</span><span class="s3">;</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">currentYear </span><span class="s3">= </span><span class="s4">this</span><span class="s3">.</span><span class="s1">today</span><span class="s3">.</span><span class="s1">getFullYear</span><span class="s3">();</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s4">typeof </span><span class="s1">selected </span><span class="s3">!== </span><span class="s2">'undefined'</span><span class="s3">) {</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">selected </span><span class="s3">= </span><span class="s1">selected</span><span class="s3">;</span>
+        <span class="s3">}</span>
+    <span class="s3">}</span>
+    <span class="s1">Calendar</span><span class="s3">.</span><span class="s1">prototype </span><span class="s3">= {</span>
+        <span class="s1">drawCurrent</span><span class="s3">: </span><span class="s4">function</span><span class="s3">() {</span>
+            <span class="s1">CalendarNamespace</span><span class="s3">.</span><span class="s1">draw</span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">currentMonth</span><span class="s3">, </span><span class="s4">this</span><span class="s3">.</span><span class="s1">currentYear</span><span class="s3">, </span><span class="s4">this</span><span class="s3">.</span><span class="s1">div_id</span><span class="s3">, </span><span class="s4">this</span><span class="s3">.</span><span class="s1">callback</span><span class="s3">, </span><span class="s4">this</span><span class="s3">.</span><span class="s1">selected</span><span class="s3">);</span>
+        <span class="s3">},</span>
+        <span class="s1">drawDate</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">month</span><span class="s3">, </span><span class="s1">year</span><span class="s3">, </span><span class="s1">selected</span><span class="s3">) {</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">currentMonth </span><span class="s3">= </span><span class="s1">month</span><span class="s3">;</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">currentYear </span><span class="s3">= </span><span class="s1">year</span><span class="s3">;</span>
+
+            <span class="s4">if</span><span class="s3">(</span><span class="s1">selected</span><span class="s3">) {</span>
+                <span class="s4">this</span><span class="s3">.</span><span class="s1">selected </span><span class="s3">= </span><span class="s1">selected</span><span class="s3">;</span>
+            <span class="s3">}</span>
+
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">drawCurrent</span><span class="s3">();</span>
+        <span class="s3">},</span>
+        <span class="s1">drawPreviousMonth</span><span class="s3">: </span><span class="s4">function</span><span class="s3">() {</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">currentMonth </span><span class="s3">=== </span><span class="s5">1</span><span class="s3">) {</span>
+                <span class="s4">this</span><span class="s3">.</span><span class="s1">currentMonth </span><span class="s3">= </span><span class="s5">12</span><span class="s3">;</span>
+                <span class="s4">this</span><span class="s3">.</span><span class="s1">currentYear</span><span class="s3">--;</span>
+            <span class="s3">}</span>
+            <span class="s4">else </span><span class="s3">{</span>
+                <span class="s4">this</span><span class="s3">.</span><span class="s1">currentMonth</span><span class="s3">--;</span>
+            <span class="s3">}</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">drawCurrent</span><span class="s3">();</span>
+        <span class="s3">},</span>
+        <span class="s1">drawNextMonth</span><span class="s3">: </span><span class="s4">function</span><span class="s3">() {</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">currentMonth </span><span class="s3">=== </span><span class="s5">12</span><span class="s3">) {</span>
+                <span class="s4">this</span><span class="s3">.</span><span class="s1">currentMonth </span><span class="s3">= </span><span class="s5">1</span><span class="s3">;</span>
+                <span class="s4">this</span><span class="s3">.</span><span class="s1">currentYear</span><span class="s3">++;</span>
+            <span class="s3">}</span>
+            <span class="s4">else </span><span class="s3">{</span>
+                <span class="s4">this</span><span class="s3">.</span><span class="s1">currentMonth</span><span class="s3">++;</span>
+            <span class="s3">}</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">drawCurrent</span><span class="s3">();</span>
+        <span class="s3">},</span>
+        <span class="s1">drawPreviousYear</span><span class="s3">: </span><span class="s4">function</span><span class="s3">() {</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">currentYear</span><span class="s3">--;</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">drawCurrent</span><span class="s3">();</span>
+        <span class="s3">},</span>
+        <span class="s1">drawNextYear</span><span class="s3">: </span><span class="s4">function</span><span class="s3">() {</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">currentYear</span><span class="s3">++;</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">drawCurrent</span><span class="s3">();</span>
+        <span class="s3">}</span>
+    <span class="s3">};</span>
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">Calendar </span><span class="s3">= </span><span class="s1">Calendar</span><span class="s3">;</span>
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">CalendarNamespace </span><span class="s3">= </span><span class="s1">CalendarNamespace</span><span class="s3">;</span>
+<span class="s3">}</span>
+</pre>
+</body>
+</html>

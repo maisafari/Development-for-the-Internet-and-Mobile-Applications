@@ -1,0 +1,199 @@
+<html>
+<head>
+<title>showmigrations.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+.s6 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+showmigrations.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">sys</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">, </span><span class="s1">connections</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">loader </span><span class="s0">import </span><span class="s1">MigrationLoader</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">recorder </span><span class="s0">import </span><span class="s1">MigrationRecorder</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= </span><span class="s3">&quot;Shows all available migrations for the current project&quot;</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;app_label&quot;</span><span class="s2">,</span>
+            <span class="s1">nargs</span><span class="s2">=</span><span class="s3">&quot;*&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;App labels of applications to limit the output to.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--database&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Nominates a database to show migrations for. Defaults to the &quot;</span>
+                <span class="s3">'&quot;default&quot; database.'</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+
+        <span class="s1">formats </span><span class="s2">= </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">add_mutually_exclusive_group</span><span class="s2">()</span>
+        <span class="s1">formats</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--list&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;-l&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_const&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;format&quot;</span><span class="s2">,</span>
+            <span class="s1">const</span><span class="s2">=</span><span class="s3">&quot;list&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Shows a list of all migrations and which are applied. &quot;</span>
+                <span class="s3">&quot;With a verbosity level of 2 or above, the applied datetimes &quot;</span>
+                <span class="s3">&quot;will be included.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">formats</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--plan&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;-p&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_const&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;format&quot;</span><span class="s2">,</span>
+            <span class="s1">const</span><span class="s2">=</span><span class="s3">&quot;plan&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Shows all migrations in the order they will be applied. With a &quot;</span>
+                <span class="s3">&quot;verbosity level of 2 or above all direct migration dependencies and &quot;</span>
+                <span class="s3">&quot;reverse dependencies (run_before) will be included.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">set_defaults</span><span class="s2">(</span><span class="s1">format</span><span class="s2">=</span><span class="s3">&quot;list&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;verbosity&quot;</span><span class="s2">]</span>
+
+        <span class="s4"># Get the database we're operating from</span>
+        <span class="s1">db </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;database&quot;</span><span class="s2">]</span>
+        <span class="s1">connection </span><span class="s2">= </span><span class="s1">connections</span><span class="s2">[</span><span class="s1">db</span><span class="s2">]</span>
+
+        <span class="s0">if </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;format&quot;</span><span class="s2">] == </span><span class="s3">&quot;plan&quot;</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">show_plan</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">, </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;app_label&quot;</span><span class="s2">])</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">show_list</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">, </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;app_label&quot;</span><span class="s2">])</span>
+
+    <span class="s0">def </span><span class="s1">_validate_app_names</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">loader</span><span class="s2">, </span><span class="s1">app_names</span><span class="s2">):</span>
+        <span class="s1">has_bad_names </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s0">for </span><span class="s1">app_name </span><span class="s0">in </span><span class="s1">app_names</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_config</span><span class="s2">(</span><span class="s1">app_name</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">LookupError </span><span class="s0">as </span><span class="s1">err</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stderr</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">str</span><span class="s2">(</span><span class="s1">err</span><span class="s2">))</span>
+                <span class="s1">has_bad_names </span><span class="s2">= </span><span class="s0">True</span>
+        <span class="s0">if </span><span class="s1">has_bad_names</span><span class="s2">:</span>
+            <span class="s1">sys</span><span class="s2">.</span><span class="s1">exit</span><span class="s2">(</span><span class="s5">2</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">show_list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">app_names</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Show a list of all migrations on the system, or only those of 
+        some named apps. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># Load migrations from disk/DB</span>
+        <span class="s1">loader </span><span class="s2">= </span><span class="s1">MigrationLoader</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">, </span><span class="s1">ignore_no_migrations</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+        <span class="s1">recorder </span><span class="s2">= </span><span class="s1">MigrationRecorder</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">)</span>
+        <span class="s1">recorded_migrations </span><span class="s2">= </span><span class="s1">recorder</span><span class="s2">.</span><span class="s1">applied_migrations</span><span class="s2">()</span>
+        <span class="s1">graph </span><span class="s2">= </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span>
+        <span class="s4"># If we were passed a list of apps, validate it</span>
+        <span class="s0">if </span><span class="s1">app_names</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_validate_app_names</span><span class="s2">(</span><span class="s1">loader</span><span class="s2">, </span><span class="s1">app_names</span><span class="s2">)</span>
+        <span class="s4"># Otherwise, show all apps in alphabetic order</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">app_names </span><span class="s2">= </span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">migrated_apps</span><span class="s2">)</span>
+        <span class="s4"># For each app, print its migrations in order from oldest (roots) to</span>
+        <span class="s4"># newest (leaves).</span>
+        <span class="s0">for </span><span class="s1">app_name </span><span class="s0">in </span><span class="s1">app_names</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">app_name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">MIGRATE_LABEL</span><span class="s2">)</span>
+            <span class="s1">shown </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+            <span class="s0">for </span><span class="s1">node </span><span class="s0">in </span><span class="s1">graph</span><span class="s2">.</span><span class="s1">leaf_nodes</span><span class="s2">(</span><span class="s1">app_name</span><span class="s2">):</span>
+                <span class="s0">for </span><span class="s1">plan_node </span><span class="s0">in </span><span class="s1">graph</span><span class="s2">.</span><span class="s1">forwards_plan</span><span class="s2">(</span><span class="s1">node</span><span class="s2">):</span>
+                    <span class="s0">if </span><span class="s1">plan_node </span><span class="s0">not in </span><span class="s1">shown </span><span class="s0">and </span><span class="s1">plan_node</span><span class="s2">[</span><span class="s5">0</span><span class="s2">] == </span><span class="s1">app_name</span><span class="s2">:</span>
+                        <span class="s4"># Give it a nice title if it's a squashed one</span>
+                        <span class="s1">title </span><span class="s2">= </span><span class="s1">plan_node</span><span class="s2">[</span><span class="s5">1</span><span class="s2">]</span>
+                        <span class="s0">if </span><span class="s1">graph</span><span class="s2">.</span><span class="s1">nodes</span><span class="s2">[</span><span class="s1">plan_node</span><span class="s2">].</span><span class="s1">replaces</span><span class="s2">:</span>
+                            <span class="s1">title </span><span class="s2">+= </span><span class="s3">&quot; (%s squashed migrations)&quot; </span><span class="s2">% </span><span class="s1">len</span><span class="s2">(</span>
+                                <span class="s1">graph</span><span class="s2">.</span><span class="s1">nodes</span><span class="s2">[</span><span class="s1">plan_node</span><span class="s2">].</span><span class="s1">replaces</span>
+                            <span class="s2">)</span>
+                        <span class="s1">applied_migration </span><span class="s2">= </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">applied_migrations</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">plan_node</span><span class="s2">)</span>
+                        <span class="s4"># Mark it as applied/unapplied</span>
+                        <span class="s0">if </span><span class="s1">applied_migration</span><span class="s2">:</span>
+                            <span class="s0">if </span><span class="s1">plan_node </span><span class="s0">in </span><span class="s1">recorded_migrations</span><span class="s2">:</span>
+                                <span class="s1">output </span><span class="s2">= </span><span class="s3">&quot; [X] %s&quot; </span><span class="s2">% </span><span class="s1">title</span>
+                            <span class="s0">else</span><span class="s2">:</span>
+                                <span class="s1">title </span><span class="s2">+= </span><span class="s3">&quot; Run 'manage.py migrate' to finish recording.&quot;</span>
+                                <span class="s1">output </span><span class="s2">= </span><span class="s3">&quot; [-] %s&quot; </span><span class="s2">% </span><span class="s1">title</span>
+                            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s5">2 </span><span class="s0">and </span><span class="s1">hasattr</span><span class="s2">(</span>
+                                <span class="s1">applied_migration</span><span class="s2">, </span><span class="s3">&quot;applied&quot;</span>
+                            <span class="s2">):</span>
+                                <span class="s1">output </span><span class="s2">+= (</span>
+                                    <span class="s3">&quot; (applied at %s)&quot;</span>
+                                    <span class="s2">% </span><span class="s1">applied_migration</span><span class="s2">.</span><span class="s1">applied</span><span class="s2">.</span><span class="s1">strftime</span><span class="s2">(</span>
+                                        <span class="s3">&quot;%Y-%m-%d %H:%M:%S&quot;</span>
+                                    <span class="s2">)</span>
+                                <span class="s2">)</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">output</span><span class="s2">)</span>
+                        <span class="s0">else</span><span class="s2">:</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot; [ ] %s&quot; </span><span class="s2">% </span><span class="s1">title</span><span class="s2">)</span>
+                        <span class="s1">shown</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s1">plan_node</span><span class="s2">)</span>
+            <span class="s4"># If we didn't print anything, then a small message</span>
+            <span class="s0">if not </span><span class="s1">shown</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot; (no migrations)&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">ERROR</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">show_plan</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">app_names</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Show all known migrations (or only those of the specified app_names) 
+        in the order they will be applied. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># Load migrations from disk/DB</span>
+        <span class="s1">loader </span><span class="s2">= </span><span class="s1">MigrationLoader</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">)</span>
+        <span class="s1">graph </span><span class="s2">= </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span>
+        <span class="s0">if </span><span class="s1">app_names</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_validate_app_names</span><span class="s2">(</span><span class="s1">loader</span><span class="s2">, </span><span class="s1">app_names</span><span class="s2">)</span>
+            <span class="s1">targets </span><span class="s2">= [</span><span class="s1">key </span><span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">graph</span><span class="s2">.</span><span class="s1">leaf_nodes</span><span class="s2">() </span><span class="s0">if </span><span class="s1">key</span><span class="s2">[</span><span class="s5">0</span><span class="s2">] </span><span class="s0">in </span><span class="s1">app_names</span><span class="s2">]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">targets </span><span class="s2">= </span><span class="s1">graph</span><span class="s2">.</span><span class="s1">leaf_nodes</span><span class="s2">()</span>
+        <span class="s1">plan </span><span class="s2">= []</span>
+        <span class="s1">seen </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+
+        <span class="s4"># Generate the plan</span>
+        <span class="s0">for </span><span class="s1">target </span><span class="s0">in </span><span class="s1">targets</span><span class="s2">:</span>
+            <span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">graph</span><span class="s2">.</span><span class="s1">forwards_plan</span><span class="s2">(</span><span class="s1">target</span><span class="s2">):</span>
+                <span class="s0">if </span><span class="s1">migration </span><span class="s0">not in </span><span class="s1">seen</span><span class="s2">:</span>
+                    <span class="s1">node </span><span class="s2">= </span><span class="s1">graph</span><span class="s2">.</span><span class="s1">node_map</span><span class="s2">[</span><span class="s1">migration</span><span class="s2">]</span>
+                    <span class="s1">plan</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">node</span><span class="s2">)</span>
+                    <span class="s1">seen</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">)</span>
+
+        <span class="s4"># Output</span>
+        <span class="s0">def </span><span class="s1">print_deps</span><span class="s2">(</span><span class="s1">node</span><span class="s2">):</span>
+            <span class="s1">out </span><span class="s2">= []</span>
+            <span class="s0">for </span><span class="s1">parent </span><span class="s0">in </span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">node</span><span class="s2">.</span><span class="s1">parents</span><span class="s2">):</span>
+                <span class="s1">out</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;%s.%s&quot; </span><span class="s2">% </span><span class="s1">parent</span><span class="s2">.</span><span class="s1">key</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">out</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s3">&quot; ... (%s)&quot; </span><span class="s2">% </span><span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">out</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s3">&quot;&quot;</span>
+
+        <span class="s0">for </span><span class="s1">node </span><span class="s0">in </span><span class="s1">plan</span><span class="s2">:</span>
+            <span class="s1">deps </span><span class="s2">= </span><span class="s3">&quot;&quot;</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s5">2</span><span class="s2">:</span>
+                <span class="s1">deps </span><span class="s2">= </span><span class="s1">print_deps</span><span class="s2">(</span><span class="s1">node</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">node</span><span class="s2">.</span><span class="s1">key </span><span class="s0">in </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">applied_migrations</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot;[X]  %s.%s%s&quot; </span><span class="s2">% (</span><span class="s1">node</span><span class="s2">.</span><span class="s1">key</span><span class="s2">[</span><span class="s5">0</span><span class="s2">], </span><span class="s1">node</span><span class="s2">.</span><span class="s1">key</span><span class="s2">[</span><span class="s5">1</span><span class="s2">], </span><span class="s1">deps</span><span class="s2">))</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot;[ ]  %s.%s%s&quot; </span><span class="s2">% (</span><span class="s1">node</span><span class="s2">.</span><span class="s1">key</span><span class="s2">[</span><span class="s5">0</span><span class="s2">], </span><span class="s1">node</span><span class="s2">.</span><span class="s1">key</span><span class="s2">[</span><span class="s5">1</span><span class="s2">], </span><span class="s1">deps</span><span class="s2">))</span>
+        <span class="s0">if not </span><span class="s1">plan</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot;(no migrations)&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">ERROR</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,40 @@
+<html>
+<head>
+<title>django_4_0.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+django_4_0.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+
+<span class="s0">from </span><span class="s2">.. </span><span class="s0">import </span><span class="s1">Error</span><span class="s2">, </span><span class="s1">Tags</span><span class="s2">, </span><span class="s1">register</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">(</span><span class="s1">Tags</span><span class="s2">.</span><span class="s1">compatibility</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">check_csrf_trusted_origins</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s1">errors </span><span class="s2">= []</span>
+    <span class="s0">for </span><span class="s1">origin </span><span class="s0">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">CSRF_TRUSTED_ORIGINS</span><span class="s2">:</span>
+        <span class="s0">if </span><span class="s3">&quot;://&quot; </span><span class="s0">not in </span><span class="s1">origin</span><span class="s2">:</span>
+            <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                <span class="s1">Error</span><span class="s2">(</span>
+                    <span class="s3">&quot;As of Django 4.0, the values in the CSRF_TRUSTED_ORIGINS &quot;</span>
+                    <span class="s3">&quot;setting must start with a scheme (usually http:// or &quot;</span>
+                    <span class="s3">&quot;https://) but found %s. See the release notes for details.&quot;</span>
+                    <span class="s2">% </span><span class="s1">origin</span><span class="s2">,</span>
+                    <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;4_0.E001&quot;</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">errors</span>
+</pre>
+</body>
+</html>
