@@ -1,0 +1,431 @@
+<html>
+<head>
+<title>DateTimeShortcuts.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #6aab73;}
+.s3 { color: #bcbec4;}
+.s4 { color: #cf8e6d;}
+.s5 { color: #2aacb8;}
+.s6 { color: #42c3d4;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+DateTimeShortcuts.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/*global Calendar, findPosX, findPosY, get_format, gettext, gettext_noop, interpolate, ngettext, quickElement*/</span>
+<span class="s0">// Inserts shortcut buttons after all of the following:</span>
+<span class="s0">//     &lt;input type=&quot;text&quot; class=&quot;vDateField&quot;&gt;</span>
+<span class="s0">//     &lt;input type=&quot;text&quot; class=&quot;vTimeField&quot;&gt;</span>
+<span class="s2">'use strict'</span><span class="s3">;</span>
+<span class="s3">{</span>
+    <span class="s4">const </span><span class="s1">DateTimeShortcuts </span><span class="s3">= {</span>
+        <span class="s1">calendars</span><span class="s3">: [],</span>
+        <span class="s1">calendarInputs</span><span class="s3">: [],</span>
+        <span class="s1">clockInputs</span><span class="s3">: [],</span>
+        <span class="s1">clockHours</span><span class="s3">: {</span>
+            <span class="s1">default_</span><span class="s3">: [</span>
+                <span class="s3">[</span><span class="s1">gettext_noop</span><span class="s3">(</span><span class="s2">'Now'</span><span class="s3">), -</span><span class="s5">1</span><span class="s3">],</span>
+                <span class="s3">[</span><span class="s1">gettext_noop</span><span class="s3">(</span><span class="s2">'Midnight'</span><span class="s3">), </span><span class="s5">0</span><span class="s3">],</span>
+                <span class="s3">[</span><span class="s1">gettext_noop</span><span class="s3">(</span><span class="s2">'6 a.m.'</span><span class="s3">), </span><span class="s5">6</span><span class="s3">],</span>
+                <span class="s3">[</span><span class="s1">gettext_noop</span><span class="s3">(</span><span class="s2">'Noon'</span><span class="s3">), </span><span class="s5">12</span><span class="s3">],</span>
+                <span class="s3">[</span><span class="s1">gettext_noop</span><span class="s3">(</span><span class="s2">'6 p.m.'</span><span class="s3">), </span><span class="s5">18</span><span class="s3">]</span>
+            <span class="s3">]</span>
+        <span class="s3">},</span>
+        <span class="s1">dismissClockFunc</span><span class="s3">: [],</span>
+        <span class="s1">dismissCalendarFunc</span><span class="s3">: [],</span>
+        <span class="s1">calendarDivName1</span><span class="s3">: </span><span class="s2">'calendarbox'</span><span class="s3">, </span><span class="s0">// name of calendar &lt;div&gt; that gets toggled</span>
+        <span class="s1">calendarDivName2</span><span class="s3">: </span><span class="s2">'calendarin'</span><span class="s3">, </span><span class="s0">// name of &lt;div&gt; that contains calendar</span>
+        <span class="s1">calendarLinkName</span><span class="s3">: </span><span class="s2">'calendarlink'</span><span class="s3">, </span><span class="s0">// name of the link that is used to toggle</span>
+        <span class="s1">clockDivName</span><span class="s3">: </span><span class="s2">'clockbox'</span><span class="s3">, </span><span class="s0">// name of clock &lt;div&gt; that gets toggled</span>
+        <span class="s1">clockLinkName</span><span class="s3">: </span><span class="s2">'clocklink'</span><span class="s3">, </span><span class="s0">// name of the link that is used to toggle</span>
+        <span class="s1">shortCutsClass</span><span class="s3">: </span><span class="s2">'datetimeshortcuts'</span><span class="s3">, </span><span class="s0">// class of the clock and cal shortcuts</span>
+        <span class="s1">timezoneWarningClass</span><span class="s3">: </span><span class="s2">'timezonewarning'</span><span class="s3">, </span><span class="s0">// class of the warning for timezone mismatch</span>
+        <span class="s1">timezoneOffset</span><span class="s3">: </span><span class="s5">0</span><span class="s3">,</span>
+        <span class="s1">init</span><span class="s3">: </span><span class="s4">function</span><span class="s3">() {</span>
+            <span class="s4">const </span><span class="s1">serverOffset </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">body</span><span class="s3">.</span><span class="s1">dataset</span><span class="s3">.</span><span class="s1">adminUtcOffset</span><span class="s3">;</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">serverOffset</span><span class="s3">) {</span>
+                <span class="s4">const </span><span class="s1">localOffset </span><span class="s3">= </span><span class="s4">new </span><span class="s1">Date</span><span class="s3">().</span><span class="s1">getTimezoneOffset</span><span class="s3">() * -</span><span class="s5">60</span><span class="s3">;</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">timezoneOffset </span><span class="s3">= </span><span class="s1">localOffset </span><span class="s3">- </span><span class="s1">serverOffset</span><span class="s3">;</span>
+            <span class="s3">}</span>
+
+            <span class="s4">for </span><span class="s3">(</span><span class="s4">const </span><span class="s1">inp of document</span><span class="s3">.</span><span class="s1">getElementsByTagName</span><span class="s3">(</span><span class="s2">'input'</span><span class="s3">)) {</span>
+                <span class="s4">if </span><span class="s3">(</span><span class="s1">inp</span><span class="s3">.</span><span class="s1">type </span><span class="s3">=== </span><span class="s2">'text' </span><span class="s3">&amp;&amp; </span><span class="s1">inp</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">contains</span><span class="s3">(</span><span class="s2">'vTimeField'</span><span class="s3">)) {</span>
+                    <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">addClock</span><span class="s3">(</span><span class="s1">inp</span><span class="s3">);</span>
+                    <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">addTimezoneWarning</span><span class="s3">(</span><span class="s1">inp</span><span class="s3">);</span>
+                <span class="s3">}</span>
+                <span class="s4">else if </span><span class="s3">(</span><span class="s1">inp</span><span class="s3">.</span><span class="s1">type </span><span class="s3">=== </span><span class="s2">'text' </span><span class="s3">&amp;&amp; </span><span class="s1">inp</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">contains</span><span class="s3">(</span><span class="s2">'vDateField'</span><span class="s3">)) {</span>
+                    <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">addCalendar</span><span class="s3">(</span><span class="s1">inp</span><span class="s3">);</span>
+                    <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">addTimezoneWarning</span><span class="s3">(</span><span class="s1">inp</span><span class="s3">);</span>
+                <span class="s3">}</span>
+            <span class="s3">}</span>
+        <span class="s3">},</span>
+        <span class="s0">// Return the current time while accounting for the server timezone.</span>
+        <span class="s1">now</span><span class="s3">: </span><span class="s4">function</span><span class="s3">() {</span>
+            <span class="s4">const </span><span class="s1">serverOffset </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">body</span><span class="s3">.</span><span class="s1">dataset</span><span class="s3">.</span><span class="s1">adminUtcOffset</span><span class="s3">;</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">serverOffset</span><span class="s3">) {</span>
+                <span class="s4">const </span><span class="s1">localNow </span><span class="s3">= </span><span class="s4">new </span><span class="s1">Date</span><span class="s3">();</span>
+                <span class="s4">const </span><span class="s1">localOffset </span><span class="s3">= </span><span class="s1">localNow</span><span class="s3">.</span><span class="s1">getTimezoneOffset</span><span class="s3">() * -</span><span class="s5">60</span><span class="s3">;</span>
+                <span class="s1">localNow</span><span class="s3">.</span><span class="s1">setTime</span><span class="s3">(</span><span class="s1">localNow</span><span class="s3">.</span><span class="s1">getTime</span><span class="s3">() + </span><span class="s5">1000 </span><span class="s3">* (</span><span class="s1">serverOffset </span><span class="s3">- </span><span class="s1">localOffset</span><span class="s3">));</span>
+                <span class="s4">return </span><span class="s1">localNow</span><span class="s3">;</span>
+            <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+                <span class="s4">return new </span><span class="s1">Date</span><span class="s3">();</span>
+            <span class="s3">}</span>
+        <span class="s3">},</span>
+        <span class="s0">// Add a warning when the time zone in the browser and backend do not match.</span>
+        <span class="s1">addTimezoneWarning</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">inp</span><span class="s3">) {</span>
+            <span class="s4">const </span><span class="s1">warningClass </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">timezoneWarningClass</span><span class="s3">;</span>
+            <span class="s4">let </span><span class="s1">timezoneOffset </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">timezoneOffset </span><span class="s3">/ </span><span class="s5">3600</span><span class="s3">;</span>
+
+            <span class="s0">// Only warn if there is a time zone mismatch.</span>
+            <span class="s4">if </span><span class="s3">(!</span><span class="s1">timezoneOffset</span><span class="s3">) {</span>
+                <span class="s4">return</span><span class="s3">;</span>
+            <span class="s3">}</span>
+
+            <span class="s0">// Check if warning is already there.</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">inp</span><span class="s3">.</span><span class="s1">parentNode</span><span class="s3">.</span><span class="s1">querySelectorAll</span><span class="s3">(</span><span class="s2">'.' </span><span class="s3">+ </span><span class="s1">warningClass</span><span class="s3">).</span><span class="s1">length</span><span class="s3">) {</span>
+                <span class="s4">return</span><span class="s3">;</span>
+            <span class="s3">}</span>
+
+            <span class="s4">let </span><span class="s1">message</span><span class="s3">;</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">timezoneOffset </span><span class="s3">&gt; </span><span class="s5">0</span><span class="s3">) {</span>
+                <span class="s1">message </span><span class="s3">= </span><span class="s1">ngettext</span><span class="s3">(</span>
+                    <span class="s2">'Note: You are %s hour ahead of server time.'</span><span class="s3">,</span>
+                    <span class="s2">'Note: You are %s hours ahead of server time.'</span><span class="s3">,</span>
+                    <span class="s1">timezoneOffset</span>
+                <span class="s3">);</span>
+            <span class="s3">}</span>
+            <span class="s4">else </span><span class="s3">{</span>
+                <span class="s1">timezoneOffset </span><span class="s3">*= -</span><span class="s5">1</span><span class="s3">;</span>
+                <span class="s1">message </span><span class="s3">= </span><span class="s1">ngettext</span><span class="s3">(</span>
+                    <span class="s2">'Note: You are %s hour behind server time.'</span><span class="s3">,</span>
+                    <span class="s2">'Note: You are %s hours behind server time.'</span><span class="s3">,</span>
+                    <span class="s1">timezoneOffset</span>
+                <span class="s3">);</span>
+            <span class="s3">}</span>
+            <span class="s1">message </span><span class="s3">= </span><span class="s1">interpolate</span><span class="s3">(</span><span class="s1">message</span><span class="s3">, [</span><span class="s1">timezoneOffset</span><span class="s3">]);</span>
+
+            <span class="s4">const </span><span class="s1">warning </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createElement</span><span class="s3">(</span><span class="s2">'div'</span><span class="s3">);</span>
+            <span class="s1">warning</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">add</span><span class="s3">(</span><span class="s2">'help'</span><span class="s3">, </span><span class="s1">warningClass</span><span class="s3">);</span>
+            <span class="s1">warning</span><span class="s3">.</span><span class="s1">textContent </span><span class="s3">= </span><span class="s1">message</span><span class="s3">;</span>
+            <span class="s1">inp</span><span class="s3">.</span><span class="s1">parentNode</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">warning</span><span class="s3">);</span>
+        <span class="s3">},</span>
+        <span class="s0">// Add clock widget to a given field</span>
+        <span class="s1">addClock</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">inp</span><span class="s3">) {</span>
+            <span class="s4">const </span><span class="s1">num </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">clockInputs</span><span class="s3">.</span><span class="s1">length</span><span class="s3">;</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">clockInputs</span><span class="s3">[</span><span class="s1">num</span><span class="s3">] = </span><span class="s1">inp</span><span class="s3">;</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissClockFunc</span><span class="s3">[</span><span class="s1">num</span><span class="s3">] = </span><span class="s4">function</span><span class="s3">() { </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissClock</span><span class="s3">(</span><span class="s1">num</span><span class="s3">); </span><span class="s4">return true</span><span class="s3">; };</span>
+
+            <span class="s0">// Shortcut links (clock icon and &quot;Now&quot; link)</span>
+            <span class="s4">const </span><span class="s1">shortcuts_span </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createElement</span><span class="s3">(</span><span class="s2">'span'</span><span class="s3">);</span>
+            <span class="s1">shortcuts_span</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">shortCutsClass</span><span class="s3">;</span>
+            <span class="s1">inp</span><span class="s3">.</span><span class="s1">parentNode</span><span class="s3">.</span><span class="s1">insertBefore</span><span class="s3">(</span><span class="s1">shortcuts_span</span><span class="s3">, </span><span class="s1">inp</span><span class="s3">.</span><span class="s1">nextSibling</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">now_link </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">);</span>
+            <span class="s1">now_link</span><span class="s3">.</span><span class="s1">href </span><span class="s3">= </span><span class="s2">&quot;#&quot;</span><span class="s3">;</span>
+            <span class="s1">now_link</span><span class="s3">.</span><span class="s1">textContent </span><span class="s3">= </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Now'</span><span class="s3">);</span>
+            <span class="s1">now_link</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+                <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">handleClockQuicklink</span><span class="s3">(</span><span class="s1">num</span><span class="s3">, -</span><span class="s5">1</span><span class="s3">);</span>
+            <span class="s3">});</span>
+            <span class="s4">const </span><span class="s1">clock_link </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">);</span>
+            <span class="s1">clock_link</span><span class="s3">.</span><span class="s1">href </span><span class="s3">= </span><span class="s2">'#'</span><span class="s3">;</span>
+            <span class="s1">clock_link</span><span class="s3">.</span><span class="s1">id </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">clockLinkName </span><span class="s3">+ </span><span class="s1">num</span><span class="s3">;</span>
+            <span class="s1">clock_link</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+                <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s0">// avoid triggering the document click handler to dismiss the clock</span>
+                <span class="s1">e</span><span class="s3">.</span><span class="s1">stopPropagation</span><span class="s3">();</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">openClock</span><span class="s3">(</span><span class="s1">num</span><span class="s3">);</span>
+            <span class="s3">});</span>
+
+            <span class="s1">quickElement</span><span class="s3">(</span>
+                <span class="s2">'span'</span><span class="s3">, </span><span class="s1">clock_link</span><span class="s3">, </span><span class="s2">''</span><span class="s3">,</span>
+                <span class="s2">'class'</span><span class="s3">, </span><span class="s2">'clock-icon'</span><span class="s3">,</span>
+                <span class="s2">'title'</span><span class="s3">, </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Choose a Time'</span><span class="s3">)</span>
+            <span class="s3">);</span>
+            <span class="s1">shortcuts_span</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">createTextNode</span><span class="s3">(</span><span class="s2">'</span><span class="s4">\u00A0</span><span class="s2">'</span><span class="s3">));</span>
+            <span class="s1">shortcuts_span</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">now_link</span><span class="s3">);</span>
+            <span class="s1">shortcuts_span</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">createTextNode</span><span class="s3">(</span><span class="s2">'</span><span class="s4">\u00A0</span><span class="s2">|</span><span class="s4">\u00A0</span><span class="s2">'</span><span class="s3">));</span>
+            <span class="s1">shortcuts_span</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">clock_link</span><span class="s3">);</span>
+
+            <span class="s0">// Create clock link div</span>
+            <span class="s0">//</span>
+            <span class="s0">// Markup looks like:</span>
+            <span class="s0">// &lt;div id=&quot;clockbox1&quot; class=&quot;clockbox module&quot;&gt;</span>
+            <span class="s0">//     &lt;h2&gt;Choose a time&lt;/h2&gt;</span>
+            <span class="s0">//     &lt;ul class=&quot;timelist&quot;&gt;</span>
+            <span class="s0">//         &lt;li&gt;&lt;a href=&quot;#&quot;&gt;Now&lt;/a&gt;&lt;/li&gt;</span>
+            <span class="s0">//         &lt;li&gt;&lt;a href=&quot;#&quot;&gt;Midnight&lt;/a&gt;&lt;/li&gt;</span>
+            <span class="s0">//         &lt;li&gt;&lt;a href=&quot;#&quot;&gt;6 a.m.&lt;/a&gt;&lt;/li&gt;</span>
+            <span class="s0">//         &lt;li&gt;&lt;a href=&quot;#&quot;&gt;Noon&lt;/a&gt;&lt;/li&gt;</span>
+            <span class="s0">//         &lt;li&gt;&lt;a href=&quot;#&quot;&gt;6 p.m.&lt;/a&gt;&lt;/li&gt;</span>
+            <span class="s0">//     &lt;/ul&gt;</span>
+            <span class="s0">//     &lt;p class=&quot;calendar-cancel&quot;&gt;&lt;a href=&quot;#&quot;&gt;Cancel&lt;/a&gt;&lt;/p&gt;</span>
+            <span class="s0">// &lt;/div&gt;</span>
+
+            <span class="s4">const </span><span class="s1">clock_box </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createElement</span><span class="s3">(</span><span class="s2">'div'</span><span class="s3">);</span>
+            <span class="s1">clock_box</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">display </span><span class="s3">= </span><span class="s2">'none'</span><span class="s3">;</span>
+            <span class="s1">clock_box</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">position </span><span class="s3">= </span><span class="s2">'absolute'</span><span class="s3">;</span>
+            <span class="s1">clock_box</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s2">'clockbox module'</span><span class="s3">;</span>
+            <span class="s1">clock_box</span><span class="s3">.</span><span class="s1">id </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">clockDivName </span><span class="s3">+ </span><span class="s1">num</span><span class="s3">;</span>
+            <span class="s1">document</span><span class="s3">.</span><span class="s1">body</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">clock_box</span><span class="s3">);</span>
+            <span class="s1">clock_box</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) { </span><span class="s1">e</span><span class="s3">.</span><span class="s1">stopPropagation</span><span class="s3">(); });</span>
+
+            <span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'h2'</span><span class="s3">, </span><span class="s1">clock_box</span><span class="s3">, </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Choose a time'</span><span class="s3">));</span>
+            <span class="s4">const </span><span class="s1">time_list </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'ul'</span><span class="s3">, </span><span class="s1">clock_box</span><span class="s3">);</span>
+            <span class="s1">time_list</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s2">'timelist'</span><span class="s3">;</span>
+            <span class="s0">// The list of choices can be overridden in JavaScript like this:</span>
+            <span class="s0">// DateTimeShortcuts.clockHours.name = [['3 a.m.', 3]];</span>
+            <span class="s0">// where name is the name attribute of the &lt;input&gt;.</span>
+            <span class="s4">const </span><span class="s1">name </span><span class="s3">= </span><span class="s4">typeof </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">clockHours</span><span class="s3">[</span><span class="s1">inp</span><span class="s3">.</span><span class="s1">name</span><span class="s3">] === </span><span class="s2">'undefined' </span><span class="s3">? </span><span class="s2">'default_' </span><span class="s3">: </span><span class="s1">inp</span><span class="s3">.</span><span class="s1">name</span><span class="s3">;</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">clockHours</span><span class="s3">[</span><span class="s1">name</span><span class="s3">].</span><span class="s1">forEach</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">element</span><span class="s3">) {</span>
+                <span class="s4">const </span><span class="s1">time_link </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">, </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'li'</span><span class="s3">, </span><span class="s1">time_list</span><span class="s3">), </span><span class="s1">gettext</span><span class="s3">(</span><span class="s1">element</span><span class="s3">[</span><span class="s5">0</span><span class="s3">]), </span><span class="s2">'href'</span><span class="s3">, </span><span class="s2">'#'</span><span class="s3">);</span>
+                <span class="s1">time_link</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+                    <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                    <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">handleClockQuicklink</span><span class="s3">(</span><span class="s1">num</span><span class="s3">, </span><span class="s1">element</span><span class="s3">[</span><span class="s5">1</span><span class="s3">]);</span>
+                <span class="s3">});</span>
+            <span class="s3">});</span>
+
+            <span class="s4">const </span><span class="s1">cancel_p </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'p'</span><span class="s3">, </span><span class="s1">clock_box</span><span class="s3">);</span>
+            <span class="s1">cancel_p</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s2">'calendar-cancel'</span><span class="s3">;</span>
+            <span class="s4">const </span><span class="s1">cancel_link </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">, </span><span class="s1">cancel_p</span><span class="s3">, </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Cancel'</span><span class="s3">), </span><span class="s2">'href'</span><span class="s3">, </span><span class="s2">'#'</span><span class="s3">);</span>
+            <span class="s1">cancel_link</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+                <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissClock</span><span class="s3">(</span><span class="s1">num</span><span class="s3">);</span>
+            <span class="s3">});</span>
+
+            <span class="s1">document</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'keyup'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">event</span><span class="s3">) {</span>
+                <span class="s4">if </span><span class="s3">(</span><span class="s1">event</span><span class="s3">.</span><span class="s1">which </span><span class="s3">=== </span><span class="s5">27</span><span class="s3">) {</span>
+                    <span class="s0">// ESC key closes popup</span>
+                    <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissClock</span><span class="s3">(</span><span class="s1">num</span><span class="s3">);</span>
+                    <span class="s1">event</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s3">}</span>
+            <span class="s3">});</span>
+        <span class="s3">},</span>
+        <span class="s1">openClock</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">num</span><span class="s3">) {</span>
+            <span class="s4">const </span><span class="s1">clock_box </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">clockDivName </span><span class="s3">+ </span><span class="s1">num</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">clock_link </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">clockLinkName </span><span class="s3">+ </span><span class="s1">num</span><span class="s3">);</span>
+
+            <span class="s0">// Recalculate the clockbox position</span>
+            <span class="s0">// is it left-to-right or right-to-left layout ?</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">window</span><span class="s3">.</span><span class="s1">getComputedStyle</span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">body</span><span class="s3">).</span><span class="s1">direction </span><span class="s3">!== </span><span class="s2">'rtl'</span><span class="s3">) {</span>
+                <span class="s1">clock_box</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">left </span><span class="s3">= </span><span class="s1">findPosX</span><span class="s3">(</span><span class="s1">clock_link</span><span class="s3">) + </span><span class="s5">17 </span><span class="s3">+ </span><span class="s2">'px'</span><span class="s3">;</span>
+            <span class="s3">}</span>
+            <span class="s4">else </span><span class="s3">{</span>
+                <span class="s0">// since style's width is in em, it'd be tough to calculate</span>
+                <span class="s0">// px value of it. let's use an estimated px for now</span>
+                <span class="s1">clock_box</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">left </span><span class="s3">= </span><span class="s1">findPosX</span><span class="s3">(</span><span class="s1">clock_link</span><span class="s3">) - </span><span class="s5">110 </span><span class="s3">+ </span><span class="s2">'px'</span><span class="s3">;</span>
+            <span class="s3">}</span>
+            <span class="s1">clock_box</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">top </span><span class="s3">= </span><span class="s1">Math</span><span class="s3">.</span><span class="s1">max</span><span class="s3">(</span><span class="s5">0</span><span class="s3">, </span><span class="s1">findPosY</span><span class="s3">(</span><span class="s1">clock_link</span><span class="s3">) - </span><span class="s5">30</span><span class="s3">) + </span><span class="s2">'px'</span><span class="s3">;</span>
+
+            <span class="s0">// Show the clock box</span>
+            <span class="s1">clock_box</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">display </span><span class="s3">= </span><span class="s2">'block'</span><span class="s3">;</span>
+            <span class="s1">document</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissClockFunc</span><span class="s3">[</span><span class="s1">num</span><span class="s3">]);</span>
+        <span class="s3">},</span>
+        <span class="s1">dismissClock</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">num</span><span class="s3">) {</span>
+            <span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">clockDivName </span><span class="s3">+ </span><span class="s1">num</span><span class="s3">).</span><span class="s1">style</span><span class="s3">.</span><span class="s1">display </span><span class="s3">= </span><span class="s2">'none'</span><span class="s3">;</span>
+            <span class="s1">document</span><span class="s3">.</span><span class="s1">removeEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissClockFunc</span><span class="s3">[</span><span class="s1">num</span><span class="s3">]);</span>
+        <span class="s3">},</span>
+        <span class="s1">handleClockQuicklink</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">num</span><span class="s3">, </span><span class="s1">val</span><span class="s3">) {</span>
+            <span class="s4">let </span><span class="s1">d</span><span class="s3">;</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">val </span><span class="s3">=== -</span><span class="s5">1</span><span class="s3">) {</span>
+                <span class="s1">d </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">now</span><span class="s3">();</span>
+            <span class="s3">}</span>
+            <span class="s4">else </span><span class="s3">{</span>
+                <span class="s1">d </span><span class="s3">= </span><span class="s4">new </span><span class="s1">Date</span><span class="s3">(</span><span class="s5">1970</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">val</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s5">0</span><span class="s3">);</span>
+            <span class="s3">}</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">clockInputs</span><span class="s3">[</span><span class="s1">num</span><span class="s3">].</span><span class="s1">value </span><span class="s3">= </span><span class="s1">d</span><span class="s3">.</span><span class="s1">strftime</span><span class="s3">(</span><span class="s1">get_format</span><span class="s3">(</span><span class="s2">'TIME_INPUT_FORMATS'</span><span class="s3">)[</span><span class="s5">0</span><span class="s3">]);</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">clockInputs</span><span class="s3">[</span><span class="s1">num</span><span class="s3">].</span><span class="s1">focus</span><span class="s3">();</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissClock</span><span class="s3">(</span><span class="s1">num</span><span class="s3">);</span>
+        <span class="s3">},</span>
+        <span class="s0">// Add calendar widget to a given field.</span>
+        <span class="s1">addCalendar</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">inp</span><span class="s3">) {</span>
+            <span class="s4">const </span><span class="s1">num </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendars</span><span class="s3">.</span><span class="s1">length</span><span class="s3">;</span>
+
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarInputs</span><span class="s3">[</span><span class="s1">num</span><span class="s3">] = </span><span class="s1">inp</span><span class="s3">;</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissCalendarFunc</span><span class="s3">[</span><span class="s1">num</span><span class="s3">] = </span><span class="s4">function</span><span class="s3">() { </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissCalendar</span><span class="s3">(</span><span class="s1">num</span><span class="s3">); </span><span class="s4">return true</span><span class="s3">; };</span>
+
+            <span class="s0">// Shortcut links (calendar icon and &quot;Today&quot; link)</span>
+            <span class="s4">const </span><span class="s1">shortcuts_span </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createElement</span><span class="s3">(</span><span class="s2">'span'</span><span class="s3">);</span>
+            <span class="s1">shortcuts_span</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">shortCutsClass</span><span class="s3">;</span>
+            <span class="s1">inp</span><span class="s3">.</span><span class="s1">parentNode</span><span class="s3">.</span><span class="s1">insertBefore</span><span class="s3">(</span><span class="s1">shortcuts_span</span><span class="s3">, </span><span class="s1">inp</span><span class="s3">.</span><span class="s1">nextSibling</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">today_link </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">);</span>
+            <span class="s1">today_link</span><span class="s3">.</span><span class="s1">href </span><span class="s3">= </span><span class="s2">'#'</span><span class="s3">;</span>
+            <span class="s1">today_link</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">createTextNode</span><span class="s3">(</span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Today'</span><span class="s3">)));</span>
+            <span class="s1">today_link</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+                <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">handleCalendarQuickLink</span><span class="s3">(</span><span class="s1">num</span><span class="s3">, </span><span class="s5">0</span><span class="s3">);</span>
+            <span class="s3">});</span>
+            <span class="s4">const </span><span class="s1">cal_link </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">);</span>
+            <span class="s1">cal_link</span><span class="s3">.</span><span class="s1">href </span><span class="s3">= </span><span class="s2">'#'</span><span class="s3">;</span>
+            <span class="s1">cal_link</span><span class="s3">.</span><span class="s1">id </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarLinkName </span><span class="s3">+ </span><span class="s1">num</span><span class="s3">;</span>
+            <span class="s1">cal_link</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+                <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s0">// avoid triggering the document click handler to dismiss the calendar</span>
+                <span class="s1">e</span><span class="s3">.</span><span class="s1">stopPropagation</span><span class="s3">();</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">openCalendar</span><span class="s3">(</span><span class="s1">num</span><span class="s3">);</span>
+            <span class="s3">});</span>
+            <span class="s1">quickElement</span><span class="s3">(</span>
+                <span class="s2">'span'</span><span class="s3">, </span><span class="s1">cal_link</span><span class="s3">, </span><span class="s2">''</span><span class="s3">,</span>
+                <span class="s2">'class'</span><span class="s3">, </span><span class="s2">'date-icon'</span><span class="s3">,</span>
+                <span class="s2">'title'</span><span class="s3">, </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Choose a Date'</span><span class="s3">)</span>
+            <span class="s3">);</span>
+            <span class="s1">shortcuts_span</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">createTextNode</span><span class="s3">(</span><span class="s2">'</span><span class="s4">\u00A0</span><span class="s2">'</span><span class="s3">));</span>
+            <span class="s1">shortcuts_span</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">today_link</span><span class="s3">);</span>
+            <span class="s1">shortcuts_span</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">createTextNode</span><span class="s3">(</span><span class="s2">'</span><span class="s4">\u00A0</span><span class="s2">|</span><span class="s4">\u00A0</span><span class="s2">'</span><span class="s3">));</span>
+            <span class="s1">shortcuts_span</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">cal_link</span><span class="s3">);</span>
+
+            <span class="s0">// Create calendarbox div.</span>
+            <span class="s0">//</span>
+            <span class="s0">// Markup looks like:</span>
+            <span class="s0">//</span>
+            <span class="s0">// &lt;div id=&quot;calendarbox3&quot; class=&quot;calendarbox module&quot;&gt;</span>
+            <span class="s0">//     &lt;h2&gt;</span>
+            <span class="s0">//           &lt;a href=&quot;#&quot; class=&quot;link-previous&quot;&gt;&amp;lsaquo;&lt;/a&gt;</span>
+            <span class="s0">//           &lt;a href=&quot;#&quot; class=&quot;link-next&quot;&gt;&amp;rsaquo;&lt;/a&gt; February 2003</span>
+            <span class="s0">//     &lt;/h2&gt;</span>
+            <span class="s0">//     &lt;div class=&quot;calendar&quot; id=&quot;calendarin3&quot;&gt;</span>
+            <span class="s0">//         &lt;!-- (cal) --&gt;</span>
+            <span class="s0">//     &lt;/div&gt;</span>
+            <span class="s0">//     &lt;div class=&quot;calendar-shortcuts&quot;&gt;</span>
+            <span class="s0">//          &lt;a href=&quot;#&quot;&gt;Yesterday&lt;/a&gt; | &lt;a href=&quot;#&quot;&gt;Today&lt;/a&gt; | &lt;a href=&quot;#&quot;&gt;Tomorrow&lt;/a&gt;</span>
+            <span class="s0">//     &lt;/div&gt;</span>
+            <span class="s0">//     &lt;p class=&quot;calendar-cancel&quot;&gt;&lt;a href=&quot;#&quot;&gt;Cancel&lt;/a&gt;&lt;/p&gt;</span>
+            <span class="s0">// &lt;/div&gt;</span>
+            <span class="s4">const </span><span class="s1">cal_box </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createElement</span><span class="s3">(</span><span class="s2">'div'</span><span class="s3">);</span>
+            <span class="s1">cal_box</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">display </span><span class="s3">= </span><span class="s2">'none'</span><span class="s3">;</span>
+            <span class="s1">cal_box</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">position </span><span class="s3">= </span><span class="s2">'absolute'</span><span class="s3">;</span>
+            <span class="s1">cal_box</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s2">'calendarbox module'</span><span class="s3">;</span>
+            <span class="s1">cal_box</span><span class="s3">.</span><span class="s1">id </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarDivName1 </span><span class="s3">+ </span><span class="s1">num</span><span class="s3">;</span>
+            <span class="s1">document</span><span class="s3">.</span><span class="s1">body</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">cal_box</span><span class="s3">);</span>
+            <span class="s1">cal_box</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) { </span><span class="s1">e</span><span class="s3">.</span><span class="s1">stopPropagation</span><span class="s3">(); });</span>
+
+            <span class="s0">// next-prev links</span>
+            <span class="s4">const </span><span class="s1">cal_nav </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'div'</span><span class="s3">, </span><span class="s1">cal_box</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">cal_nav_prev </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">, </span><span class="s1">cal_nav</span><span class="s3">, </span><span class="s2">'&lt;'</span><span class="s3">, </span><span class="s2">'href'</span><span class="s3">, </span><span class="s2">'#'</span><span class="s3">);</span>
+            <span class="s1">cal_nav_prev</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s2">'calendarnav-previous'</span><span class="s3">;</span>
+            <span class="s1">cal_nav_prev</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+                <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">drawPrev</span><span class="s3">(</span><span class="s1">num</span><span class="s3">);</span>
+            <span class="s3">});</span>
+
+            <span class="s4">const </span><span class="s1">cal_nav_next </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">, </span><span class="s1">cal_nav</span><span class="s3">, </span><span class="s2">'&gt;'</span><span class="s3">, </span><span class="s2">'href'</span><span class="s3">, </span><span class="s2">'#'</span><span class="s3">);</span>
+            <span class="s1">cal_nav_next</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s2">'calendarnav-next'</span><span class="s3">;</span>
+            <span class="s1">cal_nav_next</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+                <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">drawNext</span><span class="s3">(</span><span class="s1">num</span><span class="s3">);</span>
+            <span class="s3">});</span>
+
+            <span class="s0">// main box</span>
+            <span class="s4">const </span><span class="s1">cal_main </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'div'</span><span class="s3">, </span><span class="s1">cal_box</span><span class="s3">, </span><span class="s2">''</span><span class="s3">, </span><span class="s2">'id'</span><span class="s3">, </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarDivName2 </span><span class="s3">+ </span><span class="s1">num</span><span class="s3">);</span>
+            <span class="s1">cal_main</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s2">'calendar'</span><span class="s3">;</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendars</span><span class="s3">[</span><span class="s1">num</span><span class="s3">] = </span><span class="s4">new </span><span class="s1">Calendar</span><span class="s3">(</span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarDivName2 </span><span class="s3">+ </span><span class="s1">num</span><span class="s3">, </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">handleCalendarCallback</span><span class="s3">(</span><span class="s1">num</span><span class="s3">));</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendars</span><span class="s3">[</span><span class="s1">num</span><span class="s3">].</span><span class="s1">drawCurrent</span><span class="s3">();</span>
+
+            <span class="s0">// calendar shortcuts</span>
+            <span class="s4">const </span><span class="s1">shortcuts </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'div'</span><span class="s3">, </span><span class="s1">cal_box</span><span class="s3">);</span>
+            <span class="s1">shortcuts</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s2">'calendar-shortcuts'</span><span class="s3">;</span>
+            <span class="s4">let </span><span class="s1">day_link </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">, </span><span class="s1">shortcuts</span><span class="s3">, </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Yesterday'</span><span class="s3">), </span><span class="s2">'href'</span><span class="s3">, </span><span class="s2">'#'</span><span class="s3">);</span>
+            <span class="s1">day_link</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+                <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">handleCalendarQuickLink</span><span class="s3">(</span><span class="s1">num</span><span class="s3">, -</span><span class="s5">1</span><span class="s3">);</span>
+            <span class="s3">});</span>
+            <span class="s1">shortcuts</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">createTextNode</span><span class="s3">(</span><span class="s2">'</span><span class="s4">\u00A0</span><span class="s2">|</span><span class="s4">\u00A0</span><span class="s2">'</span><span class="s3">));</span>
+            <span class="s1">day_link </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">, </span><span class="s1">shortcuts</span><span class="s3">, </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Today'</span><span class="s3">), </span><span class="s2">'href'</span><span class="s3">, </span><span class="s2">'#'</span><span class="s3">);</span>
+            <span class="s1">day_link</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+                <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">handleCalendarQuickLink</span><span class="s3">(</span><span class="s1">num</span><span class="s3">, </span><span class="s5">0</span><span class="s3">);</span>
+            <span class="s3">});</span>
+            <span class="s1">shortcuts</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">createTextNode</span><span class="s3">(</span><span class="s2">'</span><span class="s4">\u00A0</span><span class="s2">|</span><span class="s4">\u00A0</span><span class="s2">'</span><span class="s3">));</span>
+            <span class="s1">day_link </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">, </span><span class="s1">shortcuts</span><span class="s3">, </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Tomorrow'</span><span class="s3">), </span><span class="s2">'href'</span><span class="s3">, </span><span class="s2">'#'</span><span class="s3">);</span>
+            <span class="s1">day_link</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+                <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">handleCalendarQuickLink</span><span class="s3">(</span><span class="s1">num</span><span class="s3">, +</span><span class="s5">1</span><span class="s3">);</span>
+            <span class="s3">});</span>
+
+            <span class="s0">// cancel bar</span>
+            <span class="s4">const </span><span class="s1">cancel_p </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'p'</span><span class="s3">, </span><span class="s1">cal_box</span><span class="s3">);</span>
+            <span class="s1">cancel_p</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s2">'calendar-cancel'</span><span class="s3">;</span>
+            <span class="s4">const </span><span class="s1">cancel_link </span><span class="s3">= </span><span class="s1">quickElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">, </span><span class="s1">cancel_p</span><span class="s3">, </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Cancel'</span><span class="s3">), </span><span class="s2">'href'</span><span class="s3">, </span><span class="s2">'#'</span><span class="s3">);</span>
+            <span class="s1">cancel_link</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+                <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissCalendar</span><span class="s3">(</span><span class="s1">num</span><span class="s3">);</span>
+            <span class="s3">});</span>
+            <span class="s1">document</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'keyup'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">event</span><span class="s3">) {</span>
+                <span class="s4">if </span><span class="s3">(</span><span class="s1">event</span><span class="s3">.</span><span class="s1">which </span><span class="s3">=== </span><span class="s5">27</span><span class="s3">) {</span>
+                    <span class="s0">// ESC key closes popup</span>
+                    <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissCalendar</span><span class="s3">(</span><span class="s1">num</span><span class="s3">);</span>
+                    <span class="s1">event</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s3">}</span>
+            <span class="s3">});</span>
+        <span class="s3">},</span>
+        <span class="s1">openCalendar</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">num</span><span class="s3">) {</span>
+            <span class="s4">const </span><span class="s1">cal_box </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarDivName1 </span><span class="s3">+ </span><span class="s1">num</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">cal_link </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarLinkName </span><span class="s3">+ </span><span class="s1">num</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">inp </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarInputs</span><span class="s3">[</span><span class="s1">num</span><span class="s3">];</span>
+
+            <span class="s0">// Determine if the current value in the input has a valid date.</span>
+            <span class="s0">// If so, draw the calendar with that date's year and month.</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">inp</span><span class="s3">.</span><span class="s1">value</span><span class="s3">) {</span>
+                <span class="s4">const </span><span class="s1">format </span><span class="s3">= </span><span class="s1">get_format</span><span class="s3">(</span><span class="s2">'DATE_INPUT_FORMATS'</span><span class="s3">)[</span><span class="s5">0</span><span class="s3">];</span>
+                <span class="s4">const </span><span class="s1">selected </span><span class="s3">= </span><span class="s1">inp</span><span class="s3">.</span><span class="s1">value</span><span class="s3">.</span><span class="s1">strptime</span><span class="s3">(</span><span class="s1">format</span><span class="s3">);</span>
+                <span class="s4">const </span><span class="s1">year </span><span class="s3">= </span><span class="s1">selected</span><span class="s3">.</span><span class="s1">getUTCFullYear</span><span class="s3">();</span>
+                <span class="s4">const </span><span class="s1">month </span><span class="s3">= </span><span class="s1">selected</span><span class="s3">.</span><span class="s1">getUTCMonth</span><span class="s3">() + </span><span class="s5">1</span><span class="s3">;</span>
+                <span class="s4">const </span><span class="s1">re </span><span class="s3">= </span><span class="s6">/\d{4}/</span><span class="s3">;</span>
+                <span class="s4">if </span><span class="s3">(</span><span class="s1">re</span><span class="s3">.</span><span class="s1">test</span><span class="s3">(</span><span class="s1">year</span><span class="s3">.</span><span class="s1">toString</span><span class="s3">()) &amp;&amp; </span><span class="s1">month </span><span class="s3">&gt;= </span><span class="s5">1 </span><span class="s3">&amp;&amp; </span><span class="s1">month </span><span class="s3">&lt;= </span><span class="s5">12</span><span class="s3">) {</span>
+                    <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendars</span><span class="s3">[</span><span class="s1">num</span><span class="s3">].</span><span class="s1">drawDate</span><span class="s3">(</span><span class="s1">month</span><span class="s3">, </span><span class="s1">year</span><span class="s3">, </span><span class="s1">selected</span><span class="s3">);</span>
+                <span class="s3">}</span>
+            <span class="s3">}</span>
+
+            <span class="s0">// Recalculate the clockbox position</span>
+            <span class="s0">// is it left-to-right or right-to-left layout ?</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">window</span><span class="s3">.</span><span class="s1">getComputedStyle</span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">body</span><span class="s3">).</span><span class="s1">direction </span><span class="s3">!== </span><span class="s2">'rtl'</span><span class="s3">) {</span>
+                <span class="s1">cal_box</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">left </span><span class="s3">= </span><span class="s1">findPosX</span><span class="s3">(</span><span class="s1">cal_link</span><span class="s3">) + </span><span class="s5">17 </span><span class="s3">+ </span><span class="s2">'px'</span><span class="s3">;</span>
+            <span class="s3">}</span>
+            <span class="s4">else </span><span class="s3">{</span>
+                <span class="s0">// since style's width is in em, it'd be tough to calculate</span>
+                <span class="s0">// px value of it. let's use an estimated px for now</span>
+                <span class="s1">cal_box</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">left </span><span class="s3">= </span><span class="s1">findPosX</span><span class="s3">(</span><span class="s1">cal_link</span><span class="s3">) - </span><span class="s5">180 </span><span class="s3">+ </span><span class="s2">'px'</span><span class="s3">;</span>
+            <span class="s3">}</span>
+            <span class="s1">cal_box</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">top </span><span class="s3">= </span><span class="s1">Math</span><span class="s3">.</span><span class="s1">max</span><span class="s3">(</span><span class="s5">0</span><span class="s3">, </span><span class="s1">findPosY</span><span class="s3">(</span><span class="s1">cal_link</span><span class="s3">) - </span><span class="s5">75</span><span class="s3">) + </span><span class="s2">'px'</span><span class="s3">;</span>
+
+            <span class="s1">cal_box</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">display </span><span class="s3">= </span><span class="s2">'block'</span><span class="s3">;</span>
+            <span class="s1">document</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissCalendarFunc</span><span class="s3">[</span><span class="s1">num</span><span class="s3">]);</span>
+        <span class="s3">},</span>
+        <span class="s1">dismissCalendar</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">num</span><span class="s3">) {</span>
+            <span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarDivName1 </span><span class="s3">+ </span><span class="s1">num</span><span class="s3">).</span><span class="s1">style</span><span class="s3">.</span><span class="s1">display </span><span class="s3">= </span><span class="s2">'none'</span><span class="s3">;</span>
+            <span class="s1">document</span><span class="s3">.</span><span class="s1">removeEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissCalendarFunc</span><span class="s3">[</span><span class="s1">num</span><span class="s3">]);</span>
+        <span class="s3">},</span>
+        <span class="s1">drawPrev</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">num</span><span class="s3">) {</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendars</span><span class="s3">[</span><span class="s1">num</span><span class="s3">].</span><span class="s1">drawPreviousMonth</span><span class="s3">();</span>
+        <span class="s3">},</span>
+        <span class="s1">drawNext</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">num</span><span class="s3">) {</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendars</span><span class="s3">[</span><span class="s1">num</span><span class="s3">].</span><span class="s1">drawNextMonth</span><span class="s3">();</span>
+        <span class="s3">},</span>
+        <span class="s1">handleCalendarCallback</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">num</span><span class="s3">) {</span>
+            <span class="s4">const </span><span class="s1">format </span><span class="s3">= </span><span class="s1">get_format</span><span class="s3">(</span><span class="s2">'DATE_INPUT_FORMATS'</span><span class="s3">)[</span><span class="s5">0</span><span class="s3">];</span>
+            <span class="s4">return function</span><span class="s3">(</span><span class="s1">y</span><span class="s3">, </span><span class="s1">m</span><span class="s3">, </span><span class="s1">d</span><span class="s3">) {</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarInputs</span><span class="s3">[</span><span class="s1">num</span><span class="s3">].</span><span class="s1">value </span><span class="s3">= </span><span class="s4">new </span><span class="s1">Date</span><span class="s3">(</span><span class="s1">y</span><span class="s3">, </span><span class="s1">m </span><span class="s3">- </span><span class="s5">1</span><span class="s3">, </span><span class="s1">d</span><span class="s3">).</span><span class="s1">strftime</span><span class="s3">(</span><span class="s1">format</span><span class="s3">);</span>
+                <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarInputs</span><span class="s3">[</span><span class="s1">num</span><span class="s3">].</span><span class="s1">focus</span><span class="s3">();</span>
+                <span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarDivName1 </span><span class="s3">+ </span><span class="s1">num</span><span class="s3">).</span><span class="s1">style</span><span class="s3">.</span><span class="s1">display </span><span class="s3">= </span><span class="s2">'none'</span><span class="s3">;</span>
+            <span class="s3">};</span>
+        <span class="s3">},</span>
+        <span class="s1">handleCalendarQuickLink</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">num</span><span class="s3">, </span><span class="s1">offset</span><span class="s3">) {</span>
+            <span class="s4">const </span><span class="s1">d </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">now</span><span class="s3">();</span>
+            <span class="s1">d</span><span class="s3">.</span><span class="s1">setDate</span><span class="s3">(</span><span class="s1">d</span><span class="s3">.</span><span class="s1">getDate</span><span class="s3">() + </span><span class="s1">offset</span><span class="s3">);</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarInputs</span><span class="s3">[</span><span class="s1">num</span><span class="s3">].</span><span class="s1">value </span><span class="s3">= </span><span class="s1">d</span><span class="s3">.</span><span class="s1">strftime</span><span class="s3">(</span><span class="s1">get_format</span><span class="s3">(</span><span class="s2">'DATE_INPUT_FORMATS'</span><span class="s3">)[</span><span class="s5">0</span><span class="s3">]);</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">calendarInputs</span><span class="s3">[</span><span class="s1">num</span><span class="s3">].</span><span class="s1">focus</span><span class="s3">();</span>
+            <span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">dismissCalendar</span><span class="s3">(</span><span class="s1">num</span><span class="s3">);</span>
+        <span class="s3">}</span>
+    <span class="s3">};</span>
+
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'load'</span><span class="s3">, </span><span class="s1">DateTimeShortcuts</span><span class="s3">.</span><span class="s1">init</span><span class="s3">);</span>
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">DateTimeShortcuts </span><span class="s3">= </span><span class="s1">DateTimeShortcuts</span><span class="s3">;</span>
+<span class="s3">}</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<html>
+<head>
+<title>optimizemigration.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+optimizemigration.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">shutil</span>
+<span class="s0">import </span><span class="s1">sys</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span><span class="s2">, </span><span class="s1">CommandError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">run_formatters</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">migrations</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">AmbiguityError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">loader </span><span class="s0">import </span><span class="s1">MigrationLoader</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">optimizer </span><span class="s0">import </span><span class="s1">MigrationOptimizer</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">writer </span><span class="s0">import </span><span class="s1">MigrationWriter</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">version </span><span class="s0">import </span><span class="s1">get_docs_version</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= </span><span class="s3">&quot;Optimizes the operations for the named migration.&quot;</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;app_label&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;App label of the application to optimize the migration for.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;migration_name&quot;</span><span class="s2">, </span><span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Migration name to optimize the operations for.&quot;</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--check&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Exit with a non-zero status if the migration can be optimized.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">verbosity </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;verbosity&quot;</span><span class="s2">]</span>
+        <span class="s1">app_label </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;app_label&quot;</span><span class="s2">]</span>
+        <span class="s1">migration_name </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;migration_name&quot;</span><span class="s2">]</span>
+        <span class="s1">check </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;check&quot;</span><span class="s2">]</span>
+
+        <span class="s4"># Validate app_label.</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_config</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">LookupError </span><span class="s0">as </span><span class="s1">err</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s1">str</span><span class="s2">(</span><span class="s1">err</span><span class="s2">))</span>
+
+        <span class="s4"># Load the current graph state.</span>
+        <span class="s1">loader </span><span class="s2">= </span><span class="s1">MigrationLoader</span><span class="s2">(</span><span class="s0">None</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">app_label </span><span class="s0">not in </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">migrated_apps</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s3">f&quot;App '</span><span class="s0">{</span><span class="s1">app_label</span><span class="s0">}</span><span class="s3">' does not have migrations.&quot;</span><span class="s2">)</span>
+        <span class="s4"># Find a migration.</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">migration </span><span class="s2">= </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">get_migration_by_prefix</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">migration_name</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">AmbiguityError</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s3">f&quot;More than one migration matches '</span><span class="s0">{</span><span class="s1">migration_name</span><span class="s0">}</span><span class="s3">' in app &quot;</span>
+                <span class="s3">f&quot;'</span><span class="s0">{</span><span class="s1">app_label</span><span class="s0">}</span><span class="s3">'. Please be more specific.&quot;</span>
+            <span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s3">f&quot;Cannot find a migration matching '</span><span class="s0">{</span><span class="s1">migration_name</span><span class="s0">}</span><span class="s3">' from app &quot;</span>
+                <span class="s3">f&quot;'</span><span class="s0">{</span><span class="s1">app_label</span><span class="s0">}</span><span class="s3">'.&quot;</span>
+            <span class="s2">)</span>
+
+        <span class="s4"># Optimize the migration.</span>
+        <span class="s1">optimizer </span><span class="s2">= </span><span class="s1">MigrationOptimizer</span><span class="s2">()</span>
+        <span class="s1">new_operations </span><span class="s2">= </span><span class="s1">optimizer</span><span class="s2">.</span><span class="s1">optimize</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">operations</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">operations</span><span class="s2">) == </span><span class="s1">len</span><span class="s2">(</span><span class="s1">new_operations</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">verbosity </span><span class="s2">&gt; </span><span class="s5">0</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot;No optimizations possible.&quot;</span><span class="s2">)</span>
+            <span class="s0">return</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">verbosity </span><span class="s2">&gt; </span><span class="s5">0</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                    <span class="s3">&quot;Optimizing from %d operations to %d operations.&quot;</span>
+                    <span class="s2">% (</span><span class="s1">len</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">operations</span><span class="s2">), </span><span class="s1">len</span><span class="s2">(</span><span class="s1">new_operations</span><span class="s2">))</span>
+                <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">check</span><span class="s2">:</span>
+                <span class="s1">sys</span><span class="s2">.</span><span class="s1">exit</span><span class="s2">(</span><span class="s5">1</span><span class="s2">)</span>
+
+        <span class="s4"># Set the new migration optimizations.</span>
+        <span class="s1">migration</span><span class="s2">.</span><span class="s1">operations </span><span class="s2">= </span><span class="s1">new_operations</span>
+
+        <span class="s4"># Write out the optimized migration file.</span>
+        <span class="s1">writer </span><span class="s2">= </span><span class="s1">MigrationWriter</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">)</span>
+        <span class="s1">migration_file_string </span><span class="s2">= </span><span class="s1">writer</span><span class="s2">.</span><span class="s1">as_string</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">writer</span><span class="s2">.</span><span class="s1">needs_manual_porting</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">replaces</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                    <span class="s3">&quot;Migration will require manual porting but is already a squashed &quot;</span>
+                    <span class="s3">&quot;migration.</span><span class="s0">\n</span><span class="s3">Transition to a normal migration first: &quot;</span>
+                    <span class="s3">&quot;https://docs.djangoproject.com/en/%s/topics/migrations/&quot;</span>
+                    <span class="s3">&quot;#squashing-migrations&quot; </span><span class="s2">% </span><span class="s1">get_docs_version</span><span class="s2">()</span>
+                <span class="s2">)</span>
+            <span class="s4"># Make a new migration with those operations.</span>
+            <span class="s1">subclass </span><span class="s2">= </span><span class="s1">type</span><span class="s2">(</span>
+                <span class="s3">&quot;Migration&quot;</span><span class="s2">,</span>
+                <span class="s2">(</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">Migration</span><span class="s2">,),</span>
+                <span class="s2">{</span>
+                    <span class="s3">&quot;dependencies&quot;</span><span class="s2">: </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">dependencies</span><span class="s2">,</span>
+                    <span class="s3">&quot;operations&quot;</span><span class="s2">: </span><span class="s1">new_operations</span><span class="s2">,</span>
+                    <span class="s3">&quot;replaces&quot;</span><span class="s2">: [(</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)],</span>
+                <span class="s2">},</span>
+            <span class="s2">)</span>
+            <span class="s1">optimized_migration_name </span><span class="s2">= </span><span class="s3">&quot;%s_optimized&quot; </span><span class="s2">% </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">name</span>
+            <span class="s1">optimized_migration </span><span class="s2">= </span><span class="s1">subclass</span><span class="s2">(</span><span class="s1">optimized_migration_name</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">)</span>
+            <span class="s1">writer </span><span class="s2">= </span><span class="s1">MigrationWriter</span><span class="s2">(</span><span class="s1">optimized_migration</span><span class="s2">)</span>
+            <span class="s1">migration_file_string </span><span class="s2">= </span><span class="s1">writer</span><span class="s2">.</span><span class="s1">as_string</span><span class="s2">()</span>
+            <span class="s0">if </span><span class="s1">verbosity </span><span class="s2">&gt; </span><span class="s5">0</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">MIGRATE_HEADING</span><span class="s2">(</span><span class="s3">&quot;Manual porting required&quot;</span><span class="s2">) + </span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span>
+                    <span class="s3">&quot;  Your migrations contained functions that must be manually &quot;</span>
+                    <span class="s3">&quot;copied over,</span><span class="s0">\n</span><span class="s3">&quot;</span>
+                    <span class="s3">&quot;  as we could not safely copy their implementation.</span><span class="s0">\n</span><span class="s3">&quot;</span>
+                    <span class="s3">&quot;  See the comment at the top of the optimized migration for &quot;</span>
+                    <span class="s3">&quot;details.&quot;</span>
+                <span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">shutil</span><span class="s2">.</span><span class="s1">which</span><span class="s2">(</span><span class="s3">&quot;black&quot;</span><span class="s2">):</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">WARNING</span><span class="s2">(</span>
+                            <span class="s3">&quot;Optimized migration couldn't be formatted using the &quot;</span>
+                            <span class="s3">'&quot;black&quot; command. You can call it manually.'</span>
+                        <span class="s2">)</span>
+                    <span class="s2">)</span>
+        <span class="s0">with </span><span class="s1">open</span><span class="s2">(</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">path</span><span class="s2">, </span><span class="s3">&quot;w&quot;</span><span class="s2">, </span><span class="s1">encoding</span><span class="s2">=</span><span class="s3">&quot;utf-8&quot;</span><span class="s2">) </span><span class="s0">as </span><span class="s1">fh</span><span class="s2">:</span>
+            <span class="s1">fh</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">migration_file_string</span><span class="s2">)</span>
+        <span class="s1">run_formatters</span><span class="s2">([</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">path</span><span class="s2">])</span>
+
+        <span class="s0">if </span><span class="s1">verbosity </span><span class="s2">&gt; </span><span class="s5">0</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">MIGRATE_HEADING</span><span class="s2">(</span><span class="s3">f&quot;Optimized migration </span><span class="s0">{</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">path</span><span class="s0">}</span><span class="s3">&quot;</span><span class="s2">)</span>
+            <span class="s2">)</span>
+</pre>
+</body>
+</html>

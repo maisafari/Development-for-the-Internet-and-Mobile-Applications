@@ -1,0 +1,102 @@
+<html>
+<head>
+<title>base.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+base.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span><span class="s2">, </span><span class="s1">SuspiciousFileOperation</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">get_app_template_dirs</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">_os </span><span class="s0">import </span><span class="s1">safe_join</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+
+
+<span class="s0">class </span><span class="s1">BaseEngine</span><span class="s2">:</span>
+    <span class="s3"># Core methods: engines have to provide their own implementation</span>
+    <span class="s3">#               (except for from_string which is optional).</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">params</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Initialize the template engine. 
+ 
+        `params` is a dict of configuration settings. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">params </span><span class="s2">= </span><span class="s1">params</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">params</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s5">&quot;NAME&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">dirs </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">params</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s5">&quot;DIRS&quot;</span><span class="s2">))</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">app_dirs </span><span class="s2">= </span><span class="s1">params</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s5">&quot;APP_DIRS&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">params</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                <span class="s5">&quot;Unknown parameters: {}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s5">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">params</span><span class="s2">))</span>
+            <span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">app_dirname</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+            <span class="s5">&quot;{} doesn't support loading templates from installed &quot;</span>
+            <span class="s5">&quot;applications.&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">)</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">from_string</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_code</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Create and return a template for the given source code. 
+ 
+        This method is optional. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span><span class="s2">(</span>
+            <span class="s5">&quot;subclasses of BaseEngine should provide a from_string() method&quot;</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Load and return a template for the given name. 
+ 
+        Raise TemplateDoesNotExist if no such template exists. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span><span class="s2">(</span>
+            <span class="s5">&quot;subclasses of BaseEngine must provide a get_template() method&quot;</span>
+        <span class="s2">)</span>
+
+    <span class="s3"># Utility methods: they are provided to minimize code duplication and</span>
+    <span class="s3">#                  security issues in third-party backends.</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">template_dirs</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Return a list of directories to search for templates. 
+        &quot;&quot;&quot;</span>
+        <span class="s3"># Immutable return value because it's cached and shared by callers.</span>
+        <span class="s1">template_dirs </span><span class="s2">= </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">dirs</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_dirs</span><span class="s2">:</span>
+            <span class="s1">template_dirs </span><span class="s2">+= </span><span class="s1">get_app_template_dirs</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_dirname</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">template_dirs</span>
+
+    <span class="s0">def </span><span class="s1">iter_template_filenames</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Iterate over candidate files for template_name. 
+ 
+        Ignore files that don't lie inside configured template dirs to avoid 
+        directory traversal attacks. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">for </span><span class="s1">template_dir </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">template_dirs</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s0">yield </span><span class="s1">safe_join</span><span class="s2">(</span><span class="s1">template_dir</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">SuspiciousFileOperation</span><span class="s2">:</span>
+                <span class="s3"># The joined path was located outside of this template_dir</span>
+                <span class="s3"># (it might be inside another one, so this isn't fatal).</span>
+                <span class="s0">pass</span>
+</pre>
+</body>
+</html>

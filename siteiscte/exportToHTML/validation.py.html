@@ -1,0 +1,43 @@
+<html>
+<head>
+<title>validation.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+validation.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core </span><span class="s0">import </span><span class="s1">checks</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">base</span><span class="s2">.</span><span class="s1">validation </span><span class="s0">import </span><span class="s1">BaseDatabaseValidation</span>
+
+
+<span class="s0">class </span><span class="s1">DatabaseValidation</span><span class="s2">(</span><span class="s1">BaseDatabaseValidation</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">check_field_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">field</span><span class="s2">, </span><span class="s1">field_type</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Oracle doesn't support a database index on some data types.&quot;&quot;&quot;</span>
+        <span class="s1">errors </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">field</span><span class="s2">.</span><span class="s1">db_index </span><span class="s0">and </span><span class="s1">field_type</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">() </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">_limited_data_types</span><span class="s2">:</span>
+            <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                <span class="s1">checks</span><span class="s2">.</span><span class="s1">Warning</span><span class="s2">(</span>
+                    <span class="s4">&quot;Oracle does not support a database index on %s columns.&quot;</span>
+                    <span class="s2">% </span><span class="s1">field_type</span><span class="s2">,</span>
+                    <span class="s1">hint</span><span class="s2">=(</span>
+                        <span class="s4">&quot;An index won't be created. Silence this warning if &quot;</span>
+                        <span class="s4">&quot;you don't care about it.&quot;</span>
+                    <span class="s2">),</span>
+                    <span class="s1">obj</span><span class="s2">=</span><span class="s1">field</span><span class="s2">,</span>
+                    <span class="s1">id</span><span class="s2">=</span><span class="s4">&quot;fields.W162&quot;</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">errors</span>
+</pre>
+</body>
+</html>

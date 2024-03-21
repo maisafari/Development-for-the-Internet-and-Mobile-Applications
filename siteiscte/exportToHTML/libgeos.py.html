@@ -1,0 +1,197 @@
+<html>
+<head>
+<title>libgeos.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+libgeos.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+ This module houses the ctypes initialization procedures, as well 
+ as the notice and error handler function callbacks (get called 
+ when an error occurs in GEOS). 
+ 
+ This module also houses GEOS Pointer utilities, including 
+ get_pointer_arr(), and GEOM_PTR. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">logging</span>
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">CDLL</span><span class="s3">, </span><span class="s1">CFUNCTYPE</span><span class="s3">, </span><span class="s1">POINTER</span><span class="s3">, </span><span class="s1">Structure</span><span class="s3">, </span><span class="s1">c_char_p</span>
+<span class="s2">from </span><span class="s1">ctypes</span><span class="s3">.</span><span class="s1">util </span><span class="s2">import </span><span class="s1">find_library</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">exceptions </span><span class="s2">import </span><span class="s1">ImproperlyConfigured</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">functional </span><span class="s2">import </span><span class="s1">SimpleLazyObject</span><span class="s3">, </span><span class="s1">cached_property</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">version </span><span class="s2">import </span><span class="s1">get_version_tuple</span>
+
+<span class="s1">logger </span><span class="s3">= </span><span class="s1">logging</span><span class="s3">.</span><span class="s1">getLogger</span><span class="s3">(</span><span class="s4">&quot;django.contrib.gis&quot;</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">load_geos</span><span class="s3">():</span>
+    <span class="s5"># Custom library path set?</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf </span><span class="s2">import </span><span class="s1">settings</span>
+
+        <span class="s1">lib_path </span><span class="s3">= </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">GEOS_LIBRARY_PATH</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">AttributeError</span><span class="s3">, </span><span class="s1">ImportError</span><span class="s3">, </span><span class="s1">ImproperlyConfigured</span><span class="s3">, </span><span class="s1">OSError</span><span class="s3">):</span>
+        <span class="s1">lib_path </span><span class="s3">= </span><span class="s2">None</span>
+
+    <span class="s5"># Setting the appropriate names for the GEOS-C library.</span>
+    <span class="s2">if </span><span class="s1">lib_path</span><span class="s3">:</span>
+        <span class="s1">lib_names </span><span class="s3">= </span><span class="s2">None</span>
+    <span class="s2">elif </span><span class="s1">os</span><span class="s3">.</span><span class="s1">name </span><span class="s3">== </span><span class="s4">&quot;nt&quot;</span><span class="s3">:</span>
+        <span class="s5"># Windows NT libraries</span>
+        <span class="s1">lib_names </span><span class="s3">= [</span><span class="s4">&quot;geos_c&quot;</span><span class="s3">, </span><span class="s4">&quot;libgeos_c-1&quot;</span><span class="s3">]</span>
+    <span class="s2">elif </span><span class="s1">os</span><span class="s3">.</span><span class="s1">name </span><span class="s3">== </span><span class="s4">&quot;posix&quot;</span><span class="s3">:</span>
+        <span class="s5"># *NIX libraries</span>
+        <span class="s1">lib_names </span><span class="s3">= [</span><span class="s4">&quot;geos_c&quot;</span><span class="s3">, </span><span class="s4">&quot;GEOS&quot;</span><span class="s3">]</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">ImportError</span><span class="s3">(</span><span class="s4">'Unsupported OS &quot;%s&quot;' </span><span class="s3">% </span><span class="s1">os</span><span class="s3">.</span><span class="s1">name</span><span class="s3">)</span>
+
+    <span class="s5"># Using the ctypes `find_library` utility to find the path to the GEOS</span>
+    <span class="s5"># shared library.  This is better than manually specifying each library name</span>
+    <span class="s5"># and extension (e.g., libgeos_c.[so|so.1|dylib].).</span>
+    <span class="s2">if </span><span class="s1">lib_names</span><span class="s3">:</span>
+        <span class="s2">for </span><span class="s1">lib_name </span><span class="s2">in </span><span class="s1">lib_names</span><span class="s3">:</span>
+            <span class="s1">lib_path </span><span class="s3">= </span><span class="s1">find_library</span><span class="s3">(</span><span class="s1">lib_name</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">lib_path </span><span class="s2">is not None</span><span class="s3">:</span>
+                <span class="s2">break</span>
+
+    <span class="s5"># No GEOS library could be found.</span>
+    <span class="s2">if </span><span class="s1">lib_path </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">ImportError</span><span class="s3">(</span>
+            <span class="s4">'Could not find the GEOS library (tried &quot;%s&quot;). '</span>
+            <span class="s4">&quot;Try setting GEOS_LIBRARY_PATH in your settings.&quot; </span><span class="s3">% </span><span class="s4">'&quot;, &quot;'</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">lib_names</span><span class="s3">)</span>
+        <span class="s3">)</span>
+    <span class="s5"># Getting the GEOS C library.  The C interface (CDLL) is used for</span>
+    <span class="s5"># both *NIX and Windows.</span>
+    <span class="s5"># See the GEOS C API source code for more details on the library function calls:</span>
+    <span class="s5"># https://libgeos.org/doxygen/geos__c_8h_source.html</span>
+    <span class="s1">_lgeos </span><span class="s3">= </span><span class="s1">CDLL</span><span class="s3">(</span><span class="s1">lib_path</span><span class="s3">)</span>
+    <span class="s5"># Here we set up the prototypes for the initGEOS_r and finishGEOS_r</span>
+    <span class="s5"># routines.  These functions aren't actually called until they are</span>
+    <span class="s5"># attached to a GEOS context handle -- this actually occurs in</span>
+    <span class="s5"># geos/prototypes/threadsafe.py.</span>
+    <span class="s1">_lgeos</span><span class="s3">.</span><span class="s1">initGEOS_r</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">CONTEXT_PTR</span>
+    <span class="s1">_lgeos</span><span class="s3">.</span><span class="s1">finishGEOS_r</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= [</span><span class="s1">CONTEXT_PTR</span><span class="s3">]</span>
+    <span class="s5"># Set restype for compatibility across 32 and 64-bit platforms.</span>
+    <span class="s1">_lgeos</span><span class="s3">.</span><span class="s1">GEOSversion</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">c_char_p</span>
+    <span class="s2">return </span><span class="s1">_lgeos</span>
+
+
+<span class="s5"># The notice and error handler C function callback definitions.</span>
+<span class="s5"># Supposed to mimic the GEOS message handler (C below):</span>
+<span class="s5">#  typedef void (*GEOSMessageHandler)(const char *fmt, ...);</span>
+<span class="s1">NOTICEFUNC </span><span class="s3">= </span><span class="s1">CFUNCTYPE</span><span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">notice_h</span><span class="s3">(</span><span class="s1">fmt</span><span class="s3">, </span><span class="s1">lst</span><span class="s3">):</span>
+    <span class="s1">fmt</span><span class="s3">, </span><span class="s1">lst </span><span class="s3">= </span><span class="s1">fmt</span><span class="s3">.</span><span class="s1">decode</span><span class="s3">(), </span><span class="s1">lst</span><span class="s3">.</span><span class="s1">decode</span><span class="s3">()</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">warn_msg </span><span class="s3">= </span><span class="s1">fmt </span><span class="s3">% </span><span class="s1">lst</span>
+    <span class="s2">except </span><span class="s1">TypeError</span><span class="s3">:</span>
+        <span class="s1">warn_msg </span><span class="s3">= </span><span class="s1">fmt</span>
+    <span class="s1">logger</span><span class="s3">.</span><span class="s1">warning</span><span class="s3">(</span><span class="s4">&quot;GEOS_NOTICE: %s</span><span class="s2">\n</span><span class="s4">&quot;</span><span class="s3">, </span><span class="s1">warn_msg</span><span class="s3">)</span>
+
+
+<span class="s1">notice_h </span><span class="s3">= </span><span class="s1">NOTICEFUNC</span><span class="s3">(</span><span class="s1">notice_h</span><span class="s3">)</span>
+
+<span class="s1">ERRORFUNC </span><span class="s3">= </span><span class="s1">CFUNCTYPE</span><span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">error_h</span><span class="s3">(</span><span class="s1">fmt</span><span class="s3">, </span><span class="s1">lst</span><span class="s3">):</span>
+    <span class="s1">fmt</span><span class="s3">, </span><span class="s1">lst </span><span class="s3">= </span><span class="s1">fmt</span><span class="s3">.</span><span class="s1">decode</span><span class="s3">(), </span><span class="s1">lst</span><span class="s3">.</span><span class="s1">decode</span><span class="s3">()</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">err_msg </span><span class="s3">= </span><span class="s1">fmt </span><span class="s3">% </span><span class="s1">lst</span>
+    <span class="s2">except </span><span class="s1">TypeError</span><span class="s3">:</span>
+        <span class="s1">err_msg </span><span class="s3">= </span><span class="s1">fmt</span>
+    <span class="s1">logger</span><span class="s3">.</span><span class="s1">error</span><span class="s3">(</span><span class="s4">&quot;GEOS_ERROR: %s</span><span class="s2">\n</span><span class="s4">&quot;</span><span class="s3">, </span><span class="s1">err_msg</span><span class="s3">)</span>
+
+
+<span class="s1">error_h </span><span class="s3">= </span><span class="s1">ERRORFUNC</span><span class="s3">(</span><span class="s1">error_h</span><span class="s3">)</span>
+
+<span class="s5"># #### GEOS Geometry C data structures, and utility functions. ####</span>
+
+
+<span class="s5"># Opaque GEOS geometry structures, used for GEOM_PTR and CS_PTR</span>
+<span class="s2">class </span><span class="s1">GEOSGeom_t</span><span class="s3">(</span><span class="s1">Structure</span><span class="s3">):</span>
+    <span class="s2">pass</span>
+
+
+<span class="s2">class </span><span class="s1">GEOSPrepGeom_t</span><span class="s3">(</span><span class="s1">Structure</span><span class="s3">):</span>
+    <span class="s2">pass</span>
+
+
+<span class="s2">class </span><span class="s1">GEOSCoordSeq_t</span><span class="s3">(</span><span class="s1">Structure</span><span class="s3">):</span>
+    <span class="s2">pass</span>
+
+
+<span class="s2">class </span><span class="s1">GEOSContextHandle_t</span><span class="s3">(</span><span class="s1">Structure</span><span class="s3">):</span>
+    <span class="s2">pass</span>
+
+
+<span class="s5"># Pointers to opaque GEOS geometry structures.</span>
+<span class="s1">GEOM_PTR </span><span class="s3">= </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">GEOSGeom_t</span><span class="s3">)</span>
+<span class="s1">PREPGEOM_PTR </span><span class="s3">= </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">GEOSPrepGeom_t</span><span class="s3">)</span>
+<span class="s1">CS_PTR </span><span class="s3">= </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">GEOSCoordSeq_t</span><span class="s3">)</span>
+<span class="s1">CONTEXT_PTR </span><span class="s3">= </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">GEOSContextHandle_t</span><span class="s3">)</span>
+
+
+<span class="s1">lgeos </span><span class="s3">= </span><span class="s1">SimpleLazyObject</span><span class="s3">(</span><span class="s1">load_geos</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">GEOSFuncFactory</span><span class="s3">:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Lazy loading of GEOS functions. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">argtypes </span><span class="s3">= </span><span class="s2">None</span>
+    <span class="s1">restype </span><span class="s3">= </span><span class="s2">None</span>
+    <span class="s1">errcheck </span><span class="s3">= </span><span class="s2">None</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">func_name</span><span class="s3">, *, </span><span class="s1">restype</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">func_name </span><span class="s3">= </span><span class="s1">func_name</span>
+        <span class="s2">if </span><span class="s1">restype </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">restype</span>
+        <span class="s2">if </span><span class="s1">errcheck </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">errcheck</span>
+        <span class="s2">if </span><span class="s1">argtypes </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= </span><span class="s1">argtypes</span>
+
+    <span class="s2">def </span><span class="s1">__call__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">func</span><span class="s3">(*</span><span class="s1">args</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">func</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">prototypes</span><span class="s3">.</span><span class="s1">threadsafe </span><span class="s2">import </span><span class="s1">GEOSFunc</span>
+
+        <span class="s1">func </span><span class="s3">= </span><span class="s1">GEOSFunc</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">func_name</span><span class="s3">)</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">argtypes </span><span class="s2">or </span><span class="s3">[]</span>
+        <span class="s1">func</span><span class="s3">.</span><span class="s1">restype </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">restype</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">errcheck</span><span class="s3">:</span>
+            <span class="s1">func</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">errcheck</span>
+        <span class="s2">return </span><span class="s1">func</span>
+
+
+<span class="s2">def </span><span class="s1">geos_version</span><span class="s3">():</span>
+    <span class="s0">&quot;&quot;&quot;Return the string version of the GEOS library.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">lgeos</span><span class="s3">.</span><span class="s1">GEOSversion</span><span class="s3">()</span>
+
+
+<span class="s2">def </span><span class="s1">geos_version_tuple</span><span class="s3">():</span>
+    <span class="s0">&quot;&quot;&quot;Return the GEOS version as a tuple (major, minor, subminor).&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">get_version_tuple</span><span class="s3">(</span><span class="s1">geos_version</span><span class="s3">().</span><span class="s1">decode</span><span class="s3">())</span>
+</pre>
+</body>
+</html>

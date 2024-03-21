@@ -1,0 +1,119 @@
+<html>
+<head>
+<title>testing.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #2aacb8;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+testing.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">asyncio</span>
+<span class="s0">import </span><span class="s1">time</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">compatibility </span><span class="s0">import </span><span class="s1">guarantee_single_callable</span>
+<span class="s0">from </span><span class="s2">.</span><span class="s1">timeout </span><span class="s0">import </span><span class="s1">timeout </span><span class="s0">as </span><span class="s1">async_timeout</span>
+
+
+<span class="s0">class </span><span class="s1">ApplicationCommunicator</span><span class="s2">:</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Runs an ASGI application in a test mode, allowing sending of 
+    messages to it and retrieval of messages it sends. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">application</span><span class="s2">, </span><span class="s1">scope</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">application </span><span class="s2">= </span><span class="s1">guarantee_single_callable</span><span class="s2">(</span><span class="s1">application</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">scope </span><span class="s2">= </span><span class="s1">scope</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">input_queue </span><span class="s2">= </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">Queue</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">output_queue </span><span class="s2">= </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">Queue</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">future </span><span class="s2">= </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">ensure_future</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">application</span><span class="s2">(</span><span class="s1">scope</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">input_queue</span><span class="s2">.</span><span class="s1">get</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_queue</span><span class="s2">.</span><span class="s1">put</span><span class="s2">)</span>
+        <span class="s2">)</span>
+
+    <span class="s0">async def </span><span class="s1">wait</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">timeout</span><span class="s2">=</span><span class="s4">1</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Waits for the application to stop itself and returns any exceptions. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">async with </span><span class="s1">async_timeout</span><span class="s2">(</span><span class="s1">timeout</span><span class="s2">):</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s0">await </span><span class="s1">self</span><span class="s2">.</span><span class="s1">future</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">result</span><span class="s2">()</span>
+                <span class="s0">except </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">CancelledError</span><span class="s2">:</span>
+                    <span class="s0">pass</span>
+        <span class="s0">finally</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">done</span><span class="s2">():</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">cancel</span><span class="s2">()</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s0">await </span><span class="s1">self</span><span class="s2">.</span><span class="s1">future</span>
+                <span class="s0">except </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">CancelledError</span><span class="s2">:</span>
+                    <span class="s0">pass</span>
+
+    <span class="s0">def </span><span class="s1">stop</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">exceptions</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">done</span><span class="s2">():</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">cancel</span><span class="s2">()</span>
+        <span class="s0">elif </span><span class="s1">exceptions</span><span class="s2">:</span>
+            <span class="s5"># Give a chance to raise any exceptions</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">result</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">__del__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s5"># Clean up on deletion</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stop</span><span class="s2">(</span><span class="s1">exceptions</span><span class="s2">=</span><span class="s0">False</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">RuntimeError</span><span class="s2">:</span>
+            <span class="s5"># Event loop already stopped</span>
+            <span class="s0">pass</span>
+
+    <span class="s0">async def </span><span class="s1">send_input</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">message</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Sends a single message to the application 
+        &quot;&quot;&quot;</span>
+        <span class="s5"># Give it the message</span>
+        <span class="s0">await </span><span class="s1">self</span><span class="s2">.</span><span class="s1">input_queue</span><span class="s2">.</span><span class="s1">put</span><span class="s2">(</span><span class="s1">message</span><span class="s2">)</span>
+
+    <span class="s0">async def </span><span class="s1">receive_output</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">timeout</span><span class="s2">=</span><span class="s4">1</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Receives a single message from the application, with optional timeout. 
+        &quot;&quot;&quot;</span>
+        <span class="s5"># Make sure there's not an exception to raise from the task</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">done</span><span class="s2">():</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">result</span><span class="s2">()</span>
+        <span class="s5"># Wait and receive the message</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">async with </span><span class="s1">async_timeout</span><span class="s2">(</span><span class="s1">timeout</span><span class="s2">):</span>
+                <span class="s0">return await </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_queue</span><span class="s2">.</span><span class="s1">get</span><span class="s2">()</span>
+        <span class="s0">except </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">TimeoutError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s5"># See if we have another error to raise inside</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">done</span><span class="s2">():</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">result</span><span class="s2">()</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">future</span><span class="s2">.</span><span class="s1">cancel</span><span class="s2">()</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s0">await </span><span class="s1">self</span><span class="s2">.</span><span class="s1">future</span>
+                <span class="s0">except </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">CancelledError</span><span class="s2">:</span>
+                    <span class="s0">pass</span>
+            <span class="s0">raise </span><span class="s1">e</span>
+
+    <span class="s0">async def </span><span class="s1">receive_nothing</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">timeout</span><span class="s2">=</span><span class="s4">0.1</span><span class="s2">, </span><span class="s1">interval</span><span class="s2">=</span><span class="s4">0.01</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Checks that there is no message to receive in the given time. 
+        &quot;&quot;&quot;</span>
+        <span class="s5"># `interval` has precedence over `timeout`</span>
+        <span class="s1">start </span><span class="s2">= </span><span class="s1">time</span><span class="s2">.</span><span class="s1">monotonic</span><span class="s2">()</span>
+        <span class="s0">while </span><span class="s1">time</span><span class="s2">.</span><span class="s1">monotonic</span><span class="s2">() - </span><span class="s1">start </span><span class="s2">&lt; </span><span class="s1">timeout</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_queue</span><span class="s2">.</span><span class="s1">empty</span><span class="s2">():</span>
+                <span class="s0">return False</span>
+            <span class="s0">await </span><span class="s1">asyncio</span><span class="s2">.</span><span class="s1">sleep</span><span class="s2">(</span><span class="s1">interval</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_queue</span><span class="s2">.</span><span class="s1">empty</span><span class="s2">()</span>
+</pre>
+</body>
+</html>

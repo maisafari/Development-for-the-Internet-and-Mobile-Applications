@@ -1,0 +1,125 @@
+<html>
+<head>
+<title>psycopg_any.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+psycopg_any.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">ipaddress</span>
+<span class="s0">from </span><span class="s1">functools </span><span class="s0">import </span><span class="s1">lru_cache</span>
+
+<span class="s0">try</span><span class="s2">:</span>
+    <span class="s0">from </span><span class="s1">psycopg </span><span class="s0">import </span><span class="s1">ClientCursor</span><span class="s2">, </span><span class="s1">IsolationLevel</span><span class="s2">, </span><span class="s1">adapt</span><span class="s2">, </span><span class="s1">adapters</span><span class="s2">, </span><span class="s1">errors</span><span class="s2">, </span><span class="s1">sql</span>
+    <span class="s0">from </span><span class="s1">psycopg</span><span class="s2">.</span><span class="s1">postgres </span><span class="s0">import </span><span class="s1">types</span>
+    <span class="s0">from </span><span class="s1">psycopg</span><span class="s2">.</span><span class="s1">types</span><span class="s2">.</span><span class="s1">datetime </span><span class="s0">import </span><span class="s1">TimestamptzLoader</span>
+    <span class="s0">from </span><span class="s1">psycopg</span><span class="s2">.</span><span class="s1">types</span><span class="s2">.</span><span class="s1">json </span><span class="s0">import </span><span class="s1">Jsonb</span>
+    <span class="s0">from </span><span class="s1">psycopg</span><span class="s2">.</span><span class="s1">types</span><span class="s2">.</span><span class="s1">range </span><span class="s0">import </span><span class="s1">Range</span><span class="s2">, </span><span class="s1">RangeDumper</span>
+    <span class="s0">from </span><span class="s1">psycopg</span><span class="s2">.</span><span class="s1">types</span><span class="s2">.</span><span class="s1">string </span><span class="s0">import </span><span class="s1">TextLoader</span>
+
+    <span class="s1">Inet </span><span class="s2">= </span><span class="s1">ipaddress</span><span class="s2">.</span><span class="s1">ip_address</span>
+
+    <span class="s1">DateRange </span><span class="s2">= </span><span class="s1">DateTimeRange </span><span class="s2">= </span><span class="s1">DateTimeTZRange </span><span class="s2">= </span><span class="s1">NumericRange </span><span class="s2">= </span><span class="s1">Range</span>
+    <span class="s1">RANGE_TYPES </span><span class="s2">= (</span><span class="s1">Range</span><span class="s2">,)</span>
+
+    <span class="s1">TSRANGE_OID </span><span class="s2">= </span><span class="s1">types</span><span class="s2">[</span><span class="s3">&quot;tsrange&quot;</span><span class="s2">].</span><span class="s1">oid</span>
+    <span class="s1">TSTZRANGE_OID </span><span class="s2">= </span><span class="s1">types</span><span class="s2">[</span><span class="s3">&quot;tstzrange&quot;</span><span class="s2">].</span><span class="s1">oid</span>
+
+    <span class="s0">def </span><span class="s1">mogrify</span><span class="s2">(</span><span class="s1">sql</span><span class="s2">, </span><span class="s1">params</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">with </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">cursor</span><span class="s2">() </span><span class="s0">as </span><span class="s1">cursor</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">ClientCursor</span><span class="s2">(</span><span class="s1">cursor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">).</span><span class="s1">mogrify</span><span class="s2">(</span><span class="s1">sql</span><span class="s2">, </span><span class="s1">params</span><span class="s2">)</span>
+
+    <span class="s4"># Adapters.</span>
+    <span class="s0">class </span><span class="s1">BaseTzLoader</span><span class="s2">(</span><span class="s1">TimestamptzLoader</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        Load a PostgreSQL timestamptz using the a specific timezone. 
+        The timezone can be None too, in which case it will be chopped. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s1">timezone </span><span class="s2">= </span><span class="s0">None</span>
+
+        <span class="s0">def </span><span class="s1">load</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">data</span><span class="s2">):</span>
+            <span class="s1">res </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">load</span><span class="s2">(</span><span class="s1">data</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">res</span><span class="s2">.</span><span class="s1">replace</span><span class="s2">(</span><span class="s1">tzinfo</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">timezone</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">register_tzloader</span><span class="s2">(</span><span class="s1">tz</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s0">class </span><span class="s1">SpecificTzLoader</span><span class="s2">(</span><span class="s1">BaseTzLoader</span><span class="s2">):</span>
+            <span class="s1">timezone </span><span class="s2">= </span><span class="s1">tz</span>
+
+        <span class="s1">context</span><span class="s2">.</span><span class="s1">adapters</span><span class="s2">.</span><span class="s1">register_loader</span><span class="s2">(</span><span class="s3">&quot;timestamptz&quot;</span><span class="s2">, </span><span class="s1">SpecificTzLoader</span><span class="s2">)</span>
+
+    <span class="s0">class </span><span class="s1">DjangoRangeDumper</span><span class="s2">(</span><span class="s1">RangeDumper</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot;A Range dumper customized for Django.&quot;&quot;&quot;</span>
+
+        <span class="s0">def </span><span class="s1">upgrade</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">, </span><span class="s1">format</span><span class="s2">):</span>
+            <span class="s4"># Dump ranges containing naive datetimes as tstzrange, because</span>
+            <span class="s4"># Django doesn't use tz-aware ones.</span>
+            <span class="s1">dumper </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">upgrade</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">format</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">dumper </span><span class="s0">is not </span><span class="s1">self </span><span class="s0">and </span><span class="s1">dumper</span><span class="s2">.</span><span class="s1">oid </span><span class="s2">== </span><span class="s1">TSRANGE_OID</span><span class="s2">:</span>
+                <span class="s1">dumper</span><span class="s2">.</span><span class="s1">oid </span><span class="s2">= </span><span class="s1">TSTZRANGE_OID</span>
+            <span class="s0">return </span><span class="s1">dumper</span>
+
+    <span class="s2">@</span><span class="s1">lru_cache</span>
+    <span class="s0">def </span><span class="s1">get_adapters_template</span><span class="s2">(</span><span class="s1">use_tz</span><span class="s2">, </span><span class="s1">timezone</span><span class="s2">):</span>
+        <span class="s4"># Create at adapters map extending the base one.</span>
+        <span class="s1">ctx </span><span class="s2">= </span><span class="s1">adapt</span><span class="s2">.</span><span class="s1">AdaptersMap</span><span class="s2">(</span><span class="s1">adapters</span><span class="s2">)</span>
+        <span class="s4"># Register a no-op dumper to avoid a round trip from psycopg version 3</span>
+        <span class="s4"># decode to json.dumps() to json.loads(), when using a custom decoder</span>
+        <span class="s4"># in JSONField.</span>
+        <span class="s1">ctx</span><span class="s2">.</span><span class="s1">register_loader</span><span class="s2">(</span><span class="s3">&quot;jsonb&quot;</span><span class="s2">, </span><span class="s1">TextLoader</span><span class="s2">)</span>
+        <span class="s4"># Don't convert automatically from PostgreSQL network types to Python</span>
+        <span class="s4"># ipaddress.</span>
+        <span class="s1">ctx</span><span class="s2">.</span><span class="s1">register_loader</span><span class="s2">(</span><span class="s3">&quot;inet&quot;</span><span class="s2">, </span><span class="s1">TextLoader</span><span class="s2">)</span>
+        <span class="s1">ctx</span><span class="s2">.</span><span class="s1">register_loader</span><span class="s2">(</span><span class="s3">&quot;cidr&quot;</span><span class="s2">, </span><span class="s1">TextLoader</span><span class="s2">)</span>
+        <span class="s1">ctx</span><span class="s2">.</span><span class="s1">register_dumper</span><span class="s2">(</span><span class="s1">Range</span><span class="s2">, </span><span class="s1">DjangoRangeDumper</span><span class="s2">)</span>
+        <span class="s4"># Register a timestamptz loader configured on self.timezone.</span>
+        <span class="s4"># This, however, can be overridden by create_cursor.</span>
+        <span class="s1">register_tzloader</span><span class="s2">(</span><span class="s1">timezone</span><span class="s2">, </span><span class="s1">ctx</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">ctx</span>
+
+    <span class="s1">is_psycopg3 </span><span class="s2">= </span><span class="s0">True</span>
+
+<span class="s0">except </span><span class="s1">ImportError</span><span class="s2">:</span>
+    <span class="s0">from </span><span class="s1">enum </span><span class="s0">import </span><span class="s1">IntEnum</span>
+
+    <span class="s0">from </span><span class="s1">psycopg2 </span><span class="s0">import </span><span class="s1">errors</span><span class="s2">, </span><span class="s1">extensions</span><span class="s2">, </span><span class="s1">sql  </span><span class="s4"># NOQA</span>
+    <span class="s0">from </span><span class="s1">psycopg2</span><span class="s2">.</span><span class="s1">extras </span><span class="s0">import </span><span class="s1">DateRange</span><span class="s2">, </span><span class="s1">DateTimeRange</span><span class="s2">, </span><span class="s1">DateTimeTZRange</span><span class="s2">, </span><span class="s1">Inet  </span><span class="s4"># NOQA</span>
+    <span class="s0">from </span><span class="s1">psycopg2</span><span class="s2">.</span><span class="s1">extras </span><span class="s0">import </span><span class="s1">Json </span><span class="s0">as </span><span class="s1">Jsonb  </span><span class="s4"># NOQA</span>
+    <span class="s0">from </span><span class="s1">psycopg2</span><span class="s2">.</span><span class="s1">extras </span><span class="s0">import </span><span class="s1">NumericRange</span><span class="s2">, </span><span class="s1">Range  </span><span class="s4"># NOQA</span>
+
+    <span class="s1">RANGE_TYPES </span><span class="s2">= (</span><span class="s1">DateRange</span><span class="s2">, </span><span class="s1">DateTimeRange</span><span class="s2">, </span><span class="s1">DateTimeTZRange</span><span class="s2">, </span><span class="s1">NumericRange</span><span class="s2">)</span>
+
+    <span class="s0">class </span><span class="s1">IsolationLevel</span><span class="s2">(</span><span class="s1">IntEnum</span><span class="s2">):</span>
+        <span class="s1">READ_UNCOMMITTED </span><span class="s2">= </span><span class="s1">extensions</span><span class="s2">.</span><span class="s1">ISOLATION_LEVEL_READ_UNCOMMITTED</span>
+        <span class="s1">READ_COMMITTED </span><span class="s2">= </span><span class="s1">extensions</span><span class="s2">.</span><span class="s1">ISOLATION_LEVEL_READ_COMMITTED</span>
+        <span class="s1">REPEATABLE_READ </span><span class="s2">= </span><span class="s1">extensions</span><span class="s2">.</span><span class="s1">ISOLATION_LEVEL_REPEATABLE_READ</span>
+        <span class="s1">SERIALIZABLE </span><span class="s2">= </span><span class="s1">extensions</span><span class="s2">.</span><span class="s1">ISOLATION_LEVEL_SERIALIZABLE</span>
+
+    <span class="s0">def </span><span class="s1">_quote</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">adapted </span><span class="s2">= </span><span class="s1">extensions</span><span class="s2">.</span><span class="s1">adapt</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">adapted</span><span class="s2">, </span><span class="s3">&quot;encoding&quot;</span><span class="s2">):</span>
+            <span class="s1">adapted</span><span class="s2">.</span><span class="s1">encoding </span><span class="s2">= </span><span class="s3">&quot;utf8&quot;</span>
+        <span class="s4"># getquoted() returns a quoted bytestring of the adapted value.</span>
+        <span class="s0">return </span><span class="s1">adapted</span><span class="s2">.</span><span class="s1">getquoted</span><span class="s2">().</span><span class="s1">decode</span><span class="s2">()</span>
+
+    <span class="s1">sql</span><span class="s2">.</span><span class="s1">quote </span><span class="s2">= </span><span class="s1">_quote</span>
+
+    <span class="s0">def </span><span class="s1">mogrify</span><span class="s2">(</span><span class="s1">sql</span><span class="s2">, </span><span class="s1">params</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">with </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">cursor</span><span class="s2">() </span><span class="s0">as </span><span class="s1">cursor</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">cursor</span><span class="s2">.</span><span class="s1">mogrify</span><span class="s2">(</span><span class="s1">sql</span><span class="s2">, </span><span class="s1">params</span><span class="s2">).</span><span class="s1">decode</span><span class="s2">()</span>
+
+    <span class="s1">is_psycopg3 </span><span class="s2">= </span><span class="s0">False</span>
+</pre>
+</body>
+</html>

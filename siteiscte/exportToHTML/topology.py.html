@@ -1,0 +1,95 @@
+<html>
+<head>
+<title>topology.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+topology.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+ This module houses the GEOS ctypes prototype functions for the 
+ topological operations on geometries. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">c_double</span><span class="s3">, </span><span class="s1">c_int</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">libgeos </span><span class="s2">import </span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOSFuncFactory</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">prototypes</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s2">import </span><span class="s3">(</span>
+    <span class="s1">check_geom</span><span class="s3">,</span>
+    <span class="s1">check_minus_one</span><span class="s3">,</span>
+    <span class="s1">check_string</span><span class="s3">,</span>
+<span class="s3">)</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">prototypes</span><span class="s3">.</span><span class="s1">geom </span><span class="s2">import </span><span class="s1">geos_char_p</span>
+
+
+<span class="s2">class </span><span class="s1">Topology</span><span class="s3">(</span><span class="s1">GEOSFuncFactory</span><span class="s3">):</span>
+    <span class="s0">&quot;For GEOS unary topology functions.&quot;</span>
+    <span class="s1">argtypes </span><span class="s3">= [</span><span class="s1">GEOM_PTR</span><span class="s3">]</span>
+    <span class="s1">restype </span><span class="s3">= </span><span class="s1">GEOM_PTR</span>
+    <span class="s1">errcheck </span><span class="s3">= </span><span class="s1">staticmethod</span><span class="s3">(</span><span class="s1">check_geom</span><span class="s3">)</span>
+
+
+<span class="s4"># Topology Routines</span>
+<span class="s1">geos_boundary </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span><span class="s5">&quot;GEOSBoundary&quot;</span><span class="s3">)</span>
+<span class="s1">geos_buffer </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span><span class="s5">&quot;GEOSBuffer&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">])</span>
+<span class="s1">geos_bufferwithstyle </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span>
+    <span class="s5">&quot;GEOSBufferWithStyle&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">c_int</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">geos_centroid </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span><span class="s5">&quot;GEOSGetCentroid&quot;</span><span class="s3">)</span>
+<span class="s1">geos_convexhull </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span><span class="s5">&quot;GEOSConvexHull&quot;</span><span class="s3">)</span>
+<span class="s1">geos_difference </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span><span class="s5">&quot;GEOSDifference&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOM_PTR</span><span class="s3">])</span>
+<span class="s1">geos_envelope </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span><span class="s5">&quot;GEOSEnvelope&quot;</span><span class="s3">)</span>
+<span class="s1">geos_intersection </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span><span class="s5">&quot;GEOSIntersection&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOM_PTR</span><span class="s3">])</span>
+<span class="s1">geos_linemerge </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span><span class="s5">&quot;GEOSLineMerge&quot;</span><span class="s3">)</span>
+<span class="s1">geos_pointonsurface </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span><span class="s5">&quot;GEOSPointOnSurface&quot;</span><span class="s3">)</span>
+<span class="s1">geos_preservesimplify </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span>
+    <span class="s5">&quot;GEOSTopologyPreserveSimplify&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">geos_simplify </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span><span class="s5">&quot;GEOSSimplify&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">])</span>
+<span class="s1">geos_symdifference </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span><span class="s5">&quot;GEOSSymDifference&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOM_PTR</span><span class="s3">])</span>
+<span class="s1">geos_union </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span><span class="s5">&quot;GEOSUnion&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOM_PTR</span><span class="s3">])</span>
+
+<span class="s1">geos_unary_union </span><span class="s3">= </span><span class="s1">GEOSFuncFactory</span><span class="s3">(</span>
+    <span class="s5">&quot;GEOSUnaryUnion&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">], </span><span class="s1">restype</span><span class="s3">=</span><span class="s1">GEOM_PTR</span>
+<span class="s3">)</span>
+
+<span class="s4"># GEOSRelate returns a string, not a geometry.</span>
+<span class="s1">geos_relate </span><span class="s3">= </span><span class="s1">GEOSFuncFactory</span><span class="s3">(</span>
+    <span class="s5">&quot;GEOSRelate&quot;</span><span class="s3">,</span>
+    <span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOM_PTR</span><span class="s3">],</span>
+    <span class="s1">restype</span><span class="s3">=</span><span class="s1">geos_char_p</span><span class="s3">,</span>
+    <span class="s1">errcheck</span><span class="s3">=</span><span class="s1">check_string</span><span class="s3">,</span>
+<span class="s3">)</span>
+
+<span class="s4"># Linear referencing routines</span>
+<span class="s1">geos_project </span><span class="s3">= </span><span class="s1">GEOSFuncFactory</span><span class="s3">(</span>
+    <span class="s5">&quot;GEOSProject&quot;</span><span class="s3">,</span>
+    <span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOM_PTR</span><span class="s3">],</span>
+    <span class="s1">restype</span><span class="s3">=</span><span class="s1">c_double</span><span class="s3">,</span>
+    <span class="s1">errcheck</span><span class="s3">=</span><span class="s1">check_minus_one</span><span class="s3">,</span>
+<span class="s3">)</span>
+<span class="s1">geos_interpolate </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span><span class="s5">&quot;GEOSInterpolate&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">])</span>
+
+<span class="s1">geos_project_normalized </span><span class="s3">= </span><span class="s1">GEOSFuncFactory</span><span class="s3">(</span>
+    <span class="s5">&quot;GEOSProjectNormalized&quot;</span><span class="s3">,</span>
+    <span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOM_PTR</span><span class="s3">],</span>
+    <span class="s1">restype</span><span class="s3">=</span><span class="s1">c_double</span><span class="s3">,</span>
+    <span class="s1">errcheck</span><span class="s3">=</span><span class="s1">check_minus_one</span><span class="s3">,</span>
+<span class="s3">)</span>
+<span class="s1">geos_interpolate_normalized </span><span class="s3">= </span><span class="s1">Topology</span><span class="s3">(</span>
+    <span class="s5">&quot;GEOSInterpolateNormalized&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">]</span>
+<span class="s3">)</span>
+</pre>
+</body>
+</html>

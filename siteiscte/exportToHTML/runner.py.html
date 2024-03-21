@@ -1,0 +1,1254 @@
+<html>
+<head>
+<title>runner.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #2aacb8;}
+.s5 { color: #7a7e85;}
+.s6 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+runner.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">argparse</span>
+<span class="s0">import </span><span class="s1">ctypes</span>
+<span class="s0">import </span><span class="s1">faulthandler</span>
+<span class="s0">import </span><span class="s1">hashlib</span>
+<span class="s0">import </span><span class="s1">io</span>
+<span class="s0">import </span><span class="s1">itertools</span>
+<span class="s0">import </span><span class="s1">logging</span>
+<span class="s0">import </span><span class="s1">multiprocessing</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">pickle</span>
+<span class="s0">import </span><span class="s1">random</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">textwrap</span>
+<span class="s0">import </span><span class="s1">unittest</span>
+<span class="s0">from </span><span class="s1">collections </span><span class="s0">import </span><span class="s1">defaultdict</span>
+<span class="s0">from </span><span class="s1">contextlib </span><span class="s0">import </span><span class="s1">contextmanager</span>
+<span class="s0">from </span><span class="s1">importlib </span><span class="s0">import </span><span class="s1">import_module</span>
+<span class="s0">from </span><span class="s1">io </span><span class="s0">import </span><span class="s1">StringIO</span>
+
+<span class="s0">import </span><span class="s1">sqlparse</span>
+
+<span class="s0">import </span><span class="s1">django</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management </span><span class="s0">import </span><span class="s1">call_command</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">connections</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">test </span><span class="s0">import </span><span class="s1">SimpleTestCase</span><span class="s2">, </span><span class="s1">TestCase</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">test</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">NullTimeKeeper</span><span class="s2">, </span><span class="s1">TimeKeeper</span><span class="s2">, </span><span class="s1">iter_test_cases</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">test</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">setup_databases </span><span class="s0">as </span><span class="s1">_setup_databases</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">test</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">setup_test_environment</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">test</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">teardown_databases </span><span class="s0">as </span><span class="s1">_teardown_databases</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">test</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">teardown_test_environment</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">datastructures </span><span class="s0">import </span><span class="s1">OrderedSet</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">version </span><span class="s0">import </span><span class="s1">PY312</span>
+
+<span class="s0">try</span><span class="s2">:</span>
+    <span class="s0">import </span><span class="s1">ipdb </span><span class="s0">as </span><span class="s1">pdb</span>
+<span class="s0">except </span><span class="s1">ImportError</span><span class="s2">:</span>
+    <span class="s0">import </span><span class="s1">pdb</span>
+
+<span class="s0">try</span><span class="s2">:</span>
+    <span class="s0">import </span><span class="s1">tblib</span><span class="s2">.</span><span class="s1">pickling_support</span>
+<span class="s0">except </span><span class="s1">ImportError</span><span class="s2">:</span>
+    <span class="s1">tblib </span><span class="s2">= </span><span class="s0">None</span>
+
+
+<span class="s0">class </span><span class="s1">DebugSQLTextTestResult</span><span class="s2">(</span><span class="s1">unittest</span><span class="s2">.</span><span class="s1">TextTestResult</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">stream</span><span class="s2">, </span><span class="s1">descriptions</span><span class="s2">, </span><span class="s1">verbosity</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">logger </span><span class="s2">= </span><span class="s1">logging</span><span class="s2">.</span><span class="s1">getLogger</span><span class="s2">(</span><span class="s3">&quot;django.db.backends&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">logger</span><span class="s2">.</span><span class="s1">setLevel</span><span class="s2">(</span><span class="s1">logging</span><span class="s2">.</span><span class="s1">DEBUG</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql_stream </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">stream</span><span class="s2">, </span><span class="s1">descriptions</span><span class="s2">, </span><span class="s1">verbosity</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">startTest</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql_stream </span><span class="s2">= </span><span class="s1">StringIO</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">handler </span><span class="s2">= </span><span class="s1">logging</span><span class="s2">.</span><span class="s1">StreamHandler</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql_stream</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">logger</span><span class="s2">.</span><span class="s1">addHandler</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">handler</span><span class="s2">)</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">startTest</span><span class="s2">(</span><span class="s1">test</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">stopTest</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">stopTest</span><span class="s2">(</span><span class="s1">test</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">logger</span><span class="s2">.</span><span class="s1">removeHandler</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">handler</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">showAll</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql_stream</span><span class="s2">.</span><span class="s1">seek</span><span class="s2">(</span><span class="s4">0</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stream</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql_stream</span><span class="s2">.</span><span class="s1">read</span><span class="s2">())</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stream</span><span class="s2">.</span><span class="s1">writeln</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">separator2</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">addError</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addError</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql_stream </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s5"># Error before tests e.g. in setUpTestData().</span>
+            <span class="s1">sql </span><span class="s2">= </span><span class="s3">&quot;&quot;</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql_stream</span><span class="s2">.</span><span class="s1">seek</span><span class="s2">(</span><span class="s4">0</span><span class="s2">)</span>
+            <span class="s1">sql </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql_stream</span><span class="s2">.</span><span class="s1">read</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">errors</span><span class="s2">[-</span><span class="s4">1</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">errors</span><span class="s2">[-</span><span class="s4">1</span><span class="s2">] + (</span><span class="s1">sql</span><span class="s2">,)</span>
+
+    <span class="s0">def </span><span class="s1">addFailure</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addFailure</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql_stream</span><span class="s2">.</span><span class="s1">seek</span><span class="s2">(</span><span class="s4">0</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">failures</span><span class="s2">[-</span><span class="s4">1</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">failures</span><span class="s2">[-</span><span class="s4">1</span><span class="s2">] + (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql_stream</span><span class="s2">.</span><span class="s1">read</span><span class="s2">(),)</span>
+
+    <span class="s0">def </span><span class="s1">addSubTest</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">subtest</span><span class="s2">, </span><span class="s1">err</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addSubTest</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">subtest</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">err </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql_stream</span><span class="s2">.</span><span class="s1">seek</span><span class="s2">(</span><span class="s4">0</span><span class="s2">)</span>
+            <span class="s1">errors </span><span class="s2">= (</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">failures</span>
+                <span class="s0">if </span><span class="s1">issubclass</span><span class="s2">(</span><span class="s1">err</span><span class="s2">[</span><span class="s4">0</span><span class="s2">], </span><span class="s1">test</span><span class="s2">.</span><span class="s1">failureException</span><span class="s2">)</span>
+                <span class="s0">else </span><span class="s1">self</span><span class="s2">.</span><span class="s1">errors</span>
+            <span class="s2">)</span>
+            <span class="s1">errors</span><span class="s2">[-</span><span class="s4">1</span><span class="s2">] = </span><span class="s1">errors</span><span class="s2">[-</span><span class="s4">1</span><span class="s2">] + (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql_stream</span><span class="s2">.</span><span class="s1">read</span><span class="s2">(),)</span>
+
+    <span class="s0">def </span><span class="s1">printErrorList</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">flavour</span><span class="s2">, </span><span class="s1">errors</span><span class="s2">):</span>
+        <span class="s0">for </span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">, </span><span class="s1">sql_debug </span><span class="s0">in </span><span class="s1">errors</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stream</span><span class="s2">.</span><span class="s1">writeln</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">separator1</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stream</span><span class="s2">.</span><span class="s1">writeln</span><span class="s2">(</span><span class="s3">&quot;%s: %s&quot; </span><span class="s2">% (</span><span class="s1">flavour</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">getDescription</span><span class="s2">(</span><span class="s1">test</span><span class="s2">)))</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stream</span><span class="s2">.</span><span class="s1">writeln</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">separator2</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stream</span><span class="s2">.</span><span class="s1">writeln</span><span class="s2">(</span><span class="s1">err</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stream</span><span class="s2">.</span><span class="s1">writeln</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">separator2</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stream</span><span class="s2">.</span><span class="s1">writeln</span><span class="s2">(</span>
+                <span class="s1">sqlparse</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">sql_debug</span><span class="s2">, </span><span class="s1">reindent</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">keyword_case</span><span class="s2">=</span><span class="s3">&quot;upper&quot;</span><span class="s2">)</span>
+            <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">PDBDebugResult</span><span class="s2">(</span><span class="s1">unittest</span><span class="s2">.</span><span class="s1">TextTestResult</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Custom result class that triggers a PDB session when an error or failure 
+    occurs. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">addError</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addError</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">debug</span><span class="s2">(</span><span class="s1">err</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">addFailure</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addFailure</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">debug</span><span class="s2">(</span><span class="s1">err</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">addSubTest</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">subtest</span><span class="s2">, </span><span class="s1">err</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">err </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">debug</span><span class="s2">(</span><span class="s1">err</span><span class="s2">)</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addSubTest</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">subtest</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">debug</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">error</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_restoreStdout</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">buffer </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s1">exc_type</span><span class="s2">, </span><span class="s1">exc_value</span><span class="s2">, </span><span class="s1">traceback </span><span class="s2">= </span><span class="s1">error</span>
+        <span class="s1">print</span><span class="s2">(</span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">Opening PDB: %r&quot; </span><span class="s2">% </span><span class="s1">exc_value</span><span class="s2">)</span>
+        <span class="s1">pdb</span><span class="s2">.</span><span class="s1">post_mortem</span><span class="s2">(</span><span class="s1">traceback</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">DummyList</span><span class="s2">:</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Dummy list class for faking storage of results in unittest.TestResult. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">__slots__ </span><span class="s2">= ()</span>
+
+    <span class="s0">def </span><span class="s1">append</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">item</span><span class="s2">):</span>
+        <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">RemoteTestResult</span><span class="s2">(</span><span class="s1">unittest</span><span class="s2">.</span><span class="s1">TestResult</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Extend unittest.TestResult to record events in the child processes so they 
+    can be replayed in the parent process. Events include things like which 
+    tests succeeded or failed. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s5"># Fake storage of results to reduce memory usage. These are used by the</span>
+        <span class="s5"># unittest default methods, but here 'events' is used instead.</span>
+        <span class="s1">dummy_list </span><span class="s2">= </span><span class="s1">DummyList</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">failures </span><span class="s2">= </span><span class="s1">dummy_list</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">errors </span><span class="s2">= </span><span class="s1">dummy_list</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">skipped </span><span class="s2">= </span><span class="s1">dummy_list</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">expectedFailures </span><span class="s2">= </span><span class="s1">dummy_list</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">unexpectedSuccesses </span><span class="s2">= </span><span class="s1">dummy_list</span>
+
+        <span class="s0">if </span><span class="s1">tblib </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">tblib</span><span class="s2">.</span><span class="s1">pickling_support</span><span class="s2">.</span><span class="s1">install</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">events </span><span class="s2">= []</span>
+
+    <span class="s0">def </span><span class="s1">__getstate__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s5"># Make this class picklable by removing the file-like buffer</span>
+        <span class="s5"># attributes. This is possible since they aren't used after unpickling</span>
+        <span class="s5"># after being sent to ParallelTestSuite.</span>
+        <span class="s1">state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s1">state</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s3">&quot;_stdout_buffer&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+        <span class="s1">state</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s3">&quot;_stderr_buffer&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+        <span class="s1">state</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s3">&quot;_original_stdout&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+        <span class="s1">state</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s3">&quot;_original_stderr&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">state</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">test_index</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">testsRun </span><span class="s2">- </span><span class="s4">1</span>
+
+    <span class="s0">def </span><span class="s1">_confirm_picklable</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Confirm that obj can be pickled and unpickled as multiprocessing will 
+        need to pickle the exception in the child process and unpickle it in 
+        the parent process. Let the exception rise, if not. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">pickle</span><span class="s2">.</span><span class="s1">loads</span><span class="s2">(</span><span class="s1">pickle</span><span class="s2">.</span><span class="s1">dumps</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">))</span>
+
+    <span class="s0">def </span><span class="s1">_print_unpicklable_subtest</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">subtest</span><span class="s2">, </span><span class="s1">pickle_exc</span><span class="s2">):</span>
+        <span class="s1">print</span><span class="s2">(</span>
+            <span class="s3">&quot;&quot;&quot; 
+Subtest failed: 
+ 
+    test: {} 
+ subtest: {} 
+ 
+Unfortunately, the subtest that failed cannot be pickled, so the parallel 
+test runner cannot handle it cleanly. Here is the pickling error: 
+ 
+&gt; {} 
+ 
+You should re-run this test with --parallel=1 to reproduce the failure 
+with a cleaner failure message. 
+&quot;&quot;&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span>
+                <span class="s1">test</span><span class="s2">, </span><span class="s1">subtest</span><span class="s2">, </span><span class="s1">pickle_exc</span>
+            <span class="s2">)</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">check_picklable</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">):</span>
+        <span class="s5"># Ensure that sys.exc_info() tuples are picklable. This displays a</span>
+        <span class="s5"># clear multiprocessing.pool.RemoteTraceback generated in the child</span>
+        <span class="s5"># process instead of a multiprocessing.pool.MaybeEncodingError, making</span>
+        <span class="s5"># the root cause easier to figure out for users who aren't familiar</span>
+        <span class="s5"># with the multiprocessing module. Since we're in a forked process,</span>
+        <span class="s5"># our best chance to communicate with them is to print to stdout.</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_confirm_picklable</span><span class="s2">(</span><span class="s1">err</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">exc</span><span class="s2">:</span>
+            <span class="s1">original_exc_txt </span><span class="s2">= </span><span class="s1">repr</span><span class="s2">(</span><span class="s1">err</span><span class="s2">[</span><span class="s4">1</span><span class="s2">])</span>
+            <span class="s1">original_exc_txt </span><span class="s2">= </span><span class="s1">textwrap</span><span class="s2">.</span><span class="s1">fill</span><span class="s2">(</span>
+                <span class="s1">original_exc_txt</span><span class="s2">, </span><span class="s4">75</span><span class="s2">, </span><span class="s1">initial_indent</span><span class="s2">=</span><span class="s3">&quot;    &quot;</span><span class="s2">, </span><span class="s1">subsequent_indent</span><span class="s2">=</span><span class="s3">&quot;    &quot;</span>
+            <span class="s2">)</span>
+            <span class="s1">pickle_exc_txt </span><span class="s2">= </span><span class="s1">repr</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">)</span>
+            <span class="s1">pickle_exc_txt </span><span class="s2">= </span><span class="s1">textwrap</span><span class="s2">.</span><span class="s1">fill</span><span class="s2">(</span>
+                <span class="s1">pickle_exc_txt</span><span class="s2">, </span><span class="s4">75</span><span class="s2">, </span><span class="s1">initial_indent</span><span class="s2">=</span><span class="s3">&quot;    &quot;</span><span class="s2">, </span><span class="s1">subsequent_indent</span><span class="s2">=</span><span class="s3">&quot;    &quot;</span>
+            <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">tblib </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s1">print</span><span class="s2">(</span>
+                    <span class="s3">&quot;&quot;&quot; 
+ 
+{} failed: 
+ 
+{} 
+ 
+Unfortunately, tracebacks cannot be pickled, making it impossible for the 
+parallel test runner to handle this exception cleanly. 
+ 
+In order to see the traceback, you should install tblib: 
+ 
+    python -m pip install tblib 
+&quot;&quot;&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span>
+                        <span class="s1">test</span><span class="s2">, </span><span class="s1">original_exc_txt</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">print</span><span class="s2">(</span>
+                    <span class="s3">&quot;&quot;&quot; 
+ 
+{} failed: 
+ 
+{} 
+ 
+Unfortunately, the exception it raised cannot be pickled, making it impossible 
+for the parallel test runner to handle it cleanly. 
+ 
+Here's the error encountered while trying to pickle the exception: 
+ 
+{} 
+ 
+You should re-run this test with the --parallel=1 option to reproduce the 
+failure and get a correct traceback. 
+&quot;&quot;&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span>
+                        <span class="s1">test</span><span class="s2">, </span><span class="s1">original_exc_txt</span><span class="s2">, </span><span class="s1">pickle_exc_txt</span>
+                    <span class="s2">)</span>
+                <span class="s2">)</span>
+            <span class="s0">raise</span>
+
+    <span class="s0">def </span><span class="s1">check_subtest_picklable</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">subtest</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_confirm_picklable</span><span class="s2">(</span><span class="s1">subtest</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">exc</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_print_unpicklable_subtest</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">subtest</span><span class="s2">, </span><span class="s1">exc</span><span class="s2">)</span>
+            <span class="s0">raise</span>
+
+    <span class="s0">def </span><span class="s1">startTestRun</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">startTestRun</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">events</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s3">&quot;startTestRun&quot;</span><span class="s2">,))</span>
+
+    <span class="s0">def </span><span class="s1">stopTestRun</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">stopTestRun</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">events</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s3">&quot;stopTestRun&quot;</span><span class="s2">,))</span>
+
+    <span class="s0">def </span><span class="s1">startTest</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">startTest</span><span class="s2">(</span><span class="s1">test</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">events</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s3">&quot;startTest&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_index</span><span class="s2">))</span>
+
+    <span class="s0">def </span><span class="s1">stopTest</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">stopTest</span><span class="s2">(</span><span class="s1">test</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">events</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s3">&quot;stopTest&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_index</span><span class="s2">))</span>
+
+    <span class="s0">def </span><span class="s1">addDuration</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">elapsed</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addDuration</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">elapsed</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">events</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s3">&quot;addDuration&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_index</span><span class="s2">, </span><span class="s1">elapsed</span><span class="s2">))</span>
+
+    <span class="s0">def </span><span class="s1">addError</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">check_picklable</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">events</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s3">&quot;addError&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_index</span><span class="s2">, </span><span class="s1">err</span><span class="s2">))</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addError</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">addFailure</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">check_picklable</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">events</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s3">&quot;addFailure&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_index</span><span class="s2">, </span><span class="s1">err</span><span class="s2">))</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addFailure</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">addSubTest</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">subtest</span><span class="s2">, </span><span class="s1">err</span><span class="s2">):</span>
+        <span class="s5"># Follow Python's implementation of unittest.TestResult.addSubTest() by</span>
+        <span class="s5"># not doing anything when a subtest is successful.</span>
+        <span class="s0">if </span><span class="s1">err </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s5"># Call check_picklable() before check_subtest_picklable() since</span>
+            <span class="s5"># check_picklable() performs the tblib check.</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">check_picklable</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">check_subtest_picklable</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">subtest</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">events</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s3">&quot;addSubTest&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_index</span><span class="s2">, </span><span class="s1">subtest</span><span class="s2">, </span><span class="s1">err</span><span class="s2">))</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addSubTest</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">subtest</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">addSuccess</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">events</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s3">&quot;addSuccess&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_index</span><span class="s2">))</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addSuccess</span><span class="s2">(</span><span class="s1">test</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">addSkip</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">reason</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">events</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s3">&quot;addSkip&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_index</span><span class="s2">, </span><span class="s1">reason</span><span class="s2">))</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addSkip</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">reason</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">addExpectedFailure</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">):</span>
+        <span class="s5"># If tblib isn't installed, pickling the traceback will always fail.</span>
+        <span class="s5"># However we don't want tblib to be required for running the tests</span>
+        <span class="s5"># when they pass or fail as expected. Drop the traceback when an</span>
+        <span class="s5"># expected failure occurs.</span>
+        <span class="s0">if </span><span class="s1">tblib </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">err </span><span class="s2">= </span><span class="s1">err</span><span class="s2">[</span><span class="s4">0</span><span class="s2">], </span><span class="s1">err</span><span class="s2">[</span><span class="s4">1</span><span class="s2">], </span><span class="s0">None</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">check_picklable</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">events</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s3">&quot;addExpectedFailure&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_index</span><span class="s2">, </span><span class="s1">err</span><span class="s2">))</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addExpectedFailure</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">err</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">addUnexpectedSuccess</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">events</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s3">&quot;addUnexpectedSuccess&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_index</span><span class="s2">))</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">addUnexpectedSuccess</span><span class="s2">(</span><span class="s1">test</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">wasSuccessful</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot;Tells whether or not this result was a success.&quot;&quot;&quot;</span>
+        <span class="s1">failure_types </span><span class="s2">= {</span><span class="s3">&quot;addError&quot;</span><span class="s2">, </span><span class="s3">&quot;addFailure&quot;</span><span class="s2">, </span><span class="s3">&quot;addSubTest&quot;</span><span class="s2">, </span><span class="s3">&quot;addUnexpectedSuccess&quot;</span><span class="s2">}</span>
+        <span class="s0">return </span><span class="s1">all</span><span class="s2">(</span><span class="s1">e</span><span class="s2">[</span><span class="s4">0</span><span class="s2">] </span><span class="s0">not in </span><span class="s1">failure_types </span><span class="s0">for </span><span class="s1">e </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">events</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_exc_info_to_string</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">err</span><span class="s2">, </span><span class="s1">test</span><span class="s2">):</span>
+        <span class="s5"># Make this method no-op. It only powers the default unittest behavior</span>
+        <span class="s5"># for recording errors, but this class pickles errors into 'events'</span>
+        <span class="s5"># instead.</span>
+        <span class="s0">return </span><span class="s3">&quot;&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">RemoteTestRunner</span><span class="s2">:</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Run tests and record everything but don't display anything. 
+ 
+    The implementation matches the unpythonic coding style of unittest2. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">resultclass </span><span class="s2">= </span><span class="s1">RemoteTestResult</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">failfast</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">resultclass</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">buffer</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">failfast </span><span class="s2">= </span><span class="s1">failfast</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">buffer </span><span class="s2">= </span><span class="s1">buffer</span>
+        <span class="s0">if </span><span class="s1">resultclass </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">resultclass </span><span class="s2">= </span><span class="s1">resultclass</span>
+
+    <span class="s0">def </span><span class="s1">run</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test</span><span class="s2">):</span>
+        <span class="s1">result </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">resultclass</span><span class="s2">()</span>
+        <span class="s1">unittest</span><span class="s2">.</span><span class="s1">registerResult</span><span class="s2">(</span><span class="s1">result</span><span class="s2">)</span>
+        <span class="s1">result</span><span class="s2">.</span><span class="s1">failfast </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">failfast</span>
+        <span class="s1">result</span><span class="s2">.</span><span class="s1">buffer </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">buffer</span>
+        <span class="s1">test</span><span class="s2">(</span><span class="s1">result</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">result</span>
+
+
+<span class="s0">def </span><span class="s1">get_max_test_processes</span><span class="s2">():</span>
+    <span class="s6">&quot;&quot;&quot; 
+    The maximum number of test processes when using the --parallel option. 
+    &quot;&quot;&quot;</span>
+    <span class="s5"># The current implementation of the parallel test runner requires</span>
+    <span class="s5"># multiprocessing to start subprocesses with fork() or spawn().</span>
+    <span class="s0">if </span><span class="s1">multiprocessing</span><span class="s2">.</span><span class="s1">get_start_method</span><span class="s2">() </span><span class="s0">not in </span><span class="s2">{</span><span class="s3">&quot;fork&quot;</span><span class="s2">, </span><span class="s3">&quot;spawn&quot;</span><span class="s2">}:</span>
+        <span class="s0">return </span><span class="s4">1</span>
+    <span class="s0">try</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">int</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">environ</span><span class="s2">[</span><span class="s3">&quot;DJANGO_TEST_PROCESSES&quot;</span><span class="s2">])</span>
+    <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">multiprocessing</span><span class="s2">.</span><span class="s1">cpu_count</span><span class="s2">()</span>
+
+
+<span class="s0">def </span><span class="s1">parallel_type</span><span class="s2">(</span><span class="s1">value</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot;Parse value passed to the --parallel option.&quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">value </span><span class="s2">== </span><span class="s3">&quot;auto&quot;</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">value</span>
+    <span class="s0">try</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">int</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+    <span class="s0">except </span><span class="s1">ValueError</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">argparse</span><span class="s2">.</span><span class="s1">ArgumentTypeError</span><span class="s2">(</span>
+            <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">value</span><span class="s0">!r} </span><span class="s3">is not an integer or the string 'auto'&quot;</span>
+        <span class="s2">)</span>
+
+
+<span class="s1">_worker_id </span><span class="s2">= </span><span class="s4">0</span>
+
+
+<span class="s0">def </span><span class="s1">_init_worker</span><span class="s2">(</span>
+    <span class="s1">counter</span><span class="s2">,</span>
+    <span class="s1">initial_settings</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s1">serialized_contents</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s1">process_setup</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s1">process_setup_args</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s1">debug_mode</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s1">used_aliases</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+<span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Switch to databases dedicated to this worker. 
+ 
+    This helper lives at module-level because of the multiprocessing module's 
+    requirements. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">global </span><span class="s1">_worker_id</span>
+
+    <span class="s0">with </span><span class="s1">counter</span><span class="s2">.</span><span class="s1">get_lock</span><span class="s2">():</span>
+        <span class="s1">counter</span><span class="s2">.</span><span class="s1">value </span><span class="s2">+= </span><span class="s4">1</span>
+        <span class="s1">_worker_id </span><span class="s2">= </span><span class="s1">counter</span><span class="s2">.</span><span class="s1">value</span>
+
+    <span class="s1">start_method </span><span class="s2">= </span><span class="s1">multiprocessing</span><span class="s2">.</span><span class="s1">get_start_method</span><span class="s2">()</span>
+
+    <span class="s0">if </span><span class="s1">start_method </span><span class="s2">== </span><span class="s3">&quot;spawn&quot;</span><span class="s2">:</span>
+        <span class="s0">if </span><span class="s1">process_setup </span><span class="s0">and </span><span class="s1">callable</span><span class="s2">(</span><span class="s1">process_setup</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">process_setup_args </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s1">process_setup_args </span><span class="s2">= ()</span>
+            <span class="s1">process_setup</span><span class="s2">(*</span><span class="s1">process_setup_args</span><span class="s2">)</span>
+        <span class="s1">django</span><span class="s2">.</span><span class="s1">setup</span><span class="s2">()</span>
+        <span class="s1">setup_test_environment</span><span class="s2">(</span><span class="s1">debug</span><span class="s2">=</span><span class="s1">debug_mode</span><span class="s2">)</span>
+
+    <span class="s1">db_aliases </span><span class="s2">= </span><span class="s1">used_aliases </span><span class="s0">if </span><span class="s1">used_aliases </span><span class="s0">is not None else </span><span class="s1">connections</span>
+    <span class="s0">for </span><span class="s1">alias </span><span class="s0">in </span><span class="s1">db_aliases</span><span class="s2">:</span>
+        <span class="s1">connection </span><span class="s2">= </span><span class="s1">connections</span><span class="s2">[</span><span class="s1">alias</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">start_method </span><span class="s2">== </span><span class="s3">&quot;spawn&quot;</span><span class="s2">:</span>
+            <span class="s5"># Restore initial settings in spawned processes.</span>
+            <span class="s1">connection</span><span class="s2">.</span><span class="s1">settings_dict</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">initial_settings</span><span class="s2">[</span><span class="s1">alias</span><span class="s2">])</span>
+            <span class="s0">if </span><span class="s1">value </span><span class="s2">:= </span><span class="s1">serialized_contents</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">alias</span><span class="s2">):</span>
+                <span class="s1">connection</span><span class="s2">.</span><span class="s1">_test_serialized_contents </span><span class="s2">= </span><span class="s1">value</span>
+        <span class="s1">connection</span><span class="s2">.</span><span class="s1">creation</span><span class="s2">.</span><span class="s1">setup_worker_connection</span><span class="s2">(</span><span class="s1">_worker_id</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">_run_subsuite</span><span class="s2">(</span><span class="s1">args</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Run a suite of tests with a RemoteTestRunner and return a RemoteTestResult. 
+ 
+    This helper lives at module-level and its arguments are wrapped in a tuple 
+    because of the multiprocessing module's requirements. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">runner_class</span><span class="s2">, </span><span class="s1">subsuite_index</span><span class="s2">, </span><span class="s1">subsuite</span><span class="s2">, </span><span class="s1">failfast</span><span class="s2">, </span><span class="s1">buffer </span><span class="s2">= </span><span class="s1">args</span>
+    <span class="s1">runner </span><span class="s2">= </span><span class="s1">runner_class</span><span class="s2">(</span><span class="s1">failfast</span><span class="s2">=</span><span class="s1">failfast</span><span class="s2">, </span><span class="s1">buffer</span><span class="s2">=</span><span class="s1">buffer</span><span class="s2">)</span>
+    <span class="s1">result </span><span class="s2">= </span><span class="s1">runner</span><span class="s2">.</span><span class="s1">run</span><span class="s2">(</span><span class="s1">subsuite</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">subsuite_index</span><span class="s2">, </span><span class="s1">result</span><span class="s2">.</span><span class="s1">events</span>
+
+
+<span class="s0">def </span><span class="s1">_process_setup_stub</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot;Stub method to simplify run() implementation.&quot;&quot;&quot;</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">ParallelTestSuite</span><span class="s2">(</span><span class="s1">unittest</span><span class="s2">.</span><span class="s1">TestSuite</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Run a series of tests in parallel in several processes. 
+ 
+    While the unittest module's documentation implies that orchestrating the 
+    execution of tests is the responsibility of the test runner, in practice, 
+    it appears that TestRunner classes are more concerned with formatting and 
+    displaying test results. 
+ 
+    Since there are fewer use cases for customizing TestSuite than TestRunner, 
+    implementing parallelization at the level of the TestSuite improves 
+    interoperability with existing custom test runners. A single instance of a 
+    test runner can still collect results from all tests without being aware 
+    that they have been run in parallel. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s5"># In case someone wants to modify these in a subclass.</span>
+    <span class="s1">init_worker </span><span class="s2">= </span><span class="s1">_init_worker</span>
+    <span class="s1">process_setup </span><span class="s2">= </span><span class="s1">_process_setup_stub</span>
+    <span class="s1">process_setup_args </span><span class="s2">= ()</span>
+    <span class="s1">run_subsuite </span><span class="s2">= </span><span class="s1">_run_subsuite</span>
+    <span class="s1">runner_class </span><span class="s2">= </span><span class="s1">RemoteTestRunner</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">subsuites</span><span class="s2">, </span><span class="s1">processes</span><span class="s2">, </span><span class="s1">failfast</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">debug_mode</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">buffer</span><span class="s2">=</span><span class="s0">False</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">subsuites </span><span class="s2">= </span><span class="s1">subsuites</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">processes </span><span class="s2">= </span><span class="s1">processes</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">failfast </span><span class="s2">= </span><span class="s1">failfast</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">debug_mode </span><span class="s2">= </span><span class="s1">debug_mode</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">buffer </span><span class="s2">= </span><span class="s1">buffer</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">initial_settings </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">serialized_contents </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">used_aliases </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">run</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">result</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Distribute TestCases across workers. 
+ 
+        Return an identifier of each TestCase with its result in order to use 
+        imap_unordered to show results as soon as they're available. 
+ 
+        To minimize pickling errors when getting results from workers: 
+ 
+        - pass back numeric indexes in self.subsuites instead of tests 
+        - make tracebacks picklable with tblib, if available 
+ 
+        Even with tblib, errors may still occur for dynamically created 
+        exception classes which cannot be unpickled. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">initialize_suite</span><span class="s2">()</span>
+        <span class="s1">counter </span><span class="s2">= </span><span class="s1">multiprocessing</span><span class="s2">.</span><span class="s1">Value</span><span class="s2">(</span><span class="s1">ctypes</span><span class="s2">.</span><span class="s1">c_int</span><span class="s2">, </span><span class="s4">0</span><span class="s2">)</span>
+        <span class="s1">pool </span><span class="s2">= </span><span class="s1">multiprocessing</span><span class="s2">.</span><span class="s1">Pool</span><span class="s2">(</span>
+            <span class="s1">processes</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">processes</span><span class="s2">,</span>
+            <span class="s1">initializer</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">init_worker</span><span class="s2">.</span><span class="s1">__func__</span><span class="s2">,</span>
+            <span class="s1">initargs</span><span class="s2">=[</span>
+                <span class="s1">counter</span><span class="s2">,</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">initial_settings</span><span class="s2">,</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">serialized_contents</span><span class="s2">,</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">process_setup</span><span class="s2">.</span><span class="s1">__func__</span><span class="s2">,</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">process_setup_args</span><span class="s2">,</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">debug_mode</span><span class="s2">,</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">used_aliases</span><span class="s2">,</span>
+            <span class="s2">],</span>
+        <span class="s2">)</span>
+        <span class="s1">args </span><span class="s2">= [</span>
+            <span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">runner_class</span><span class="s2">, </span><span class="s1">index</span><span class="s2">, </span><span class="s1">subsuite</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">failfast</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">buffer</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">index</span><span class="s2">, </span><span class="s1">subsuite </span><span class="s0">in </span><span class="s1">enumerate</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">subsuites</span><span class="s2">)</span>
+        <span class="s2">]</span>
+        <span class="s1">test_results </span><span class="s2">= </span><span class="s1">pool</span><span class="s2">.</span><span class="s1">imap_unordered</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">run_subsuite</span><span class="s2">.</span><span class="s1">__func__</span><span class="s2">, </span><span class="s1">args</span><span class="s2">)</span>
+
+        <span class="s0">while True</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">result</span><span class="s2">.</span><span class="s1">shouldStop</span><span class="s2">:</span>
+                <span class="s1">pool</span><span class="s2">.</span><span class="s1">terminate</span><span class="s2">()</span>
+                <span class="s0">break</span>
+
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">subsuite_index</span><span class="s2">, </span><span class="s1">events </span><span class="s2">= </span><span class="s1">test_results</span><span class="s2">.</span><span class="s1">next</span><span class="s2">(</span><span class="s1">timeout</span><span class="s2">=</span><span class="s4">0.1</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">multiprocessing</span><span class="s2">.</span><span class="s1">TimeoutError</span><span class="s2">:</span>
+                <span class="s0">continue</span>
+            <span class="s0">except </span><span class="s1">StopIteration</span><span class="s2">:</span>
+                <span class="s1">pool</span><span class="s2">.</span><span class="s1">close</span><span class="s2">()</span>
+                <span class="s0">break</span>
+
+            <span class="s1">tests </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">subsuites</span><span class="s2">[</span><span class="s1">subsuite_index</span><span class="s2">])</span>
+            <span class="s0">for </span><span class="s1">event </span><span class="s0">in </span><span class="s1">events</span><span class="s2">:</span>
+                <span class="s1">event_name </span><span class="s2">= </span><span class="s1">event</span><span class="s2">[</span><span class="s4">0</span><span class="s2">]</span>
+                <span class="s1">handler </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">result</span><span class="s2">, </span><span class="s1">event_name</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">handler </span><span class="s0">is None</span><span class="s2">:</span>
+                    <span class="s0">continue</span>
+                <span class="s1">test </span><span class="s2">= </span><span class="s1">tests</span><span class="s2">[</span><span class="s1">event</span><span class="s2">[</span><span class="s4">1</span><span class="s2">]]</span>
+                <span class="s1">args </span><span class="s2">= </span><span class="s1">event</span><span class="s2">[</span><span class="s4">2</span><span class="s2">:]</span>
+                <span class="s1">handler</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">)</span>
+
+        <span class="s1">pool</span><span class="s2">.</span><span class="s1">join</span><span class="s2">()</span>
+
+        <span class="s0">return </span><span class="s1">result</span>
+
+    <span class="s0">def </span><span class="s1">__iter__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">iter</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">subsuites</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">initialize_suite</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">multiprocessing</span><span class="s2">.</span><span class="s1">get_start_method</span><span class="s2">() == </span><span class="s3">&quot;spawn&quot;</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">initial_settings </span><span class="s2">= {</span>
+                <span class="s1">alias</span><span class="s2">: </span><span class="s1">connections</span><span class="s2">[</span><span class="s1">alias</span><span class="s2">].</span><span class="s1">settings_dict </span><span class="s0">for </span><span class="s1">alias </span><span class="s0">in </span><span class="s1">connections</span>
+            <span class="s2">}</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">serialized_contents </span><span class="s2">= {</span>
+                <span class="s1">alias</span><span class="s2">: </span><span class="s1">connections</span><span class="s2">[</span><span class="s1">alias</span><span class="s2">].</span><span class="s1">_test_serialized_contents</span>
+                <span class="s0">for </span><span class="s1">alias </span><span class="s0">in </span><span class="s1">connections</span>
+                <span class="s0">if </span><span class="s1">alias </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">serialized_aliases</span>
+            <span class="s2">}</span>
+
+
+<span class="s0">class </span><span class="s1">Shuffler</span><span class="s2">:</span>
+    <span class="s6">&quot;&quot;&quot; 
+    This class implements shuffling with a special consistency property. 
+    Consistency means that, for a given seed and key function, if two sets of 
+    items are shuffled, the resulting order will agree on the intersection of 
+    the two sets. For example, if items are removed from an original set, the 
+    shuffled order for the new set will be the shuffled order of the original 
+    set restricted to the smaller set. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s5"># This doesn't need to be cryptographically strong, so use what's fastest.</span>
+    <span class="s1">hash_algorithm </span><span class="s2">= </span><span class="s3">&quot;md5&quot;</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">_hash_text</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">text</span><span class="s2">):</span>
+        <span class="s1">h </span><span class="s2">= </span><span class="s1">hashlib</span><span class="s2">.</span><span class="s1">new</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">.</span><span class="s1">hash_algorithm</span><span class="s2">, </span><span class="s1">usedforsecurity</span><span class="s2">=</span><span class="s0">False</span><span class="s2">)</span>
+        <span class="s1">h</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">text</span><span class="s2">.</span><span class="s1">encode</span><span class="s2">(</span><span class="s3">&quot;utf-8&quot;</span><span class="s2">))</span>
+        <span class="s0">return </span><span class="s1">h</span><span class="s2">.</span><span class="s1">hexdigest</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">seed</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">seed </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s5"># Limit seeds to 10 digits for simpler output.</span>
+            <span class="s1">seed </span><span class="s2">= </span><span class="s1">random</span><span class="s2">.</span><span class="s1">randint</span><span class="s2">(</span><span class="s4">0</span><span class="s2">, </span><span class="s4">10</span><span class="s2">**</span><span class="s4">10 </span><span class="s2">- </span><span class="s4">1</span><span class="s2">)</span>
+            <span class="s1">seed_source </span><span class="s2">= </span><span class="s3">&quot;generated&quot;</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">seed_source </span><span class="s2">= </span><span class="s3">&quot;given&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">seed </span><span class="s2">= </span><span class="s1">seed</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">seed_source </span><span class="s2">= </span><span class="s1">seed_source</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">seed_display</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">seed</span><span class="s0">!r} </span><span class="s3">(</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">seed_source</span><span class="s0">}</span><span class="s3">)&quot;</span>
+
+    <span class="s0">def </span><span class="s1">_hash_item</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">item</span><span class="s2">, </span><span class="s1">key</span><span class="s2">):</span>
+        <span class="s1">text </span><span class="s2">= </span><span class="s3">&quot;{}{}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">seed</span><span class="s2">, </span><span class="s1">key</span><span class="s2">(</span><span class="s1">item</span><span class="s2">))</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_hash_text</span><span class="s2">(</span><span class="s1">text</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">shuffle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">items</span><span class="s2">, </span><span class="s1">key</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Return a new list of the items in a shuffled order. 
+ 
+        The `key` is a function that accepts an item in `items` and returns 
+        a string unique for that item that can be viewed as a string id. The 
+        order of the return value is deterministic. It depends on the seed 
+        and key function but not on the original order. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">hashes </span><span class="s2">= {}</span>
+        <span class="s0">for </span><span class="s1">item </span><span class="s0">in </span><span class="s1">items</span><span class="s2">:</span>
+            <span class="s1">hashed </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_hash_item</span><span class="s2">(</span><span class="s1">item</span><span class="s2">, </span><span class="s1">key</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">hashed </span><span class="s0">in </span><span class="s1">hashes</span><span class="s2">:</span>
+                <span class="s1">msg </span><span class="s2">= </span><span class="s3">&quot;item {!r} has same hash {!r} as item {!r}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span>
+                    <span class="s1">item</span><span class="s2">,</span>
+                    <span class="s1">hashed</span><span class="s2">,</span>
+                    <span class="s1">hashes</span><span class="s2">[</span><span class="s1">hashed</span><span class="s2">],</span>
+                <span class="s2">)</span>
+                <span class="s0">raise </span><span class="s1">RuntimeError</span><span class="s2">(</span><span class="s1">msg</span><span class="s2">)</span>
+            <span class="s1">hashes</span><span class="s2">[</span><span class="s1">hashed</span><span class="s2">] = </span><span class="s1">item</span>
+        <span class="s0">return </span><span class="s2">[</span><span class="s1">hashes</span><span class="s2">[</span><span class="s1">hashed</span><span class="s2">] </span><span class="s0">for </span><span class="s1">hashed </span><span class="s0">in </span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">hashes</span><span class="s2">)]</span>
+
+
+<span class="s0">class </span><span class="s1">DiscoverRunner</span><span class="s2">:</span>
+    <span class="s6">&quot;&quot;&quot;A Django test runner that uses unittest2 test discovery.&quot;&quot;&quot;</span>
+
+    <span class="s1">test_suite </span><span class="s2">= </span><span class="s1">unittest</span><span class="s2">.</span><span class="s1">TestSuite</span>
+    <span class="s1">parallel_test_suite </span><span class="s2">= </span><span class="s1">ParallelTestSuite</span>
+    <span class="s1">test_runner </span><span class="s2">= </span><span class="s1">unittest</span><span class="s2">.</span><span class="s1">TextTestRunner</span>
+    <span class="s1">test_loader </span><span class="s2">= </span><span class="s1">unittest</span><span class="s2">.</span><span class="s1">defaultTestLoader</span>
+    <span class="s1">reorder_by </span><span class="s2">= (</span><span class="s1">TestCase</span><span class="s2">, </span><span class="s1">SimpleTestCase</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">pattern</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">top_level</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">verbosity</span><span class="s2">=</span><span class="s4">1</span><span class="s2">,</span>
+        <span class="s1">interactive</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+        <span class="s1">failfast</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">keepdb</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">reverse</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">debug_mode</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">debug_sql</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">parallel</span><span class="s2">=</span><span class="s4">0</span><span class="s2">,</span>
+        <span class="s1">tags</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">exclude_tags</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">test_name_patterns</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">pdb</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">buffer</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">enable_faulthandler</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+        <span class="s1">timing</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">shuffle</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s1">logger</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">durations</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s2">**</span><span class="s1">kwargs</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">pattern </span><span class="s2">= </span><span class="s1">pattern</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">top_level </span><span class="s2">= </span><span class="s1">top_level</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">= </span><span class="s1">verbosity</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">interactive </span><span class="s2">= </span><span class="s1">interactive</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">failfast </span><span class="s2">= </span><span class="s1">failfast</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">keepdb </span><span class="s2">= </span><span class="s1">keepdb</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">reverse </span><span class="s2">= </span><span class="s1">reverse</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">debug_mode </span><span class="s2">= </span><span class="s1">debug_mode</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql </span><span class="s2">= </span><span class="s1">debug_sql</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">parallel </span><span class="s2">= </span><span class="s1">parallel</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">tags </span><span class="s2">= </span><span class="s1">set</span><span class="s2">(</span><span class="s1">tags </span><span class="s0">or </span><span class="s2">[])</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">exclude_tags </span><span class="s2">= </span><span class="s1">set</span><span class="s2">(</span><span class="s1">exclude_tags </span><span class="s0">or </span><span class="s2">[])</span>
+        <span class="s0">if not </span><span class="s1">faulthandler</span><span class="s2">.</span><span class="s1">is_enabled</span><span class="s2">() </span><span class="s0">and </span><span class="s1">enable_faulthandler</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">faulthandler</span><span class="s2">.</span><span class="s1">enable</span><span class="s2">(</span><span class="s1">file</span><span class="s2">=</span><span class="s1">sys</span><span class="s2">.</span><span class="s1">stderr</span><span class="s2">.</span><span class="s1">fileno</span><span class="s2">())</span>
+            <span class="s0">except </span><span class="s2">(</span><span class="s1">AttributeError</span><span class="s2">, </span><span class="s1">io</span><span class="s2">.</span><span class="s1">UnsupportedOperation</span><span class="s2">):</span>
+                <span class="s1">faulthandler</span><span class="s2">.</span><span class="s1">enable</span><span class="s2">(</span><span class="s1">file</span><span class="s2">=</span><span class="s1">sys</span><span class="s2">.</span><span class="s1">__stderr__</span><span class="s2">.</span><span class="s1">fileno</span><span class="s2">())</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">pdb </span><span class="s2">= </span><span class="s1">pdb</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pdb </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">parallel </span><span class="s2">&gt; </span><span class="s4">1</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                <span class="s3">&quot;You cannot use --pdb with parallel tests; pass --parallel=1 to use it.&quot;</span>
+            <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">buffer </span><span class="s2">= </span><span class="s1">buffer</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">test_name_patterns </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">time_keeper </span><span class="s2">= </span><span class="s1">TimeKeeper</span><span class="s2">() </span><span class="s0">if </span><span class="s1">timing </span><span class="s0">else </span><span class="s1">NullTimeKeeper</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">test_name_patterns</span><span class="s2">:</span>
+            <span class="s5"># unittest does not export the _convert_select_pattern function</span>
+            <span class="s5"># that converts command-line arguments to patterns.</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">test_name_patterns </span><span class="s2">= {</span>
+                <span class="s1">pattern </span><span class="s0">if </span><span class="s3">&quot;*&quot; </span><span class="s0">in </span><span class="s1">pattern </span><span class="s0">else </span><span class="s3">&quot;*%s*&quot; </span><span class="s2">% </span><span class="s1">pattern</span>
+                <span class="s0">for </span><span class="s1">pattern </span><span class="s0">in </span><span class="s1">test_name_patterns</span>
+            <span class="s2">}</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">shuffle </span><span class="s2">= </span><span class="s1">shuffle</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_shuffler </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">logger </span><span class="s2">= </span><span class="s1">logger</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">durations </span><span class="s2">= </span><span class="s1">durations</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;-t&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--top-level-directory&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;top_level&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Top level of project for unittest discovery.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;-p&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--pattern&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s3">&quot;test*.py&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;The test matching pattern. Defaults to test*.py.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--keepdb&quot;</span><span class="s2">, </span><span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">, </span><span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Preserves the test DB between runs.&quot;</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--shuffle&quot;</span><span class="s2">,</span>
+            <span class="s1">nargs</span><span class="s2">=</span><span class="s3">&quot;?&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+            <span class="s1">type</span><span class="s2">=</span><span class="s1">int</span><span class="s2">,</span>
+            <span class="s1">metavar</span><span class="s2">=</span><span class="s3">&quot;SEED&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Shuffles test case order.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;-r&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--reverse&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Reverses test case order.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--debug-mode&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Sets settings.DEBUG to True.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;-d&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--debug-sql&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Prints logged SQL queries on failure.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--parallel&quot;</span><span class="s2">,</span>
+            <span class="s1">nargs</span><span class="s2">=</span><span class="s3">&quot;?&quot;</span><span class="s2">,</span>
+            <span class="s1">const</span><span class="s2">=</span><span class="s3">&quot;auto&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s4">0</span><span class="s2">,</span>
+            <span class="s1">type</span><span class="s2">=</span><span class="s1">parallel_type</span><span class="s2">,</span>
+            <span class="s1">metavar</span><span class="s2">=</span><span class="s3">&quot;N&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Run tests using up to N parallel processes. Use the value &quot;</span>
+                <span class="s3">'&quot;auto&quot; to run one test process for each processor core.'</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--tag&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;append&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;tags&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Run only tests with the specified tag. Can be used multiple times.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--exclude-tag&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;append&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;exclude_tags&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Do not run tests with the specified tag. Can be used multiple times.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--pdb&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Runs a debugger (pdb, or ipdb if installed) on error or failure.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;-b&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--buffer&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Discard output from passing tests.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--no-faulthandler&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_false&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;enable_faulthandler&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Disables the Python faulthandler module during tests.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--timing&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span><span class="s3">&quot;Output timings, including database set up and total run time.&quot;</span><span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;-k&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;append&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;test_name_patterns&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Only run test methods and classes that match the pattern &quot;</span>
+                <span class="s3">&quot;or substring. Can be used multiple times. Same as &quot;</span>
+                <span class="s3">&quot;unittest -k option.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">PY312</span><span class="s2">:</span>
+            <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+                <span class="s3">&quot;--durations&quot;</span><span class="s2">,</span>
+                <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;durations&quot;</span><span class="s2">,</span>
+                <span class="s1">type</span><span class="s2">=</span><span class="s1">int</span><span class="s2">,</span>
+                <span class="s1">default</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+                <span class="s1">metavar</span><span class="s2">=</span><span class="s3">&quot;N&quot;</span><span class="s2">,</span>
+                <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Show the N slowest test cases (N=0 for all).&quot;</span><span class="s2">,</span>
+            <span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">shuffle_seed</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_shuffler </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">return None</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_shuffler</span><span class="s2">.</span><span class="s1">seed</span>
+
+    <span class="s0">def </span><span class="s1">log</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">msg</span><span class="s2">, </span><span class="s1">level</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Log the message at the given logging level (the default is INFO). 
+ 
+        If a logger isn't set, the message is instead printed to the console, 
+        respecting the configured verbosity. A verbosity of 0 prints no output, 
+        a verbosity of 1 prints INFO and above, and a verbosity of 2 or higher 
+        prints all levels. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">level </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">level </span><span class="s2">= </span><span class="s1">logging</span><span class="s2">.</span><span class="s1">INFO</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">logger </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&lt;= </span><span class="s4">0 </span><span class="s0">or </span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">== </span><span class="s4">1 </span><span class="s0">and </span><span class="s1">level </span><span class="s2">&lt; </span><span class="s1">logging</span><span class="s2">.</span><span class="s1">INFO</span><span class="s2">):</span>
+                <span class="s0">return</span>
+            <span class="s1">print</span><span class="s2">(</span><span class="s1">msg</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">logger</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s1">level</span><span class="s2">, </span><span class="s1">msg</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">setup_test_environment</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">setup_test_environment</span><span class="s2">(</span><span class="s1">debug</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">debug_mode</span><span class="s2">)</span>
+        <span class="s1">unittest</span><span class="s2">.</span><span class="s1">installHandler</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">setup_shuffler</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">shuffle </span><span class="s0">is False</span><span class="s2">:</span>
+            <span class="s0">return</span>
+        <span class="s1">shuffler </span><span class="s2">= </span><span class="s1">Shuffler</span><span class="s2">(</span><span class="s1">seed</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">shuffle</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s3">f&quot;Using shuffle seed: </span><span class="s0">{</span><span class="s1">shuffler</span><span class="s2">.</span><span class="s1">seed_display</span><span class="s0">}</span><span class="s3">&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_shuffler </span><span class="s2">= </span><span class="s1">shuffler</span>
+
+    <span class="s2">@</span><span class="s1">contextmanager</span>
+    <span class="s0">def </span><span class="s1">load_with_patterns</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">original_test_name_patterns </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_loader</span><span class="s2">.</span><span class="s1">testNamePatterns</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">test_loader</span><span class="s2">.</span><span class="s1">testNamePatterns </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_name_patterns</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">yield</span>
+        <span class="s0">finally</span><span class="s2">:</span>
+            <span class="s5"># Restore the original patterns.</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">test_loader</span><span class="s2">.</span><span class="s1">testNamePatterns </span><span class="s2">= </span><span class="s1">original_test_name_patterns</span>
+
+    <span class="s0">def </span><span class="s1">load_tests_for_label</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">label</span><span class="s2">, </span><span class="s1">discover_kwargs</span><span class="s2">):</span>
+        <span class="s1">label_as_path </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">abspath</span><span class="s2">(</span><span class="s1">label</span><span class="s2">)</span>
+        <span class="s1">tests </span><span class="s2">= </span><span class="s0">None</span>
+
+        <span class="s5"># If a module, or &quot;module.ClassName[.method_name]&quot;, just run those.</span>
+        <span class="s0">if not </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s1">label_as_path</span><span class="s2">):</span>
+            <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">load_with_patterns</span><span class="s2">():</span>
+                <span class="s1">tests </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_loader</span><span class="s2">.</span><span class="s1">loadTestsFromName</span><span class="s2">(</span><span class="s1">label</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">tests</span><span class="s2">.</span><span class="s1">countTestCases</span><span class="s2">():</span>
+                <span class="s0">return </span><span class="s1">tests</span>
+        <span class="s5"># Try discovery if &quot;label&quot; is a package or directory.</span>
+        <span class="s1">is_importable</span><span class="s2">, </span><span class="s1">is_package </span><span class="s2">= </span><span class="s1">try_importing</span><span class="s2">(</span><span class="s1">label</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">is_importable</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">is_package</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">tests</span>
+        <span class="s0">elif not </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">isdir</span><span class="s2">(</span><span class="s1">label_as_path</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s1">label_as_path</span><span class="s2">):</span>
+                <span class="s0">assert </span><span class="s1">tests </span><span class="s0">is None</span>
+                <span class="s0">raise </span><span class="s1">RuntimeError</span><span class="s2">(</span>
+                    <span class="s3">f&quot;One of the test labels is a path to a file: </span><span class="s0">{</span><span class="s1">label</span><span class="s0">!r}</span><span class="s3">, &quot;</span>
+                    <span class="s3">f&quot;which is not supported. Use a dotted module name or &quot;</span>
+                    <span class="s3">f&quot;path to a directory instead.&quot;</span>
+                <span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">tests</span>
+
+        <span class="s1">kwargs </span><span class="s2">= </span><span class="s1">discover_kwargs</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">isdir</span><span class="s2">(</span><span class="s1">label_as_path</span><span class="s2">) </span><span class="s0">and not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">top_level</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;top_level_dir&quot;</span><span class="s2">] = </span><span class="s1">find_top_level</span><span class="s2">(</span><span class="s1">label_as_path</span><span class="s2">)</span>
+
+        <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">load_with_patterns</span><span class="s2">():</span>
+            <span class="s1">tests </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_loader</span><span class="s2">.</span><span class="s1">discover</span><span class="s2">(</span><span class="s1">start_dir</span><span class="s2">=</span><span class="s1">label</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s5"># Make unittest forget the top-level dir it calculated from this run,</span>
+        <span class="s5"># to support running tests from two different top-levels.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">test_loader</span><span class="s2">.</span><span class="s1">_top_level_dir </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s0">return </span><span class="s1">tests</span>
+
+    <span class="s0">def </span><span class="s1">build_suite</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test_labels</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">test_labels </span><span class="s2">= </span><span class="s1">test_labels </span><span class="s0">or </span><span class="s2">[</span><span class="s3">&quot;.&quot;</span><span class="s2">]</span>
+
+        <span class="s1">discover_kwargs </span><span class="s2">= {}</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pattern </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">discover_kwargs</span><span class="s2">[</span><span class="s3">&quot;pattern&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pattern</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">top_level </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">discover_kwargs</span><span class="s2">[</span><span class="s3">&quot;top_level_dir&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">top_level</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">setup_shuffler</span><span class="s2">()</span>
+
+        <span class="s1">all_tests </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">label </span><span class="s0">in </span><span class="s1">test_labels</span><span class="s2">:</span>
+            <span class="s1">tests </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">load_tests_for_label</span><span class="s2">(</span><span class="s1">label</span><span class="s2">, </span><span class="s1">discover_kwargs</span><span class="s2">)</span>
+            <span class="s1">all_tests</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">iter_test_cases</span><span class="s2">(</span><span class="s1">tests</span><span class="s2">))</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">tags </span><span class="s0">or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">exclude_tags</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">tags</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span>
+                    <span class="s3">&quot;Including test tag(s): %s.&quot; </span><span class="s2">% </span><span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">tags</span><span class="s2">)),</span>
+                    <span class="s1">level</span><span class="s2">=</span><span class="s1">logging</span><span class="s2">.</span><span class="s1">DEBUG</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">exclude_tags</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span>
+                    <span class="s3">&quot;Excluding test tag(s): %s.&quot; </span><span class="s2">% </span><span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">exclude_tags</span><span class="s2">)),</span>
+                    <span class="s1">level</span><span class="s2">=</span><span class="s1">logging</span><span class="s2">.</span><span class="s1">DEBUG</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s1">all_tests </span><span class="s2">= </span><span class="s1">filter_tests_by_tags</span><span class="s2">(</span><span class="s1">all_tests</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">tags</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">exclude_tags</span><span class="s2">)</span>
+
+        <span class="s5"># Put the failures detected at load time first for quicker feedback.</span>
+        <span class="s5"># _FailedTest objects include things like test modules that couldn't be</span>
+        <span class="s5"># found or that couldn't be loaded due to syntax errors.</span>
+        <span class="s1">test_types </span><span class="s2">= (</span><span class="s1">unittest</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">_FailedTest</span><span class="s2">, *</span><span class="s1">self</span><span class="s2">.</span><span class="s1">reorder_by</span><span class="s2">)</span>
+        <span class="s1">all_tests </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span>
+            <span class="s1">reorder_tests</span><span class="s2">(</span>
+                <span class="s1">all_tests</span><span class="s2">,</span>
+                <span class="s1">test_types</span><span class="s2">,</span>
+                <span class="s1">shuffler</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_shuffler</span><span class="s2">,</span>
+                <span class="s1">reverse</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">reverse</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s3">&quot;Found %d test(s).&quot; </span><span class="s2">% </span><span class="s1">len</span><span class="s2">(</span><span class="s1">all_tests</span><span class="s2">))</span>
+        <span class="s1">suite </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_suite</span><span class="s2">(</span><span class="s1">all_tests</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">parallel </span><span class="s2">&gt; </span><span class="s4">1</span><span class="s2">:</span>
+            <span class="s1">subsuites </span><span class="s2">= </span><span class="s1">partition_suite_by_case</span><span class="s2">(</span><span class="s1">suite</span><span class="s2">)</span>
+            <span class="s5"># Since tests are distributed across processes on a per-TestCase</span>
+            <span class="s5"># basis, there's no need for more processes than TestCases.</span>
+            <span class="s1">processes </span><span class="s2">= </span><span class="s1">min</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">parallel</span><span class="s2">, </span><span class="s1">len</span><span class="s2">(</span><span class="s1">subsuites</span><span class="s2">))</span>
+            <span class="s5"># Update also &quot;parallel&quot; because it's used to determine the number</span>
+            <span class="s5"># of test databases.</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">parallel </span><span class="s2">= </span><span class="s1">processes</span>
+            <span class="s0">if </span><span class="s1">processes </span><span class="s2">&gt; </span><span class="s4">1</span><span class="s2">:</span>
+                <span class="s1">suite </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">parallel_test_suite</span><span class="s2">(</span>
+                    <span class="s1">subsuites</span><span class="s2">,</span>
+                    <span class="s1">processes</span><span class="s2">,</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">failfast</span><span class="s2">,</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">debug_mode</span><span class="s2">,</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">buffer</span><span class="s2">,</span>
+                <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">suite</span>
+
+    <span class="s0">def </span><span class="s1">setup_databases</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">_setup_databases</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">interactive</span><span class="s2">,</span>
+            <span class="s1">time_keeper</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">time_keeper</span><span class="s2">,</span>
+            <span class="s1">keepdb</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">keepdb</span><span class="s2">,</span>
+            <span class="s1">debug_sql</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql</span><span class="s2">,</span>
+            <span class="s1">parallel</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">parallel</span><span class="s2">,</span>
+            <span class="s2">**</span><span class="s1">kwargs</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_resultclass</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">debug_sql</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">DebugSQLTextTestResult</span>
+        <span class="s0">elif </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pdb</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">PDBDebugResult</span>
+
+    <span class="s0">def </span><span class="s1">get_test_runner_kwargs</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">kwargs </span><span class="s2">= {</span>
+            <span class="s3">&quot;failfast&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">failfast</span><span class="s2">,</span>
+            <span class="s3">&quot;resultclass&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_resultclass</span><span class="s2">(),</span>
+            <span class="s3">&quot;verbosity&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity</span><span class="s2">,</span>
+            <span class="s3">&quot;buffer&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">buffer</span><span class="s2">,</span>
+        <span class="s2">}</span>
+        <span class="s0">if </span><span class="s1">PY312</span><span class="s2">:</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;durations&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">durations</span>
+        <span class="s0">return </span><span class="s1">kwargs</span>
+
+    <span class="s0">def </span><span class="s1">run_checks</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">databases</span><span class="s2">):</span>
+        <span class="s5"># Checks are run after database creation since some checks require</span>
+        <span class="s5"># database access.</span>
+        <span class="s1">call_command</span><span class="s2">(</span><span class="s3">&quot;check&quot;</span><span class="s2">, </span><span class="s1">verbosity</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity</span><span class="s2">, </span><span class="s1">databases</span><span class="s2">=</span><span class="s1">databases</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">run_suite</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">suite</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">kwargs </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_test_runner_kwargs</span><span class="s2">()</span>
+        <span class="s1">runner </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">test_runner</span><span class="s2">(**</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">runner</span><span class="s2">.</span><span class="s1">run</span><span class="s2">(</span><span class="s1">suite</span><span class="s2">)</span>
+        <span class="s0">finally</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_shuffler </span><span class="s0">is not None</span><span class="s2">:</span>
+                <span class="s1">seed_display </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_shuffler</span><span class="s2">.</span><span class="s1">seed_display</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s3">f&quot;Used shuffle seed: </span><span class="s0">{</span><span class="s1">seed_display</span><span class="s0">}</span><span class="s3">&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">teardown_databases</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">old_config</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot;Destroy all the non-mirror databases.&quot;&quot;&quot;</span>
+        <span class="s1">_teardown_databases</span><span class="s2">(</span>
+            <span class="s1">old_config</span><span class="s2">,</span>
+            <span class="s1">verbosity</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity</span><span class="s2">,</span>
+            <span class="s1">parallel</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">parallel</span><span class="s2">,</span>
+            <span class="s1">keepdb</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">keepdb</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">teardown_test_environment</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">unittest</span><span class="s2">.</span><span class="s1">removeHandler</span><span class="s2">()</span>
+        <span class="s1">teardown_test_environment</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">suite_result</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">suite</span><span class="s2">, </span><span class="s1">result</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">(</span>
+            <span class="s1">len</span><span class="s2">(</span><span class="s1">result</span><span class="s2">.</span><span class="s1">failures</span><span class="s2">) + </span><span class="s1">len</span><span class="s2">(</span><span class="s1">result</span><span class="s2">.</span><span class="s1">errors</span><span class="s2">) + </span><span class="s1">len</span><span class="s2">(</span><span class="s1">result</span><span class="s2">.</span><span class="s1">unexpectedSuccesses</span><span class="s2">)</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_get_databases</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">suite</span><span class="s2">):</span>
+        <span class="s1">databases </span><span class="s2">= {}</span>
+        <span class="s0">for </span><span class="s1">test </span><span class="s0">in </span><span class="s1">iter_test_cases</span><span class="s2">(</span><span class="s1">suite</span><span class="s2">):</span>
+            <span class="s1">test_databases </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s3">&quot;databases&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">test_databases </span><span class="s2">== </span><span class="s3">&quot;__all__&quot;</span><span class="s2">:</span>
+                <span class="s1">test_databases </span><span class="s2">= </span><span class="s1">connections</span>
+            <span class="s0">if </span><span class="s1">test_databases</span><span class="s2">:</span>
+                <span class="s1">serialized_rollback </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s3">&quot;serialized_rollback&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">)</span>
+                <span class="s1">databases</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span>
+                    <span class="s2">(</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">serialized_rollback </span><span class="s0">or </span><span class="s1">databases</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">alias</span><span class="s2">, </span><span class="s0">False</span><span class="s2">))</span>
+                    <span class="s0">for </span><span class="s1">alias </span><span class="s0">in </span><span class="s1">test_databases</span>
+                <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">databases</span>
+
+    <span class="s0">def </span><span class="s1">get_databases</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">suite</span><span class="s2">):</span>
+        <span class="s1">databases </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_databases</span><span class="s2">(</span><span class="s1">suite</span><span class="s2">)</span>
+        <span class="s1">unused_databases </span><span class="s2">= [</span><span class="s1">alias </span><span class="s0">for </span><span class="s1">alias </span><span class="s0">in </span><span class="s1">connections </span><span class="s0">if </span><span class="s1">alias </span><span class="s0">not in </span><span class="s1">databases</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">unused_databases</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span>
+                <span class="s3">&quot;Skipping setup of unused database(s): %s.&quot;</span>
+                <span class="s2">% </span><span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">unused_databases</span><span class="s2">)),</span>
+                <span class="s1">level</span><span class="s2">=</span><span class="s1">logging</span><span class="s2">.</span><span class="s1">DEBUG</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">databases</span>
+
+    <span class="s0">def </span><span class="s1">run_tests</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">test_labels</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Run the unit tests for all the test labels in the provided list. 
+ 
+        Test labels should be dotted Python paths to test modules, test 
+        classes, or test methods. 
+ 
+        Return the number of tests that failed. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">setup_test_environment</span><span class="s2">()</span>
+        <span class="s1">suite </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">build_suite</span><span class="s2">(</span><span class="s1">test_labels</span><span class="s2">)</span>
+        <span class="s1">databases </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_databases</span><span class="s2">(</span><span class="s1">suite</span><span class="s2">)</span>
+        <span class="s1">suite</span><span class="s2">.</span><span class="s1">serialized_aliases </span><span class="s2">= </span><span class="s1">set</span><span class="s2">(</span>
+            <span class="s1">alias </span><span class="s0">for </span><span class="s1">alias</span><span class="s2">, </span><span class="s1">serialize </span><span class="s0">in </span><span class="s1">databases</span><span class="s2">.</span><span class="s1">items</span><span class="s2">() </span><span class="s0">if </span><span class="s1">serialize</span>
+        <span class="s2">)</span>
+        <span class="s1">suite</span><span class="s2">.</span><span class="s1">used_aliases </span><span class="s2">= </span><span class="s1">set</span><span class="s2">(</span><span class="s1">databases</span><span class="s2">)</span>
+        <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">time_keeper</span><span class="s2">.</span><span class="s1">timed</span><span class="s2">(</span><span class="s3">&quot;Total database setup&quot;</span><span class="s2">):</span>
+            <span class="s1">old_config </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">setup_databases</span><span class="s2">(</span>
+                <span class="s1">aliases</span><span class="s2">=</span><span class="s1">databases</span><span class="s2">,</span>
+                <span class="s1">serialized_aliases</span><span class="s2">=</span><span class="s1">suite</span><span class="s2">.</span><span class="s1">serialized_aliases</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s1">run_failed </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">run_checks</span><span class="s2">(</span><span class="s1">databases</span><span class="s2">)</span>
+            <span class="s1">result </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">run_suite</span><span class="s2">(</span><span class="s1">suite</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">Exception</span><span class="s2">:</span>
+            <span class="s1">run_failed </span><span class="s2">= </span><span class="s0">True</span>
+            <span class="s0">raise</span>
+        <span class="s0">finally</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">time_keeper</span><span class="s2">.</span><span class="s1">timed</span><span class="s2">(</span><span class="s3">&quot;Total database teardown&quot;</span><span class="s2">):</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">teardown_databases</span><span class="s2">(</span><span class="s1">old_config</span><span class="s2">)</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">teardown_test_environment</span><span class="s2">()</span>
+            <span class="s0">except </span><span class="s1">Exception</span><span class="s2">:</span>
+                <span class="s5"># Silence teardown exceptions if an exception was raised during</span>
+                <span class="s5"># runs to avoid shadowing it.</span>
+                <span class="s0">if not </span><span class="s1">run_failed</span><span class="s2">:</span>
+                    <span class="s0">raise</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">time_keeper</span><span class="s2">.</span><span class="s1">print_results</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">suite_result</span><span class="s2">(</span><span class="s1">suite</span><span class="s2">, </span><span class="s1">result</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">try_importing</span><span class="s2">(</span><span class="s1">label</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Try importing a test label, and return (is_importable, is_package). 
+ 
+    Relative labels like &quot;.&quot; and &quot;..&quot; are seen as directories. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">try</span><span class="s2">:</span>
+        <span class="s1">mod </span><span class="s2">= </span><span class="s1">import_module</span><span class="s2">(</span><span class="s1">label</span><span class="s2">)</span>
+    <span class="s0">except </span><span class="s2">(</span><span class="s1">ImportError</span><span class="s2">, </span><span class="s1">TypeError</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">(</span><span class="s0">False</span><span class="s2">, </span><span class="s0">False</span><span class="s2">)</span>
+
+    <span class="s0">return </span><span class="s2">(</span><span class="s0">True</span><span class="s2">, </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">mod</span><span class="s2">, </span><span class="s3">&quot;__path__&quot;</span><span class="s2">))</span>
+
+
+<span class="s0">def </span><span class="s1">find_top_level</span><span class="s2">(</span><span class="s1">top_level</span><span class="s2">):</span>
+    <span class="s5"># Try to be a bit smarter than unittest about finding the default top-level</span>
+    <span class="s5"># for a given directory path, to avoid breaking relative imports.</span>
+    <span class="s5"># (Unittest's default is to set top-level equal to the path, which means</span>
+    <span class="s5"># relative imports will result in &quot;Attempted relative import in</span>
+    <span class="s5"># non-package.&quot;).</span>
+
+    <span class="s5"># We'd be happy to skip this and require dotted module paths (which don't</span>
+    <span class="s5"># cause this problem) instead of file paths (which do), but in the case of</span>
+    <span class="s5"># a directory in the cwd, which would be equally valid if considered as a</span>
+    <span class="s5"># top-level module or as a directory path, unittest unfortunately prefers</span>
+    <span class="s5"># the latter.</span>
+    <span class="s0">while True</span><span class="s2">:</span>
+        <span class="s1">init_py </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">top_level</span><span class="s2">, </span><span class="s3">&quot;__init__.py&quot;</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s1">init_py</span><span class="s2">):</span>
+            <span class="s0">break</span>
+        <span class="s1">try_next </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">dirname</span><span class="s2">(</span><span class="s1">top_level</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">try_next </span><span class="s2">== </span><span class="s1">top_level</span><span class="s2">:</span>
+            <span class="s5"># __init__.py all the way down? give up.</span>
+            <span class="s0">break</span>
+        <span class="s1">top_level </span><span class="s2">= </span><span class="s1">try_next</span>
+    <span class="s0">return </span><span class="s1">top_level</span>
+
+
+<span class="s0">def </span><span class="s1">_class_shuffle_key</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">cls</span><span class="s2">.</span><span class="s1">__module__</span><span class="s0">}</span><span class="s3">.</span><span class="s0">{</span><span class="s1">cls</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s0">}</span><span class="s3">&quot;</span>
+
+
+<span class="s0">def </span><span class="s1">shuffle_tests</span><span class="s2">(</span><span class="s1">tests</span><span class="s2">, </span><span class="s1">shuffler</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Return an iterator over the given tests in a shuffled order, keeping tests 
+    next to other tests of their class. 
+ 
+    `tests` should be an iterable of tests. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">tests_by_type </span><span class="s2">= {}</span>
+    <span class="s0">for </span><span class="s1">_</span><span class="s2">, </span><span class="s1">class_tests </span><span class="s0">in </span><span class="s1">itertools</span><span class="s2">.</span><span class="s1">groupby</span><span class="s2">(</span><span class="s1">tests</span><span class="s2">, </span><span class="s1">type</span><span class="s2">):</span>
+        <span class="s1">class_tests </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">class_tests</span><span class="s2">)</span>
+        <span class="s1">test_type </span><span class="s2">= </span><span class="s1">type</span><span class="s2">(</span><span class="s1">class_tests</span><span class="s2">[</span><span class="s4">0</span><span class="s2">])</span>
+        <span class="s1">class_tests </span><span class="s2">= </span><span class="s1">shuffler</span><span class="s2">.</span><span class="s1">shuffle</span><span class="s2">(</span><span class="s1">class_tests</span><span class="s2">, </span><span class="s1">key</span><span class="s2">=</span><span class="s0">lambda </span><span class="s1">test</span><span class="s2">: </span><span class="s1">test</span><span class="s2">.</span><span class="s1">id</span><span class="s2">())</span>
+        <span class="s1">tests_by_type</span><span class="s2">[</span><span class="s1">test_type</span><span class="s2">] = </span><span class="s1">class_tests</span>
+
+    <span class="s1">classes </span><span class="s2">= </span><span class="s1">shuffler</span><span class="s2">.</span><span class="s1">shuffle</span><span class="s2">(</span><span class="s1">tests_by_type</span><span class="s2">, </span><span class="s1">key</span><span class="s2">=</span><span class="s1">_class_shuffle_key</span><span class="s2">)</span>
+
+    <span class="s0">return </span><span class="s1">itertools</span><span class="s2">.</span><span class="s1">chain</span><span class="s2">(*(</span><span class="s1">tests_by_type</span><span class="s2">[</span><span class="s1">cls</span><span class="s2">] </span><span class="s0">for </span><span class="s1">cls </span><span class="s0">in </span><span class="s1">classes</span><span class="s2">))</span>
+
+
+<span class="s0">def </span><span class="s1">reorder_test_bin</span><span class="s2">(</span><span class="s1">tests</span><span class="s2">, </span><span class="s1">shuffler</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">reverse</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Return an iterator that reorders the given tests, keeping tests next to 
+    other tests of their class. 
+ 
+    `tests` should be an iterable of tests that supports reversed(). 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">shuffler </span><span class="s0">is None</span><span class="s2">:</span>
+        <span class="s0">if </span><span class="s1">reverse</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">reversed</span><span class="s2">(</span><span class="s1">tests</span><span class="s2">)</span>
+        <span class="s5"># The function must return an iterator.</span>
+        <span class="s0">return </span><span class="s1">iter</span><span class="s2">(</span><span class="s1">tests</span><span class="s2">)</span>
+
+    <span class="s1">tests </span><span class="s2">= </span><span class="s1">shuffle_tests</span><span class="s2">(</span><span class="s1">tests</span><span class="s2">, </span><span class="s1">shuffler</span><span class="s2">)</span>
+    <span class="s0">if not </span><span class="s1">reverse</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">tests</span>
+    <span class="s5"># Arguments to reversed() must be reversible.</span>
+    <span class="s0">return </span><span class="s1">reversed</span><span class="s2">(</span><span class="s1">list</span><span class="s2">(</span><span class="s1">tests</span><span class="s2">))</span>
+
+
+<span class="s0">def </span><span class="s1">reorder_tests</span><span class="s2">(</span><span class="s1">tests</span><span class="s2">, </span><span class="s1">classes</span><span class="s2">, </span><span class="s1">reverse</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">shuffler</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot; 
+    Reorder an iterable of tests, grouping by the given TestCase classes. 
+ 
+    This function also removes any duplicates and reorders so that tests of the 
+    same type are consecutive. 
+ 
+    The result is returned as an iterator. `classes` is a sequence of types. 
+    Tests that are instances of `classes[0]` are grouped first, followed by 
+    instances of `classes[1]`, etc. Tests that are not instances of any of the 
+    classes are grouped last. 
+ 
+    If `reverse` is True, the tests within each `classes` group are reversed, 
+    but without reversing the order of `classes` itself. 
+ 
+    The `shuffler` argument is an optional instance of this module's `Shuffler` 
+    class. If provided, tests will be shuffled within each `classes` group, but 
+    keeping tests with other tests of their TestCase class. Reversing is 
+    applied after shuffling to allow reversing the same random order. 
+    &quot;&quot;&quot;</span>
+    <span class="s5"># Each bin maps TestCase class to OrderedSet of tests. This permits tests</span>
+    <span class="s5"># to be grouped by TestCase class even if provided non-consecutively.</span>
+    <span class="s1">bins </span><span class="s2">= [</span><span class="s1">defaultdict</span><span class="s2">(</span><span class="s1">OrderedSet</span><span class="s2">) </span><span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range</span><span class="s2">(</span><span class="s1">len</span><span class="s2">(</span><span class="s1">classes</span><span class="s2">) + </span><span class="s4">1</span><span class="s2">)]</span>
+    <span class="s2">*</span><span class="s1">class_bins</span><span class="s2">, </span><span class="s1">last_bin </span><span class="s2">= </span><span class="s1">bins</span>
+
+    <span class="s0">for </span><span class="s1">test </span><span class="s0">in </span><span class="s1">tests</span><span class="s2">:</span>
+        <span class="s0">for </span><span class="s1">test_bin</span><span class="s2">, </span><span class="s1">test_class </span><span class="s0">in </span><span class="s1">zip</span><span class="s2">(</span><span class="s1">class_bins</span><span class="s2">, </span><span class="s1">classes</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">test_class</span><span class="s2">):</span>
+                <span class="s0">break</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">test_bin </span><span class="s2">= </span><span class="s1">last_bin</span>
+        <span class="s1">test_bin</span><span class="s2">[</span><span class="s1">type</span><span class="s2">(</span><span class="s1">test</span><span class="s2">)].</span><span class="s1">add</span><span class="s2">(</span><span class="s1">test</span><span class="s2">)</span>
+
+    <span class="s0">for </span><span class="s1">test_bin </span><span class="s0">in </span><span class="s1">bins</span><span class="s2">:</span>
+        <span class="s5"># Call list() since reorder_test_bin()'s input must support reversed().</span>
+        <span class="s1">tests </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">itertools</span><span class="s2">.</span><span class="s1">chain</span><span class="s2">.</span><span class="s1">from_iterable</span><span class="s2">(</span><span class="s1">test_bin</span><span class="s2">.</span><span class="s1">values</span><span class="s2">()))</span>
+        <span class="s0">yield from </span><span class="s1">reorder_test_bin</span><span class="s2">(</span><span class="s1">tests</span><span class="s2">, </span><span class="s1">shuffler</span><span class="s2">=</span><span class="s1">shuffler</span><span class="s2">, </span><span class="s1">reverse</span><span class="s2">=</span><span class="s1">reverse</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">partition_suite_by_case</span><span class="s2">(</span><span class="s1">suite</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot;Partition a test suite by TestCase, preserving the order of tests.&quot;&quot;&quot;</span>
+    <span class="s1">suite_class </span><span class="s2">= </span><span class="s1">type</span><span class="s2">(</span><span class="s1">suite</span><span class="s2">)</span>
+    <span class="s1">all_tests </span><span class="s2">= </span><span class="s1">iter_test_cases</span><span class="s2">(</span><span class="s1">suite</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s2">[</span><span class="s1">suite_class</span><span class="s2">(</span><span class="s1">tests</span><span class="s2">) </span><span class="s0">for </span><span class="s1">_</span><span class="s2">, </span><span class="s1">tests </span><span class="s0">in </span><span class="s1">itertools</span><span class="s2">.</span><span class="s1">groupby</span><span class="s2">(</span><span class="s1">all_tests</span><span class="s2">, </span><span class="s1">type</span><span class="s2">)]</span>
+
+
+<span class="s0">def </span><span class="s1">test_match_tags</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">tags</span><span class="s2">, </span><span class="s1">exclude_tags</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">unittest</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">_FailedTest</span><span class="s2">):</span>
+        <span class="s5"># Tests that couldn't load always match to prevent tests from falsely</span>
+        <span class="s5"># passing due e.g. to syntax errors.</span>
+        <span class="s0">return True</span>
+    <span class="s1">test_tags </span><span class="s2">= </span><span class="s1">set</span><span class="s2">(</span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s3">&quot;tags&quot;</span><span class="s2">, []))</span>
+    <span class="s1">test_fn_name </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s3">&quot;_testMethodName&quot;</span><span class="s2">, </span><span class="s1">str</span><span class="s2">(</span><span class="s1">test</span><span class="s2">))</span>
+    <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">test_fn_name</span><span class="s2">):</span>
+        <span class="s1">test_fn </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">test_fn_name</span><span class="s2">)</span>
+        <span class="s1">test_fn_tags </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">test_fn</span><span class="s2">, </span><span class="s3">&quot;tags&quot;</span><span class="s2">, []))</span>
+        <span class="s1">test_tags </span><span class="s2">= </span><span class="s1">test_tags</span><span class="s2">.</span><span class="s1">union</span><span class="s2">(</span><span class="s1">test_fn_tags</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">tags </span><span class="s0">and </span><span class="s1">test_tags</span><span class="s2">.</span><span class="s1">isdisjoint</span><span class="s2">(</span><span class="s1">tags</span><span class="s2">):</span>
+        <span class="s0">return False</span>
+    <span class="s0">return </span><span class="s1">test_tags</span><span class="s2">.</span><span class="s1">isdisjoint</span><span class="s2">(</span><span class="s1">exclude_tags</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">filter_tests_by_tags</span><span class="s2">(</span><span class="s1">tests</span><span class="s2">, </span><span class="s1">tags</span><span class="s2">, </span><span class="s1">exclude_tags</span><span class="s2">):</span>
+    <span class="s6">&quot;&quot;&quot;Return the matching tests as an iterator.&quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s2">(</span><span class="s1">test </span><span class="s0">for </span><span class="s1">test </span><span class="s0">in </span><span class="s1">tests </span><span class="s0">if </span><span class="s1">test_match_tags</span><span class="s2">(</span><span class="s1">test</span><span class="s2">, </span><span class="s1">tags</span><span class="s2">, </span><span class="s1">exclude_tags</span><span class="s2">))</span>
+</pre>
+</body>
+</html>

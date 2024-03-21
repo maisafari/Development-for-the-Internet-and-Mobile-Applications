@@ -1,0 +1,82 @@
+<html>
+<head>
+<title>l10n.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+l10n.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template </span><span class="s0">import </span><span class="s1">Library</span><span class="s2">, </span><span class="s1">Node</span><span class="s2">, </span><span class="s1">TemplateSyntaxError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">formats</span>
+
+<span class="s1">register </span><span class="s2">= </span><span class="s1">Library</span><span class="s2">()</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">is_safe</span><span class="s2">=</span><span class="s0">False</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">localize</span><span class="s2">(</span><span class="s1">value</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Force a value to be rendered as a localized value. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">str</span><span class="s2">(</span><span class="s1">formats</span><span class="s2">.</span><span class="s1">localize</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">use_l10n</span><span class="s2">=</span><span class="s0">True</span><span class="s2">))</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">is_safe</span><span class="s2">=</span><span class="s0">False</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">unlocalize</span><span class="s2">(</span><span class="s1">value</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Force a value to be rendered as a non-localized value. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">str</span><span class="s2">(</span><span class="s1">formats</span><span class="s2">.</span><span class="s1">localize</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">use_l10n</span><span class="s2">=</span><span class="s0">False</span><span class="s2">))</span>
+
+
+<span class="s0">class </span><span class="s1">LocalizeNode</span><span class="s2">(</span><span class="s1">Node</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">nodelist</span><span class="s2">, </span><span class="s1">use_l10n</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">nodelist </span><span class="s2">= </span><span class="s1">nodelist</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">use_l10n </span><span class="s2">= </span><span class="s1">use_l10n</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s4">&quot;&lt;%s&gt;&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s1">old_setting </span><span class="s2">= </span><span class="s1">context</span><span class="s2">.</span><span class="s1">use_l10n</span>
+        <span class="s1">context</span><span class="s2">.</span><span class="s1">use_l10n </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">use_l10n</span>
+        <span class="s1">output </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">nodelist</span><span class="s2">.</span><span class="s1">render</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+        <span class="s1">context</span><span class="s2">.</span><span class="s1">use_l10n </span><span class="s2">= </span><span class="s1">old_setting</span>
+        <span class="s0">return </span><span class="s1">output</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s4">&quot;localize&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">localize_tag</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Force or prevents localization of values. 
+ 
+    Sample usage:: 
+ 
+        {% localize off %} 
+            var pi = {{ 3.1415 }}; 
+        {% endlocalize %} 
+    &quot;&quot;&quot;</span>
+    <span class="s1">use_l10n </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">bits </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">token</span><span class="s2">.</span><span class="s1">split_contents</span><span class="s2">())</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">bits</span><span class="s2">) == </span><span class="s5">1</span><span class="s2">:</span>
+        <span class="s1">use_l10n </span><span class="s2">= </span><span class="s0">True</span>
+    <span class="s0">elif </span><span class="s1">len</span><span class="s2">(</span><span class="s1">bits</span><span class="s2">) &gt; </span><span class="s5">2 </span><span class="s0">or </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">1</span><span class="s2">] </span><span class="s0">not in </span><span class="s2">(</span><span class="s4">&quot;on&quot;</span><span class="s2">, </span><span class="s4">&quot;off&quot;</span><span class="s2">):</span>
+        <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span><span class="s4">&quot;%r argument should be 'on' or 'off'&quot; </span><span class="s2">% </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">0</span><span class="s2">])</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">use_l10n </span><span class="s2">= </span><span class="s1">bits</span><span class="s2">[</span><span class="s5">1</span><span class="s2">] == </span><span class="s4">&quot;on&quot;</span>
+    <span class="s1">nodelist </span><span class="s2">= </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">parse</span><span class="s2">((</span><span class="s4">&quot;endlocalize&quot;</span><span class="s2">,))</span>
+    <span class="s1">parser</span><span class="s2">.</span><span class="s1">delete_first_token</span><span class="s2">()</span>
+    <span class="s0">return </span><span class="s1">LocalizeNode</span><span class="s2">(</span><span class="s1">nodelist</span><span class="s2">, </span><span class="s1">use_l10n</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<html>
+<head>
+<title>lexer.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #5f826b; font-style: italic;}
+.s3 { color: #cf8e6d;}
+.s4 { color: #bcbec4;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+lexer.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#</span>
+<span class="s0"># Copyright (C) 2009-2020 the sqlparse authors and contributors</span>
+<span class="s0"># &lt;see AUTHORS file&gt;</span>
+<span class="s0">#</span>
+<span class="s0"># This module is part of python-sqlparse and is released under</span>
+<span class="s0"># the BSD License: https://opensource.org/licenses/BSD-3-Clause</span>
+
+<span class="s2">&quot;&quot;&quot;SQL Lexer&quot;&quot;&quot;</span>
+<span class="s3">import </span><span class="s1">re</span>
+
+<span class="s0"># This code is based on the SqlLexer in pygments.</span>
+<span class="s0"># http://pygments.org/</span>
+<span class="s0"># It's separated from the rest of pygments to increase performance</span>
+<span class="s0"># and to allow some customizations.</span>
+
+<span class="s3">from </span><span class="s1">io </span><span class="s3">import </span><span class="s1">TextIOBase</span>
+
+<span class="s3">from </span><span class="s1">sqlparse </span><span class="s3">import </span><span class="s1">tokens</span><span class="s4">, </span><span class="s1">keywords</span>
+<span class="s3">from </span><span class="s1">sqlparse</span><span class="s4">.</span><span class="s1">utils </span><span class="s3">import </span><span class="s1">consume</span>
+
+
+<span class="s3">class </span><span class="s1">Lexer</span><span class="s4">:</span>
+    <span class="s2">&quot;&quot;&quot;The Lexer supports configurable syntax. 
+    To add support for additional keywords, use the `add_keywords` method.&quot;&quot;&quot;</span>
+
+    <span class="s1">_default_intance </span><span class="s4">= </span><span class="s3">None</span>
+
+    <span class="s0"># Development notes:</span>
+    <span class="s0"># - This class is prepared to be able to support additional SQL dialects</span>
+    <span class="s0">#   in the future by adding additional functions that take the place of</span>
+    <span class="s0">#   the function default_initialization()</span>
+    <span class="s0"># - The lexer class uses an explicit singleton behavior with the</span>
+    <span class="s0">#   instance-getter method get_default_instance(). This mechanism has</span>
+    <span class="s0">#   the advantage that the call signature of the entry-points to the</span>
+    <span class="s0">#   sqlparse library are not affected. Also, usage of sqlparse in third</span>
+    <span class="s0">#   party code does not need to be adapted. On the other hand, singleton</span>
+    <span class="s0">#   behavior is not thread safe, and the current implementation does not</span>
+    <span class="s0">#   easily allow for multiple SQL dialects to be parsed in the same</span>
+    <span class="s0">#   process. Such behavior can be supported in the future by passing a</span>
+    <span class="s0">#   suitably initialized lexer object as an additional parameter to the</span>
+    <span class="s0">#   entry-point functions (such as `parse`). Code will need to be written</span>
+    <span class="s0">#   to pass down and utilize such an object. The current implementation</span>
+    <span class="s0">#   is prepared to support this thread safe approach without the</span>
+    <span class="s0">#   default_instance part needing to change interface.</span>
+
+    <span class="s4">@</span><span class="s1">classmethod</span>
+    <span class="s3">def </span><span class="s1">get_default_instance</span><span class="s4">(</span><span class="s1">cls</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the lexer instance used internally 
+        by the sqlparse core functions.&quot;&quot;&quot;</span>
+        <span class="s3">if </span><span class="s1">cls</span><span class="s4">.</span><span class="s1">_default_intance </span><span class="s3">is None</span><span class="s4">:</span>
+            <span class="s1">cls</span><span class="s4">.</span><span class="s1">_default_intance </span><span class="s4">= </span><span class="s1">cls</span><span class="s4">()</span>
+            <span class="s1">cls</span><span class="s4">.</span><span class="s1">_default_intance</span><span class="s4">.</span><span class="s1">default_initialization</span><span class="s4">()</span>
+        <span class="s3">return </span><span class="s1">cls</span><span class="s4">.</span><span class="s1">_default_intance</span>
+
+    <span class="s3">def </span><span class="s1">default_initialization</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Initialize the lexer with default dictionaries. 
+        Useful if you need to revert custom syntax settings.&quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">clear</span><span class="s4">()</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">set_SQL_REGEX</span><span class="s4">(</span><span class="s1">keywords</span><span class="s4">.</span><span class="s1">SQL_REGEX</span><span class="s4">)</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">add_keywords</span><span class="s4">(</span><span class="s1">keywords</span><span class="s4">.</span><span class="s1">KEYWORDS_COMMON</span><span class="s4">)</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">add_keywords</span><span class="s4">(</span><span class="s1">keywords</span><span class="s4">.</span><span class="s1">KEYWORDS_ORACLE</span><span class="s4">)</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">add_keywords</span><span class="s4">(</span><span class="s1">keywords</span><span class="s4">.</span><span class="s1">KEYWORDS_PLPGSQL</span><span class="s4">)</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">add_keywords</span><span class="s4">(</span><span class="s1">keywords</span><span class="s4">.</span><span class="s1">KEYWORDS_HQL</span><span class="s4">)</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">add_keywords</span><span class="s4">(</span><span class="s1">keywords</span><span class="s4">.</span><span class="s1">KEYWORDS_MSACCESS</span><span class="s4">)</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">add_keywords</span><span class="s4">(</span><span class="s1">keywords</span><span class="s4">.</span><span class="s1">KEYWORDS</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">clear</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Clear all syntax configurations. 
+        Useful if you want to load a reduced set of syntax configurations. 
+        After this call, regexps and keyword dictionaries need to be loaded 
+        to make the lexer functional again.&quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">_SQL_REGEX </span><span class="s4">= []</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">_keywords </span><span class="s4">= []</span>
+
+    <span class="s3">def </span><span class="s1">set_SQL_REGEX</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">SQL_REGEX</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Set the list of regex that will parse the SQL.&quot;&quot;&quot;</span>
+        <span class="s1">FLAGS </span><span class="s4">= </span><span class="s1">re</span><span class="s4">.</span><span class="s1">IGNORECASE </span><span class="s4">| </span><span class="s1">re</span><span class="s4">.</span><span class="s1">UNICODE</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">_SQL_REGEX </span><span class="s4">= [</span>
+            <span class="s4">(</span><span class="s1">re</span><span class="s4">.</span><span class="s1">compile</span><span class="s4">(</span><span class="s1">rx</span><span class="s4">, </span><span class="s1">FLAGS</span><span class="s4">).</span><span class="s1">match</span><span class="s4">, </span><span class="s1">tt</span><span class="s4">)</span>
+            <span class="s3">for </span><span class="s1">rx</span><span class="s4">, </span><span class="s1">tt </span><span class="s3">in </span><span class="s1">SQL_REGEX</span>
+        <span class="s4">]</span>
+
+    <span class="s3">def </span><span class="s1">add_keywords</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">keywords</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Add keyword dictionaries. Keywords are looked up in the same order 
+        that dictionaries were added.&quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">_keywords</span><span class="s4">.</span><span class="s1">append</span><span class="s4">(</span><span class="s1">keywords</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">is_keyword</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">value</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Checks for a keyword. 
+ 
+        If the given value is in one of the KEYWORDS_* dictionary 
+        it's considered a keyword. Otherwise, tokens.Name is returned. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">val </span><span class="s4">= </span><span class="s1">value</span><span class="s4">.</span><span class="s1">upper</span><span class="s4">()</span>
+        <span class="s3">for </span><span class="s1">kwdict </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_keywords</span><span class="s4">:</span>
+            <span class="s3">if </span><span class="s1">val </span><span class="s3">in </span><span class="s1">kwdict</span><span class="s4">:</span>
+                <span class="s3">return </span><span class="s1">kwdict</span><span class="s4">[</span><span class="s1">val</span><span class="s4">], </span><span class="s1">value</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">tokens</span><span class="s4">.</span><span class="s1">Name</span><span class="s4">, </span><span class="s1">value</span>
+
+    <span class="s3">def </span><span class="s1">get_tokens</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">text</span><span class="s4">, </span><span class="s1">encoding</span><span class="s4">=</span><span class="s3">None</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Return an iterable of (tokentype, value) pairs generated from 
+        `text`. If `unfiltered` is set to `True`, the filtering mechanism 
+        is bypassed even if filters are defined. 
+ 
+        Also preprocess the text, i.e. expand tabs and strip it if 
+        wanted and applies registered filters. 
+ 
+        Split ``text`` into (tokentype, text) pairs. 
+ 
+        ``stack`` is the initial stack (default: ``['root']``) 
+        &quot;&quot;&quot;</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">text</span><span class="s4">, </span><span class="s1">TextIOBase</span><span class="s4">):</span>
+            <span class="s1">text </span><span class="s4">= </span><span class="s1">text</span><span class="s4">.</span><span class="s1">read</span><span class="s4">()</span>
+
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">text</span><span class="s4">, </span><span class="s1">str</span><span class="s4">):</span>
+            <span class="s3">pass</span>
+        <span class="s3">elif </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">text</span><span class="s4">, </span><span class="s1">bytes</span><span class="s4">):</span>
+            <span class="s3">if </span><span class="s1">encoding</span><span class="s4">:</span>
+                <span class="s1">text </span><span class="s4">= </span><span class="s1">text</span><span class="s4">.</span><span class="s1">decode</span><span class="s4">(</span><span class="s1">encoding</span><span class="s4">)</span>
+            <span class="s3">else</span><span class="s4">:</span>
+                <span class="s3">try</span><span class="s4">:</span>
+                    <span class="s1">text </span><span class="s4">= </span><span class="s1">text</span><span class="s4">.</span><span class="s1">decode</span><span class="s4">(</span><span class="s5">'utf-8'</span><span class="s4">)</span>
+                <span class="s3">except </span><span class="s1">UnicodeDecodeError</span><span class="s4">:</span>
+                    <span class="s1">text </span><span class="s4">= </span><span class="s1">text</span><span class="s4">.</span><span class="s1">decode</span><span class="s4">(</span><span class="s5">'unicode-escape'</span><span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span><span class="s5">&quot;Expected text or file-like object, got {!r}&quot;</span><span class="s4">.</span>
+                            <span class="s1">format</span><span class="s4">(</span><span class="s1">type</span><span class="s4">(</span><span class="s1">text</span><span class="s4">)))</span>
+
+        <span class="s1">iterable </span><span class="s4">= </span><span class="s1">enumerate</span><span class="s4">(</span><span class="s1">text</span><span class="s4">)</span>
+        <span class="s3">for </span><span class="s1">pos</span><span class="s4">, </span><span class="s1">char </span><span class="s3">in </span><span class="s1">iterable</span><span class="s4">:</span>
+            <span class="s3">for </span><span class="s1">rexmatch</span><span class="s4">, </span><span class="s1">action </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_SQL_REGEX</span><span class="s4">:</span>
+                <span class="s1">m </span><span class="s4">= </span><span class="s1">rexmatch</span><span class="s4">(</span><span class="s1">text</span><span class="s4">, </span><span class="s1">pos</span><span class="s4">)</span>
+
+                <span class="s3">if not </span><span class="s1">m</span><span class="s4">:</span>
+                    <span class="s3">continue</span>
+                <span class="s3">elif </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">action</span><span class="s4">, </span><span class="s1">tokens</span><span class="s4">.</span><span class="s1">_TokenType</span><span class="s4">):</span>
+                    <span class="s3">yield </span><span class="s1">action</span><span class="s4">, </span><span class="s1">m</span><span class="s4">.</span><span class="s1">group</span><span class="s4">()</span>
+                <span class="s3">elif </span><span class="s1">action </span><span class="s3">is </span><span class="s1">keywords</span><span class="s4">.</span><span class="s1">PROCESS_AS_KEYWORD</span><span class="s4">:</span>
+                    <span class="s3">yield </span><span class="s1">self</span><span class="s4">.</span><span class="s1">is_keyword</span><span class="s4">(</span><span class="s1">m</span><span class="s4">.</span><span class="s1">group</span><span class="s4">())</span>
+
+                <span class="s1">consume</span><span class="s4">(</span><span class="s1">iterable</span><span class="s4">, </span><span class="s1">m</span><span class="s4">.</span><span class="s1">end</span><span class="s4">() - </span><span class="s1">pos </span><span class="s4">- </span><span class="s6">1</span><span class="s4">)</span>
+                <span class="s3">break</span>
+            <span class="s3">else</span><span class="s4">:</span>
+                <span class="s3">yield </span><span class="s1">tokens</span><span class="s4">.</span><span class="s1">Error</span><span class="s4">, </span><span class="s1">char</span>
+
+
+<span class="s3">def </span><span class="s1">tokenize</span><span class="s4">(</span><span class="s1">sql</span><span class="s4">, </span><span class="s1">encoding</span><span class="s4">=</span><span class="s3">None</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;Tokenize sql. 
+ 
+    Tokenize *sql* using the :class:`Lexer` and return a 2-tuple stream 
+    of ``(token type, value)`` items. 
+    &quot;&quot;&quot;</span>
+    <span class="s3">return </span><span class="s1">Lexer</span><span class="s4">.</span><span class="s1">get_default_instance</span><span class="s4">().</span><span class="s1">get_tokens</span><span class="s4">(</span><span class="s1">sql</span><span class="s4">, </span><span class="s1">encoding</span><span class="s4">)</span>
+</pre>
+</body>
+</html>

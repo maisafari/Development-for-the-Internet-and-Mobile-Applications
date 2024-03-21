@@ -1,0 +1,159 @@
+<html>
+<head>
+<title>others.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+others.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#</span>
+<span class="s0"># Copyright (C) 2009-2020 the sqlparse authors and contributors</span>
+<span class="s0"># &lt;see AUTHORS file&gt;</span>
+<span class="s0">#</span>
+<span class="s0"># This module is part of python-sqlparse and is released under</span>
+<span class="s0"># the BSD License: https://opensource.org/licenses/BSD-3-Clause</span>
+
+<span class="s2">import </span><span class="s1">re</span>
+
+<span class="s2">from </span><span class="s1">sqlparse </span><span class="s2">import </span><span class="s1">sql</span><span class="s3">, </span><span class="s1">tokens </span><span class="s2">as </span><span class="s1">T</span>
+<span class="s2">from </span><span class="s1">sqlparse</span><span class="s3">.</span><span class="s1">utils </span><span class="s2">import </span><span class="s1">split_unquoted_newlines</span>
+
+
+<span class="s2">class </span><span class="s1">StripCommentsFilter</span><span class="s3">:</span>
+
+    <span class="s3">@</span><span class="s1">staticmethod</span>
+    <span class="s2">def </span><span class="s1">_process</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">):</span>
+        <span class="s2">def </span><span class="s1">get_next_comment</span><span class="s3">():</span>
+            <span class="s0"># TODO(andi) Comment types should be unified, see related issue38</span>
+            <span class="s2">return </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">token_next_by</span><span class="s3">(</span><span class="s1">i</span><span class="s3">=</span><span class="s1">sql</span><span class="s3">.</span><span class="s1">Comment</span><span class="s3">, </span><span class="s1">t</span><span class="s3">=</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Comment</span><span class="s3">)</span>
+
+        <span class="s2">def </span><span class="s1">_get_insert_token</span><span class="s3">(</span><span class="s1">token</span><span class="s3">):</span>
+            <span class="s4">&quot;&quot;&quot;Returns either a whitespace or the line breaks from token.&quot;&quot;&quot;</span>
+            <span class="s0"># See issue484 why line breaks should be preserved.</span>
+            <span class="s0"># Note: The actual value for a line break is replaced by \n</span>
+            <span class="s0"># in SerializerUnicode which will be executed in the</span>
+            <span class="s0"># postprocessing state.</span>
+            <span class="s1">m </span><span class="s3">= </span><span class="s1">re</span><span class="s3">.</span><span class="s1">search</span><span class="s3">(</span><span class="s5">r'((\r|\n)+) *$'</span><span class="s3">, </span><span class="s1">token</span><span class="s3">.</span><span class="s1">value</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">m </span><span class="s2">is not None</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">sql</span><span class="s3">.</span><span class="s1">Token</span><span class="s3">(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Whitespace</span><span class="s3">.</span><span class="s1">Newline</span><span class="s3">, </span><span class="s1">m</span><span class="s3">.</span><span class="s1">groups</span><span class="s3">()[</span><span class="s6">0</span><span class="s3">])</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">sql</span><span class="s3">.</span><span class="s1">Token</span><span class="s3">(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Whitespace</span><span class="s3">, </span><span class="s5">' '</span><span class="s3">)</span>
+
+        <span class="s1">tidx</span><span class="s3">, </span><span class="s1">token </span><span class="s3">= </span><span class="s1">get_next_comment</span><span class="s3">()</span>
+        <span class="s2">while </span><span class="s1">token</span><span class="s3">:</span>
+            <span class="s1">pidx</span><span class="s3">, </span><span class="s1">prev_ </span><span class="s3">= </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">token_prev</span><span class="s3">(</span><span class="s1">tidx</span><span class="s3">, </span><span class="s1">skip_ws</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+            <span class="s1">nidx</span><span class="s3">, </span><span class="s1">next_ </span><span class="s3">= </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">token_next</span><span class="s3">(</span><span class="s1">tidx</span><span class="s3">, </span><span class="s1">skip_ws</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+            <span class="s0"># Replace by whitespace if prev and next exist and if they're not</span>
+            <span class="s0"># whitespaces. This doesn't apply if prev or next is a parenthesis.</span>
+            <span class="s2">if </span><span class="s3">(</span><span class="s1">prev_ </span><span class="s2">is None or </span><span class="s1">next_ </span><span class="s2">is None</span>
+                    <span class="s2">or </span><span class="s1">prev_</span><span class="s3">.</span><span class="s1">is_whitespace </span><span class="s2">or </span><span class="s1">prev_</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Punctuation</span><span class="s3">, </span><span class="s5">'('</span><span class="s3">)</span>
+                    <span class="s2">or </span><span class="s1">next_</span><span class="s3">.</span><span class="s1">is_whitespace </span><span class="s2">or </span><span class="s1">next_</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Punctuation</span><span class="s3">, </span><span class="s5">')'</span><span class="s3">)):</span>
+                <span class="s0"># Insert a whitespace to ensure the following SQL produces</span>
+                <span class="s0"># a valid SQL (see #425).</span>
+                <span class="s2">if </span><span class="s1">prev_ </span><span class="s2">is not None and not </span><span class="s1">prev_</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Punctuation</span><span class="s3">, </span><span class="s5">'('</span><span class="s3">):</span>
+                    <span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">insert</span><span class="s3">(</span><span class="s1">tidx</span><span class="s3">, </span><span class="s1">_get_insert_token</span><span class="s3">(</span><span class="s1">token</span><span class="s3">))</span>
+                <span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">remove</span><span class="s3">(</span><span class="s1">token</span><span class="s3">)</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">[</span><span class="s1">tidx</span><span class="s3">] = </span><span class="s1">_get_insert_token</span><span class="s3">(</span><span class="s1">token</span><span class="s3">)</span>
+
+            <span class="s1">tidx</span><span class="s3">, </span><span class="s1">token </span><span class="s3">= </span><span class="s1">get_next_comment</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">process</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">stmt</span><span class="s3">):</span>
+        <span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">process</span><span class="s3">(</span><span class="s1">sgroup</span><span class="s3">) </span><span class="s2">for </span><span class="s1">sgroup </span><span class="s2">in </span><span class="s1">stmt</span><span class="s3">.</span><span class="s1">get_sublists</span><span class="s3">()]</span>
+        <span class="s1">StripCommentsFilter</span><span class="s3">.</span><span class="s1">_process</span><span class="s3">(</span><span class="s1">stmt</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">stmt</span>
+
+
+<span class="s2">class </span><span class="s1">StripWhitespaceFilter</span><span class="s3">:</span>
+    <span class="s2">def </span><span class="s1">_stripws</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">tlist</span><span class="s3">):</span>
+        <span class="s1">func_name </span><span class="s3">= </span><span class="s5">'_stripws_{cls}'</span><span class="s3">.</span><span class="s1">format</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">=</span><span class="s1">type</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">).</span><span class="s1">__name__</span><span class="s3">)</span>
+        <span class="s1">func </span><span class="s3">= </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">func_name</span><span class="s3">.</span><span class="s1">lower</span><span class="s3">(), </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_stripws_default</span><span class="s3">)</span>
+        <span class="s1">func</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">staticmethod</span>
+    <span class="s2">def </span><span class="s1">_stripws_default</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">):</span>
+        <span class="s1">last_was_ws </span><span class="s3">= </span><span class="s2">False</span>
+        <span class="s1">is_first_char </span><span class="s3">= </span><span class="s2">True</span>
+        <span class="s2">for </span><span class="s1">token </span><span class="s2">in </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">token</span><span class="s3">.</span><span class="s1">is_whitespace</span><span class="s3">:</span>
+                <span class="s1">token</span><span class="s3">.</span><span class="s1">value </span><span class="s3">= </span><span class="s5">'' </span><span class="s2">if </span><span class="s1">last_was_ws </span><span class="s2">or </span><span class="s1">is_first_char </span><span class="s2">else </span><span class="s5">' '</span>
+            <span class="s1">last_was_ws </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">is_whitespace</span>
+            <span class="s1">is_first_char </span><span class="s3">= </span><span class="s2">False</span>
+
+    <span class="s2">def </span><span class="s1">_stripws_identifierlist</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">tlist</span><span class="s3">):</span>
+        <span class="s0"># Removes newlines before commas, see issue140</span>
+        <span class="s1">last_nl </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s2">for </span><span class="s1">token </span><span class="s2">in </span><span class="s1">list</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">):</span>
+            <span class="s2">if </span><span class="s1">last_nl </span><span class="s2">and </span><span class="s1">token</span><span class="s3">.</span><span class="s1">ttype </span><span class="s2">is </span><span class="s1">T</span><span class="s3">.</span><span class="s1">Punctuation </span><span class="s2">and </span><span class="s1">token</span><span class="s3">.</span><span class="s1">value </span><span class="s3">== </span><span class="s5">','</span><span class="s3">:</span>
+                <span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">remove</span><span class="s3">(</span><span class="s1">last_nl</span><span class="s3">)</span>
+            <span class="s1">last_nl </span><span class="s3">= </span><span class="s1">token </span><span class="s2">if </span><span class="s1">token</span><span class="s3">.</span><span class="s1">is_whitespace </span><span class="s2">else None</span>
+
+            <span class="s0"># next_ = tlist.token_next(token, skip_ws=False)</span>
+            <span class="s0"># if (next_ and not next_.is_whitespace and</span>
+            <span class="s0">#             token.ttype is T.Punctuation and token.value == ','):</span>
+            <span class="s0">#     tlist.insert_after(token, sql.Token(T.Whitespace, ' '))</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_stripws_default</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_stripws_parenthesis</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">tlist</span><span class="s3">):</span>
+        <span class="s2">while </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">[</span><span class="s6">1</span><span class="s3">].</span><span class="s1">is_whitespace</span><span class="s3">:</span>
+            <span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">(</span><span class="s6">1</span><span class="s3">)</span>
+        <span class="s2">while </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">[-</span><span class="s6">2</span><span class="s3">].</span><span class="s1">is_whitespace</span><span class="s3">:</span>
+            <span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">(-</span><span class="s6">2</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_stripws_default</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">process</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">stmt</span><span class="s3">, </span><span class="s1">depth</span><span class="s3">=</span><span class="s6">0</span><span class="s3">):</span>
+        <span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">process</span><span class="s3">(</span><span class="s1">sgroup</span><span class="s3">, </span><span class="s1">depth </span><span class="s3">+ </span><span class="s6">1</span><span class="s3">) </span><span class="s2">for </span><span class="s1">sgroup </span><span class="s2">in </span><span class="s1">stmt</span><span class="s3">.</span><span class="s1">get_sublists</span><span class="s3">()]</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_stripws</span><span class="s3">(</span><span class="s1">stmt</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">depth </span><span class="s3">== </span><span class="s6">0 </span><span class="s2">and </span><span class="s1">stmt</span><span class="s3">.</span><span class="s1">tokens </span><span class="s2">and </span><span class="s1">stmt</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">].</span><span class="s1">is_whitespace</span><span class="s3">:</span>
+            <span class="s1">stmt</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">(-</span><span class="s6">1</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">stmt</span>
+
+
+<span class="s2">class </span><span class="s1">SpacesAroundOperatorsFilter</span><span class="s3">:</span>
+    <span class="s3">@</span><span class="s1">staticmethod</span>
+    <span class="s2">def </span><span class="s1">_process</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">):</span>
+
+        <span class="s1">ttypes </span><span class="s3">= (</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Operator</span><span class="s3">, </span><span class="s1">T</span><span class="s3">.</span><span class="s1">Comparison</span><span class="s3">)</span>
+        <span class="s1">tidx</span><span class="s3">, </span><span class="s1">token </span><span class="s3">= </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">token_next_by</span><span class="s3">(</span><span class="s1">t</span><span class="s3">=</span><span class="s1">ttypes</span><span class="s3">)</span>
+        <span class="s2">while </span><span class="s1">token</span><span class="s3">:</span>
+            <span class="s1">nidx</span><span class="s3">, </span><span class="s1">next_ </span><span class="s3">= </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">token_next</span><span class="s3">(</span><span class="s1">tidx</span><span class="s3">, </span><span class="s1">skip_ws</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">next_ </span><span class="s2">and </span><span class="s1">next_</span><span class="s3">.</span><span class="s1">ttype </span><span class="s3">!= </span><span class="s1">T</span><span class="s3">.</span><span class="s1">Whitespace</span><span class="s3">:</span>
+                <span class="s1">tlist</span><span class="s3">.</span><span class="s1">insert_after</span><span class="s3">(</span><span class="s1">tidx</span><span class="s3">, </span><span class="s1">sql</span><span class="s3">.</span><span class="s1">Token</span><span class="s3">(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Whitespace</span><span class="s3">, </span><span class="s5">' '</span><span class="s3">))</span>
+
+            <span class="s1">pidx</span><span class="s3">, </span><span class="s1">prev_ </span><span class="s3">= </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">token_prev</span><span class="s3">(</span><span class="s1">tidx</span><span class="s3">, </span><span class="s1">skip_ws</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">prev_ </span><span class="s2">and </span><span class="s1">prev_</span><span class="s3">.</span><span class="s1">ttype </span><span class="s3">!= </span><span class="s1">T</span><span class="s3">.</span><span class="s1">Whitespace</span><span class="s3">:</span>
+                <span class="s1">tlist</span><span class="s3">.</span><span class="s1">insert_before</span><span class="s3">(</span><span class="s1">tidx</span><span class="s3">, </span><span class="s1">sql</span><span class="s3">.</span><span class="s1">Token</span><span class="s3">(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Whitespace</span><span class="s3">, </span><span class="s5">' '</span><span class="s3">))</span>
+                <span class="s1">tidx </span><span class="s3">+= </span><span class="s6">1  </span><span class="s0"># has to shift since token inserted before it</span>
+
+            <span class="s0"># assert tlist.token_index(token) == tidx</span>
+            <span class="s1">tidx</span><span class="s3">, </span><span class="s1">token </span><span class="s3">= </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">token_next_by</span><span class="s3">(</span><span class="s1">t</span><span class="s3">=</span><span class="s1">ttypes</span><span class="s3">, </span><span class="s1">idx</span><span class="s3">=</span><span class="s1">tidx</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">process</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">stmt</span><span class="s3">):</span>
+        <span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">process</span><span class="s3">(</span><span class="s1">sgroup</span><span class="s3">) </span><span class="s2">for </span><span class="s1">sgroup </span><span class="s2">in </span><span class="s1">stmt</span><span class="s3">.</span><span class="s1">get_sublists</span><span class="s3">()]</span>
+        <span class="s1">SpacesAroundOperatorsFilter</span><span class="s3">.</span><span class="s1">_process</span><span class="s3">(</span><span class="s1">stmt</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">stmt</span>
+
+
+<span class="s0"># ---------------------------</span>
+<span class="s0"># postprocess</span>
+
+<span class="s2">class </span><span class="s1">SerializerUnicode</span><span class="s3">:</span>
+    <span class="s3">@</span><span class="s1">staticmethod</span>
+    <span class="s2">def </span><span class="s1">process</span><span class="s3">(</span><span class="s1">stmt</span><span class="s3">):</span>
+        <span class="s1">lines </span><span class="s3">= </span><span class="s1">split_unquoted_newlines</span><span class="s3">(</span><span class="s1">stmt</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s5">'</span><span class="s2">\n</span><span class="s5">'</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">line</span><span class="s3">.</span><span class="s1">rstrip</span><span class="s3">() </span><span class="s2">for </span><span class="s1">line </span><span class="s2">in </span><span class="s1">lines</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

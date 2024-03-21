@@ -1,0 +1,307 @@
+<html>
+<head>
+<title>dumpdata.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #2aacb8;}
+.s5 { color: #7a7e85;}
+.s6 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+dumpdata.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">gzip</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core </span><span class="s0">import </span><span class="s1">serializers</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span><span class="s2">, </span><span class="s1">CommandError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">parse_apps_and_model_labels</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">, </span><span class="s1">router</span>
+
+<span class="s0">try</span><span class="s2">:</span>
+    <span class="s0">import </span><span class="s1">bz2</span>
+
+    <span class="s1">has_bz2 </span><span class="s2">= </span><span class="s0">True</span>
+<span class="s0">except </span><span class="s1">ImportError</span><span class="s2">:</span>
+    <span class="s1">has_bz2 </span><span class="s2">= </span><span class="s0">False</span>
+
+<span class="s0">try</span><span class="s2">:</span>
+    <span class="s0">import </span><span class="s1">lzma</span>
+
+    <span class="s1">has_lzma </span><span class="s2">= </span><span class="s0">True</span>
+<span class="s0">except </span><span class="s1">ImportError</span><span class="s2">:</span>
+    <span class="s1">has_lzma </span><span class="s2">= </span><span class="s0">False</span>
+
+
+<span class="s0">class </span><span class="s1">ProxyModelWarning</span><span class="s2">(</span><span class="s1">Warning</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= (</span>
+        <span class="s3">&quot;Output the contents of the database as a fixture of the given format &quot;</span>
+        <span class="s3">&quot;(using each model's default manager unless --all is specified).&quot;</span>
+    <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;args&quot;</span><span class="s2">,</span>
+            <span class="s1">metavar</span><span class="s2">=</span><span class="s3">&quot;app_label[.ModelName]&quot;</span><span class="s2">,</span>
+            <span class="s1">nargs</span><span class="s2">=</span><span class="s3">&quot;*&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Restricts dumped data to the specified app_label or &quot;</span>
+                <span class="s3">&quot;app_label.ModelName.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--format&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s3">&quot;json&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Specifies the output serialization format for fixtures.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--indent&quot;</span><span class="s2">,</span>
+            <span class="s1">type</span><span class="s2">=</span><span class="s1">int</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Specifies the indent level to use when pretty-printing output.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--database&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Nominates a specific database to dump fixtures from. &quot;</span>
+            <span class="s3">'Defaults to the &quot;default&quot; database.'</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;-e&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--exclude&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;append&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=[],</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;An app_label or app_label.ModelName to exclude &quot;</span>
+            <span class="s3">&quot;(use multiple --exclude to exclude multiple apps/models).&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--natural-foreign&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;use_natural_foreign_keys&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Use natural foreign keys if they are available.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--natural-primary&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;use_natural_primary_keys&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Use natural primary keys if they are available.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;-a&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--all&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;use_base_manager&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Use Django's base manager to dump all models stored in the database, &quot;</span>
+                <span class="s3">&quot;including those that would otherwise be filtered or modified by a &quot;</span>
+                <span class="s3">&quot;custom manager.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--pks&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;primary_keys&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Only dump objects with given primary keys. Accepts a comma-separated &quot;</span>
+            <span class="s3">&quot;list of keys. This option only works when you specify one model.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;-o&quot;</span><span class="s2">, </span><span class="s3">&quot;--output&quot;</span><span class="s2">, </span><span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Specifies file to which the output is written.&quot;</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">app_labels</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">format </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;format&quot;</span><span class="s2">]</span>
+        <span class="s1">indent </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;indent&quot;</span><span class="s2">]</span>
+        <span class="s1">using </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;database&quot;</span><span class="s2">]</span>
+        <span class="s1">excludes </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;exclude&quot;</span><span class="s2">]</span>
+        <span class="s1">output </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;output&quot;</span><span class="s2">]</span>
+        <span class="s1">show_traceback </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;traceback&quot;</span><span class="s2">]</span>
+        <span class="s1">use_natural_foreign_keys </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;use_natural_foreign_keys&quot;</span><span class="s2">]</span>
+        <span class="s1">use_natural_primary_keys </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;use_natural_primary_keys&quot;</span><span class="s2">]</span>
+        <span class="s1">use_base_manager </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;use_base_manager&quot;</span><span class="s2">]</span>
+        <span class="s1">pks </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;primary_keys&quot;</span><span class="s2">]</span>
+
+        <span class="s0">if </span><span class="s1">pks</span><span class="s2">:</span>
+            <span class="s1">primary_keys </span><span class="s2">= [</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">strip</span><span class="s2">() </span><span class="s0">for </span><span class="s1">pk </span><span class="s0">in </span><span class="s1">pks</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s3">&quot;,&quot;</span><span class="s2">)]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">primary_keys </span><span class="s2">= []</span>
+
+        <span class="s1">excluded_models</span><span class="s2">, </span><span class="s1">excluded_apps </span><span class="s2">= </span><span class="s1">parse_apps_and_model_labels</span><span class="s2">(</span><span class="s1">excludes</span><span class="s2">)</span>
+
+        <span class="s0">if not </span><span class="s1">app_labels</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">primary_keys</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s3">&quot;You can only use --pks option with one model&quot;</span><span class="s2">)</span>
+            <span class="s1">app_list </span><span class="s2">= </span><span class="s1">dict</span><span class="s2">.</span><span class="s1">fromkeys</span><span class="s2">(</span>
+                <span class="s1">app_config</span>
+                <span class="s0">for </span><span class="s1">app_config </span><span class="s0">in </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_configs</span><span class="s2">()</span>
+                <span class="s0">if </span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">models_module </span><span class="s0">is not None</span>
+                <span class="s0">and </span><span class="s1">app_config </span><span class="s0">not in </span><span class="s1">excluded_apps</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">app_labels</span><span class="s2">) &gt; </span><span class="s4">1 </span><span class="s0">and </span><span class="s1">primary_keys</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s3">&quot;You can only use --pks option with one model&quot;</span><span class="s2">)</span>
+            <span class="s1">app_list </span><span class="s2">= {}</span>
+            <span class="s0">for </span><span class="s1">label </span><span class="s0">in </span><span class="s1">app_labels</span><span class="s2">:</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_label </span><span class="s2">= </span><span class="s1">label</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s3">&quot;.&quot;</span><span class="s2">)</span>
+                    <span class="s0">try</span><span class="s2">:</span>
+                        <span class="s1">app_config </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_config</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">)</span>
+                    <span class="s0">except </span><span class="s1">LookupError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+                        <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s1">str</span><span class="s2">(</span><span class="s1">e</span><span class="s2">))</span>
+                    <span class="s0">if </span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">models_module </span><span class="s0">is None or </span><span class="s1">app_config </span><span class="s0">in </span><span class="s1">excluded_apps</span><span class="s2">:</span>
+                        <span class="s0">continue</span>
+                    <span class="s0">try</span><span class="s2">:</span>
+                        <span class="s1">model </span><span class="s2">= </span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">model_label</span><span class="s2">)</span>
+                    <span class="s0">except </span><span class="s1">LookupError</span><span class="s2">:</span>
+                        <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                            <span class="s3">&quot;Unknown model: %s.%s&quot; </span><span class="s2">% (</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_label</span><span class="s2">)</span>
+                        <span class="s2">)</span>
+
+                    <span class="s1">app_list_value </span><span class="s2">= </span><span class="s1">app_list</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span><span class="s1">app_config</span><span class="s2">, [])</span>
+
+                    <span class="s5"># We may have previously seen an &quot;all-models&quot; request for</span>
+                    <span class="s5"># this app (no model qualifier was given). In this case</span>
+                    <span class="s5"># there is no need adding specific models to the list.</span>
+                    <span class="s0">if </span><span class="s1">app_list_value </span><span class="s0">is not None and </span><span class="s1">model </span><span class="s0">not in </span><span class="s1">app_list_value</span><span class="s2">:</span>
+                        <span class="s1">app_list_value</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">model</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">ValueError</span><span class="s2">:</span>
+                    <span class="s0">if </span><span class="s1">primary_keys</span><span class="s2">:</span>
+                        <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                            <span class="s3">&quot;You can only use --pks option with one model&quot;</span>
+                        <span class="s2">)</span>
+                    <span class="s5"># This is just an app - no model qualifier</span>
+                    <span class="s1">app_label </span><span class="s2">= </span><span class="s1">label</span>
+                    <span class="s0">try</span><span class="s2">:</span>
+                        <span class="s1">app_config </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_config</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">)</span>
+                    <span class="s0">except </span><span class="s1">LookupError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+                        <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s1">str</span><span class="s2">(</span><span class="s1">e</span><span class="s2">))</span>
+                    <span class="s0">if </span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">models_module </span><span class="s0">is None or </span><span class="s1">app_config </span><span class="s0">in </span><span class="s1">excluded_apps</span><span class="s2">:</span>
+                        <span class="s0">continue</span>
+                    <span class="s1">app_list</span><span class="s2">[</span><span class="s1">app_config</span><span class="s2">] = </span><span class="s0">None</span>
+
+        <span class="s5"># Check that the serialization format exists; this is a shortcut to</span>
+        <span class="s5"># avoid collating all the objects and _then_ failing.</span>
+        <span class="s0">if </span><span class="s1">format </span><span class="s0">not in </span><span class="s1">serializers</span><span class="s2">.</span><span class="s1">get_public_serializer_formats</span><span class="s2">():</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">serializers</span><span class="s2">.</span><span class="s1">get_serializer</span><span class="s2">(</span><span class="s1">format</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">serializers</span><span class="s2">.</span><span class="s1">SerializerDoesNotExist</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s3">&quot;Unknown serialization format: %s&quot; </span><span class="s2">% </span><span class="s1">format</span><span class="s2">)</span>
+
+        <span class="s0">def </span><span class="s1">get_objects</span><span class="s2">(</span><span class="s1">count_only</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+            <span class="s6">&quot;&quot;&quot; 
+            Collate the objects to be serialized. If count_only is True, just 
+            count the number of objects to be serialized. 
+            &quot;&quot;&quot;</span>
+            <span class="s0">if </span><span class="s1">use_natural_foreign_keys</span><span class="s2">:</span>
+                <span class="s1">models </span><span class="s2">= </span><span class="s1">serializers</span><span class="s2">.</span><span class="s1">sort_dependencies</span><span class="s2">(</span>
+                    <span class="s1">app_list</span><span class="s2">.</span><span class="s1">items</span><span class="s2">(), </span><span class="s1">allow_cycles</span><span class="s2">=</span><span class="s0">True</span>
+                <span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s5"># There is no need to sort dependencies when natural foreign</span>
+                <span class="s5"># keys are not used.</span>
+                <span class="s1">models </span><span class="s2">= []</span>
+                <span class="s0">for </span><span class="s1">app_config</span><span class="s2">, </span><span class="s1">model_list </span><span class="s0">in </span><span class="s1">app_list</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+                    <span class="s0">if </span><span class="s1">model_list </span><span class="s0">is None</span><span class="s2">:</span>
+                        <span class="s1">models</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">get_models</span><span class="s2">())</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s1">models</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">model_list</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">model </span><span class="s0">in </span><span class="s1">models</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">model </span><span class="s0">in </span><span class="s1">excluded_models</span><span class="s2">:</span>
+                    <span class="s0">continue</span>
+                <span class="s0">if </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">proxy </span><span class="s0">and </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">proxy_for_model </span><span class="s0">not in </span><span class="s1">models</span><span class="s2">:</span>
+                    <span class="s1">warnings</span><span class="s2">.</span><span class="s1">warn</span><span class="s2">(</span>
+                        <span class="s3">&quot;%s is a proxy model and won't be serialized.&quot;</span>
+                        <span class="s2">% </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">label</span><span class="s2">,</span>
+                        <span class="s1">category</span><span class="s2">=</span><span class="s1">ProxyModelWarning</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s0">if not </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">proxy </span><span class="s0">and </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate_model</span><span class="s2">(</span><span class="s1">using</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+                    <span class="s0">if </span><span class="s1">use_base_manager</span><span class="s2">:</span>
+                        <span class="s1">objects </span><span class="s2">= </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_base_manager</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s1">objects </span><span class="s2">= </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_default_manager</span>
+
+                    <span class="s1">queryset </span><span class="s2">= </span><span class="s1">objects</span><span class="s2">.</span><span class="s1">using</span><span class="s2">(</span><span class="s1">using</span><span class="s2">).</span><span class="s1">order_by</span><span class="s2">(</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+                    <span class="s0">if </span><span class="s1">primary_keys</span><span class="s2">:</span>
+                        <span class="s1">queryset </span><span class="s2">= </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">pk__in</span><span class="s2">=</span><span class="s1">primary_keys</span><span class="s2">)</span>
+                    <span class="s0">if </span><span class="s1">count_only</span><span class="s2">:</span>
+                        <span class="s0">yield </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">order_by</span><span class="s2">().</span><span class="s1">count</span><span class="s2">()</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s1">chunk_size </span><span class="s2">= (</span>
+                            <span class="s4">2000 </span><span class="s0">if </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">_prefetch_related_lookups </span><span class="s0">else None</span>
+                        <span class="s2">)</span>
+                        <span class="s0">yield from </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">iterator</span><span class="s2">(</span><span class="s1">chunk_size</span><span class="s2">=</span><span class="s1">chunk_size</span><span class="s2">)</span>
+
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">ending </span><span class="s2">= </span><span class="s0">None</span>
+            <span class="s1">progress_output </span><span class="s2">= </span><span class="s0">None</span>
+            <span class="s1">object_count </span><span class="s2">= </span><span class="s4">0</span>
+            <span class="s5"># If dumpdata is outputting to stdout, there is no way to display progress</span>
+            <span class="s0">if </span><span class="s1">output </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">isatty</span><span class="s2">() </span><span class="s0">and </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;verbosity&quot;</span><span class="s2">] &gt; </span><span class="s4">0</span><span class="s2">:</span>
+                <span class="s1">progress_output </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span>
+                <span class="s1">object_count </span><span class="s2">= </span><span class="s1">sum</span><span class="s2">(</span><span class="s1">get_objects</span><span class="s2">(</span><span class="s1">count_only</span><span class="s2">=</span><span class="s0">True</span><span class="s2">))</span>
+            <span class="s0">if </span><span class="s1">output</span><span class="s2">:</span>
+                <span class="s1">file_root</span><span class="s2">, </span><span class="s1">file_ext </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">splitext</span><span class="s2">(</span><span class="s1">output</span><span class="s2">)</span>
+                <span class="s1">compression_formats </span><span class="s2">= {</span>
+                    <span class="s3">&quot;.bz2&quot;</span><span class="s2">: (</span><span class="s1">open</span><span class="s2">, {}, </span><span class="s1">file_root</span><span class="s2">),</span>
+                    <span class="s3">&quot;.gz&quot;</span><span class="s2">: (</span><span class="s1">gzip</span><span class="s2">.</span><span class="s1">open</span><span class="s2">, {}, </span><span class="s1">output</span><span class="s2">),</span>
+                    <span class="s3">&quot;.lzma&quot;</span><span class="s2">: (</span><span class="s1">open</span><span class="s2">, {}, </span><span class="s1">file_root</span><span class="s2">),</span>
+                    <span class="s3">&quot;.xz&quot;</span><span class="s2">: (</span><span class="s1">open</span><span class="s2">, {}, </span><span class="s1">file_root</span><span class="s2">),</span>
+                    <span class="s3">&quot;.zip&quot;</span><span class="s2">: (</span><span class="s1">open</span><span class="s2">, {}, </span><span class="s1">file_root</span><span class="s2">),</span>
+                <span class="s2">}</span>
+                <span class="s0">if </span><span class="s1">has_bz2</span><span class="s2">:</span>
+                    <span class="s1">compression_formats</span><span class="s2">[</span><span class="s3">&quot;.bz2&quot;</span><span class="s2">] = (</span><span class="s1">bz2</span><span class="s2">.</span><span class="s1">open</span><span class="s2">, {}, </span><span class="s1">output</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">has_lzma</span><span class="s2">:</span>
+                    <span class="s1">compression_formats</span><span class="s2">[</span><span class="s3">&quot;.lzma&quot;</span><span class="s2">] = (</span>
+                        <span class="s1">lzma</span><span class="s2">.</span><span class="s1">open</span><span class="s2">,</span>
+                        <span class="s2">{</span><span class="s3">&quot;format&quot;</span><span class="s2">: </span><span class="s1">lzma</span><span class="s2">.</span><span class="s1">FORMAT_ALONE</span><span class="s2">},</span>
+                        <span class="s1">output</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                    <span class="s1">compression_formats</span><span class="s2">[</span><span class="s3">&quot;.xz&quot;</span><span class="s2">] = (</span><span class="s1">lzma</span><span class="s2">.</span><span class="s1">open</span><span class="s2">, {}, </span><span class="s1">output</span><span class="s2">)</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">open_method</span><span class="s2">, </span><span class="s1">kwargs</span><span class="s2">, </span><span class="s1">file_path </span><span class="s2">= </span><span class="s1">compression_formats</span><span class="s2">[</span><span class="s1">file_ext</span><span class="s2">]</span>
+                <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+                    <span class="s1">open_method</span><span class="s2">, </span><span class="s1">kwargs</span><span class="s2">, </span><span class="s1">file_path </span><span class="s2">= (</span><span class="s1">open</span><span class="s2">, {}, </span><span class="s1">output</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">file_path </span><span class="s2">!= </span><span class="s1">output</span><span class="s2">:</span>
+                    <span class="s1">file_name </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">basename</span><span class="s2">(</span><span class="s1">file_path</span><span class="s2">)</span>
+                    <span class="s1">warnings</span><span class="s2">.</span><span class="s1">warn</span><span class="s2">(</span>
+                        <span class="s3">f&quot;Unsupported file extension (</span><span class="s0">{</span><span class="s1">file_ext</span><span class="s0">}</span><span class="s3">). &quot;</span>
+                        <span class="s3">f&quot;Fixtures saved in '</span><span class="s0">{</span><span class="s1">file_name</span><span class="s0">}</span><span class="s3">'.&quot;</span><span class="s2">,</span>
+                        <span class="s1">RuntimeWarning</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s1">stream </span><span class="s2">= </span><span class="s1">open_method</span><span class="s2">(</span><span class="s1">file_path</span><span class="s2">, </span><span class="s3">&quot;wt&quot;</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">stream </span><span class="s2">= </span><span class="s0">None</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">serializers</span><span class="s2">.</span><span class="s1">serialize</span><span class="s2">(</span>
+                    <span class="s1">format</span><span class="s2">,</span>
+                    <span class="s1">get_objects</span><span class="s2">(),</span>
+                    <span class="s1">indent</span><span class="s2">=</span><span class="s1">indent</span><span class="s2">,</span>
+                    <span class="s1">use_natural_foreign_keys</span><span class="s2">=</span><span class="s1">use_natural_foreign_keys</span><span class="s2">,</span>
+                    <span class="s1">use_natural_primary_keys</span><span class="s2">=</span><span class="s1">use_natural_primary_keys</span><span class="s2">,</span>
+                    <span class="s1">stream</span><span class="s2">=</span><span class="s1">stream </span><span class="s0">or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">,</span>
+                    <span class="s1">progress_output</span><span class="s2">=</span><span class="s1">progress_output</span><span class="s2">,</span>
+                    <span class="s1">object_count</span><span class="s2">=</span><span class="s1">object_count</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s0">finally</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">stream</span><span class="s2">:</span>
+                    <span class="s1">stream</span><span class="s2">.</span><span class="s1">close</span><span class="s2">()</span>
+        <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">show_traceback</span><span class="s2">:</span>
+                <span class="s0">raise</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s3">&quot;Unable to serialize database: %s&quot; </span><span class="s2">% </span><span class="s1">e</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

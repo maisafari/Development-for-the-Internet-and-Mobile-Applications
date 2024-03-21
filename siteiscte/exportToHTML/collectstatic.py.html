@@ -1,0 +1,402 @@
+<html>
+<head>
+<title>collectstatic.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+collectstatic.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">os</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">staticfiles</span><span class="s2">.</span><span class="s1">finders </span><span class="s0">import </span><span class="s1">get_finders</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">staticfiles</span><span class="s2">.</span><span class="s1">storage </span><span class="s0">import </span><span class="s1">staticfiles_storage</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">checks </span><span class="s0">import </span><span class="s1">Tags</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">files</span><span class="s2">.</span><span class="s1">storage </span><span class="s0">import </span><span class="s1">FileSystemStorage</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span><span class="s2">, </span><span class="s1">CommandError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">color </span><span class="s0">import </span><span class="s1">no_style</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Copies or symlinks static files from different locations to the 
+    settings.STATIC_ROOT. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">help </span><span class="s2">= </span><span class="s4">&quot;Collect static files in a single location.&quot;</span>
+    <span class="s1">requires_system_checks </span><span class="s2">= [</span><span class="s1">Tags</span><span class="s2">.</span><span class="s1">staticfiles</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">copied_files </span><span class="s2">= []</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">symlinked_files </span><span class="s2">= []</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">unmodified_files </span><span class="s2">= []</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">post_processed_files </span><span class="s2">= []</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">storage </span><span class="s2">= </span><span class="s1">staticfiles_storage</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">style </span><span class="s2">= </span><span class="s1">no_style</span><span class="s2">()</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">local</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">path</span><span class="s2">(</span><span class="s4">&quot;&quot;</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">NotImplementedError</span><span class="s2">:</span>
+            <span class="s0">return False</span>
+        <span class="s0">return True</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s4">&quot;--noinput&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;--no-input&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s4">&quot;store_false&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s4">&quot;interactive&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s4">&quot;Do NOT prompt the user for input of any kind.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s4">&quot;--no-post-process&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s4">&quot;store_false&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s4">&quot;post_process&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s4">&quot;Do NOT post process collected files.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s4">&quot;-i&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;--ignore&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s4">&quot;append&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=[],</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s4">&quot;ignore_patterns&quot;</span><span class="s2">,</span>
+            <span class="s1">metavar</span><span class="s2">=</span><span class="s4">&quot;PATTERN&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s4">&quot;Ignore files or directories matching this glob-style &quot;</span>
+            <span class="s4">&quot;pattern. Use multiple times to ignore more.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s4">&quot;-n&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;--dry-run&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s4">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s4">&quot;Do everything except modify the filesystem.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s4">&quot;-c&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;--clear&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s4">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s4">&quot;Clear the existing files using the storage &quot;</span>
+            <span class="s4">&quot;before trying to copy or link the original file.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s4">&quot;-l&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;--link&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s4">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s4">&quot;Create a symbolic link to each file instead of copying.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s4">&quot;--no-default-ignore&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s4">&quot;store_false&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s4">&quot;use_default_ignore_patterns&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s4">&quot;Don't ignore the common private glob-style patterns (defaults to &quot;</span>
+                <span class="s4">&quot;'CVS', '.*' and '*~').&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">set_options</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Set instance variables based on an options dict 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">interactive </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s4">&quot;interactive&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s4">&quot;verbosity&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">symlink </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s4">&quot;link&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">clear </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s4">&quot;clear&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">dry_run </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s4">&quot;dry_run&quot;</span><span class="s2">]</span>
+        <span class="s1">ignore_patterns </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s4">&quot;ignore_patterns&quot;</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">options</span><span class="s2">[</span><span class="s4">&quot;use_default_ignore_patterns&quot;</span><span class="s2">]:</span>
+            <span class="s1">ignore_patterns </span><span class="s2">+= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_config</span><span class="s2">(</span><span class="s4">&quot;staticfiles&quot;</span><span class="s2">).</span><span class="s1">ignore_patterns</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">ignore_patterns </span><span class="s2">= </span><span class="s1">list</span><span class="s2">({</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">normpath</span><span class="s2">(</span><span class="s1">p</span><span class="s2">) </span><span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">ignore_patterns</span><span class="s2">})</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">post_process </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s4">&quot;post_process&quot;</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">collect</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Perform the bulk of the work of collectstatic. 
+ 
+        Split off from handle() to facilitate testing. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">symlink </span><span class="s0">and not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">local</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s4">&quot;Can't symlink to a remote destination.&quot;</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">clear</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">clear_dir</span><span class="s2">(</span><span class="s4">&quot;&quot;</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">symlink</span><span class="s2">:</span>
+            <span class="s1">handler </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">link_file</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">handler </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">copy_file</span>
+
+        <span class="s1">found_files </span><span class="s2">= {}</span>
+        <span class="s0">for </span><span class="s1">finder </span><span class="s0">in </span><span class="s1">get_finders</span><span class="s2">():</span>
+            <span class="s0">for </span><span class="s1">path</span><span class="s2">, </span><span class="s1">storage </span><span class="s0">in </span><span class="s1">finder</span><span class="s2">.</span><span class="s1">list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ignore_patterns</span><span class="s2">):</span>
+                <span class="s5"># Prefix the relative path if the source storage contains it</span>
+                <span class="s0">if </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">storage</span><span class="s2">, </span><span class="s4">&quot;prefix&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">):</span>
+                    <span class="s1">prefixed_path </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">prefix</span><span class="s2">, </span><span class="s1">path</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">prefixed_path </span><span class="s2">= </span><span class="s1">path</span>
+
+                <span class="s0">if </span><span class="s1">prefixed_path </span><span class="s0">not in </span><span class="s1">found_files</span><span class="s2">:</span>
+                    <span class="s1">found_files</span><span class="s2">[</span><span class="s1">prefixed_path</span><span class="s2">] = (</span><span class="s1">storage</span><span class="s2">, </span><span class="s1">path</span><span class="s2">)</span>
+                    <span class="s1">handler</span><span class="s2">(</span><span class="s1">path</span><span class="s2">, </span><span class="s1">prefixed_path</span><span class="s2">, </span><span class="s1">storage</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span>
+                        <span class="s4">&quot;Found another file with the destination path '%s'. It &quot;</span>
+                        <span class="s4">&quot;will be ignored since only the first encountered file &quot;</span>
+                        <span class="s4">&quot;is collected. If this is not what you want, make sure &quot;</span>
+                        <span class="s4">&quot;every static file has a unique path.&quot; </span><span class="s2">% </span><span class="s1">prefixed_path</span><span class="s2">,</span>
+                        <span class="s1">level</span><span class="s2">=</span><span class="s6">1</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+
+        <span class="s5"># Storage backends may define a post_process() method.</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">post_process </span><span class="s0">and </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">, </span><span class="s4">&quot;post_process&quot;</span><span class="s2">):</span>
+            <span class="s1">processor </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">post_process</span><span class="s2">(</span><span class="s1">found_files</span><span class="s2">, </span><span class="s1">dry_run</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">dry_run</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">original_path</span><span class="s2">, </span><span class="s1">processed_path</span><span class="s2">, </span><span class="s1">processed </span><span class="s0">in </span><span class="s1">processor</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">processed</span><span class="s2">, </span><span class="s1">Exception</span><span class="s2">):</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">stderr</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s4">&quot;Post-processing '%s' failed!&quot; </span><span class="s2">% </span><span class="s1">original_path</span><span class="s2">)</span>
+                    <span class="s5"># Add a blank line before the traceback, otherwise it's</span>
+                    <span class="s5"># too easy to miss the relevant part of the error message.</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">stderr</span><span class="s2">.</span><span class="s1">write</span><span class="s2">()</span>
+                    <span class="s0">raise </span><span class="s1">processed</span>
+                <span class="s0">if </span><span class="s1">processed</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span>
+                        <span class="s4">&quot;Post-processed '%s' as '%s'&quot; </span><span class="s2">% (</span><span class="s1">original_path</span><span class="s2">, </span><span class="s1">processed_path</span><span class="s2">),</span>
+                        <span class="s1">level</span><span class="s2">=</span><span class="s6">2</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">post_processed_files</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">original_path</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s4">&quot;Skipped post-processing '%s'&quot; </span><span class="s2">% </span><span class="s1">original_path</span><span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s2">{</span>
+            <span class="s4">&quot;modified&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">copied_files </span><span class="s2">+ </span><span class="s1">self</span><span class="s2">.</span><span class="s1">symlinked_files</span><span class="s2">,</span>
+            <span class="s4">&quot;unmodified&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">unmodified_files</span><span class="s2">,</span>
+            <span class="s4">&quot;post_processed&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">post_processed_files</span><span class="s2">,</span>
+        <span class="s2">}</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">set_options</span><span class="s2">(**</span><span class="s1">options</span><span class="s2">)</span>
+        <span class="s1">message </span><span class="s2">= [</span><span class="s4">&quot;</span><span class="s0">\n</span><span class="s4">&quot;</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">dry_run</span><span class="s2">:</span>
+            <span class="s1">message</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                <span class="s4">&quot;You have activated the --dry-run option so no files will be &quot;</span>
+                <span class="s4">&quot;modified.</span><span class="s0">\n\n</span><span class="s4">&quot;</span>
+            <span class="s2">)</span>
+
+        <span class="s1">message</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+            <span class="s4">&quot;You have requested to collect static files at the destination</span><span class="s0">\n</span><span class="s4">&quot;</span>
+            <span class="s4">&quot;location as specified in your settings&quot;</span>
+        <span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_local_storage</span><span class="s2">() </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">location</span><span class="s2">:</span>
+            <span class="s1">destination_path </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">location</span>
+            <span class="s1">message</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s4">&quot;:</span><span class="s0">\n\n    </span><span class="s4">%s</span><span class="s0">\n\n</span><span class="s4">&quot; </span><span class="s2">% </span><span class="s1">destination_path</span><span class="s2">)</span>
+            <span class="s1">should_warn_user </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s1">destination_path</span><span class="s2">) </span><span class="s0">and </span><span class="s1">any</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">listdir</span><span class="s2">(</span><span class="s1">destination_path</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">destination_path </span><span class="s2">= </span><span class="s0">None</span>
+            <span class="s1">message</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s4">&quot;.</span><span class="s0">\n\n</span><span class="s4">&quot;</span><span class="s2">)</span>
+            <span class="s5"># Destination files existence not checked; play it safe and warn.</span>
+            <span class="s1">should_warn_user </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">interactive </span><span class="s0">and </span><span class="s1">should_warn_user</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">clear</span><span class="s2">:</span>
+                <span class="s1">message</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s4">&quot;This will DELETE ALL FILES in this location!</span><span class="s0">\n</span><span class="s4">&quot;</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">message</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s4">&quot;This will overwrite existing files!</span><span class="s0">\n</span><span class="s4">&quot;</span><span class="s2">)</span>
+
+            <span class="s1">message</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                <span class="s4">&quot;Are you sure you want to do this?</span><span class="s0">\n\n</span><span class="s4">&quot;</span>
+                <span class="s4">&quot;Type 'yes' to continue, or 'no' to cancel: &quot;</span>
+            <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">input</span><span class="s2">(</span><span class="s4">&quot;&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">message</span><span class="s2">)) != </span><span class="s4">&quot;yes&quot;</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s4">&quot;Collecting static files cancelled.&quot;</span><span class="s2">)</span>
+
+        <span class="s1">collected </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">collect</span><span class="s2">()</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s6">1</span><span class="s2">:</span>
+            <span class="s1">modified_count </span><span class="s2">= </span><span class="s1">len</span><span class="s2">(</span><span class="s1">collected</span><span class="s2">[</span><span class="s4">&quot;modified&quot;</span><span class="s2">])</span>
+            <span class="s1">unmodified_count </span><span class="s2">= </span><span class="s1">len</span><span class="s2">(</span><span class="s1">collected</span><span class="s2">[</span><span class="s4">&quot;unmodified&quot;</span><span class="s2">])</span>
+            <span class="s1">post_processed_count </span><span class="s2">= </span><span class="s1">len</span><span class="s2">(</span><span class="s1">collected</span><span class="s2">[</span><span class="s4">&quot;post_processed&quot;</span><span class="s2">])</span>
+            <span class="s0">return </span><span class="s2">(</span>
+                <span class="s4">&quot;</span><span class="s0">\n</span><span class="s4">%(modified_count)s %(identifier)s %(action)s&quot;</span>
+                <span class="s4">&quot;%(destination)s%(unmodified)s%(post_processed)s.&quot;</span>
+            <span class="s2">) % {</span>
+                <span class="s4">&quot;modified_count&quot;</span><span class="s2">: </span><span class="s1">modified_count</span><span class="s2">,</span>
+                <span class="s4">&quot;identifier&quot;</span><span class="s2">: </span><span class="s4">&quot;static file&quot; </span><span class="s2">+ (</span><span class="s4">&quot;&quot; </span><span class="s0">if </span><span class="s1">modified_count </span><span class="s2">== </span><span class="s6">1 </span><span class="s0">else </span><span class="s4">&quot;s&quot;</span><span class="s2">),</span>
+                <span class="s4">&quot;action&quot;</span><span class="s2">: </span><span class="s4">&quot;symlinked&quot; </span><span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">symlink </span><span class="s0">else </span><span class="s4">&quot;copied&quot;</span><span class="s2">,</span>
+                <span class="s4">&quot;destination&quot;</span><span class="s2">: (</span>
+                    <span class="s4">&quot; to '%s'&quot; </span><span class="s2">% </span><span class="s1">destination_path </span><span class="s0">if </span><span class="s1">destination_path </span><span class="s0">else </span><span class="s4">&quot;&quot;</span>
+                <span class="s2">),</span>
+                <span class="s4">&quot;unmodified&quot;</span><span class="s2">: (</span>
+                    <span class="s4">&quot;, %s unmodified&quot; </span><span class="s2">% </span><span class="s1">unmodified_count</span>
+                    <span class="s0">if </span><span class="s1">collected</span><span class="s2">[</span><span class="s4">&quot;unmodified&quot;</span><span class="s2">]</span>
+                    <span class="s0">else </span><span class="s4">&quot;&quot;</span>
+                <span class="s2">),</span>
+                <span class="s4">&quot;post_processed&quot;</span><span class="s2">: (</span>
+                    <span class="s1">collected</span><span class="s2">[</span><span class="s4">&quot;post_processed&quot;</span><span class="s2">]</span>
+                    <span class="s0">and </span><span class="s4">&quot;, %s post-processed&quot; </span><span class="s2">% </span><span class="s1">post_processed_count</span>
+                    <span class="s0">or </span><span class="s4">&quot;&quot;</span>
+                <span class="s2">),</span>
+            <span class="s2">}</span>
+
+    <span class="s0">def </span><span class="s1">log</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">msg</span><span class="s2">, </span><span class="s1">level</span><span class="s2">=</span><span class="s6">2</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Small log helper 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s1">level</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">msg</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">is_local_storage</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">, </span><span class="s1">FileSystemStorage</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">clear_dir</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">path</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Delete the given relative path using the destination storage backend. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s1">path</span><span class="s2">):</span>
+            <span class="s0">return</span>
+
+        <span class="s1">dirs</span><span class="s2">, </span><span class="s1">files </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">listdir</span><span class="s2">(</span><span class="s1">path</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">f </span><span class="s0">in </span><span class="s1">files</span><span class="s2">:</span>
+            <span class="s1">fpath </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">path</span><span class="s2">, </span><span class="s1">f</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">dry_run</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s4">&quot;Pretending to delete '%s'&quot; </span><span class="s2">% </span><span class="s1">fpath</span><span class="s2">, </span><span class="s1">level</span><span class="s2">=</span><span class="s6">1</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s4">&quot;Deleting '%s'&quot; </span><span class="s2">% </span><span class="s1">fpath</span><span class="s2">, </span><span class="s1">level</span><span class="s2">=</span><span class="s6">1</span><span class="s2">)</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">full_path </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">path</span><span class="s2">(</span><span class="s1">fpath</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">NotImplementedError</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">delete</span><span class="s2">(</span><span class="s1">fpath</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s0">if not </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s1">full_path</span><span class="s2">) </span><span class="s0">and </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">lexists</span><span class="s2">(</span><span class="s1">full_path</span><span class="s2">):</span>
+                        <span class="s5"># Delete broken symlinks</span>
+                        <span class="s1">os</span><span class="s2">.</span><span class="s1">unlink</span><span class="s2">(</span><span class="s1">full_path</span><span class="s2">)</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">delete</span><span class="s2">(</span><span class="s1">fpath</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">d </span><span class="s0">in </span><span class="s1">dirs</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">clear_dir</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">path</span><span class="s2">, </span><span class="s1">d</span><span class="s2">))</span>
+
+    <span class="s0">def </span><span class="s1">delete_file</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">prefixed_path</span><span class="s2">, </span><span class="s1">source_storage</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Check if the target file should be deleted if it already exists. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s1">prefixed_path</span><span class="s2">):</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s5"># When was the target file modified last time?</span>
+                <span class="s1">target_last_modified </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">get_modified_time</span><span class="s2">(</span><span class="s1">prefixed_path</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s2">(</span><span class="s1">OSError</span><span class="s2">, </span><span class="s1">NotImplementedError</span><span class="s2">, </span><span class="s1">AttributeError</span><span class="s2">):</span>
+                <span class="s5"># The storage doesn't support get_modified_time() or failed</span>
+                <span class="s0">pass</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s5"># When was the source file modified last time?</span>
+                    <span class="s1">source_last_modified </span><span class="s2">= </span><span class="s1">source_storage</span><span class="s2">.</span><span class="s1">get_modified_time</span><span class="s2">(</span><span class="s1">path</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s2">(</span><span class="s1">OSError</span><span class="s2">, </span><span class="s1">NotImplementedError</span><span class="s2">, </span><span class="s1">AttributeError</span><span class="s2">):</span>
+                    <span class="s0">pass</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s5"># The full path of the target file</span>
+                    <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">local</span><span class="s2">:</span>
+                        <span class="s1">full_path </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">path</span><span class="s2">(</span><span class="s1">prefixed_path</span><span class="s2">)</span>
+                        <span class="s5"># If it's --link mode and the path isn't a link (i.e.</span>
+                        <span class="s5"># the previous collectstatic wasn't with --link) or if</span>
+                        <span class="s5"># it's non-link mode and the path is a link (i.e. the</span>
+                        <span class="s5"># previous collectstatic was with --link), the old</span>
+                        <span class="s5"># links/files must be deleted so it's not safe to skip</span>
+                        <span class="s5"># unmodified files.</span>
+                        <span class="s1">can_skip_unmodified_files </span><span class="s2">= </span><span class="s0">not </span><span class="s2">(</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">symlink </span><span class="s2">^ </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">islink</span><span class="s2">(</span><span class="s1">full_path</span><span class="s2">)</span>
+                        <span class="s2">)</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s5"># In remote storages, skipping is only based on the</span>
+                        <span class="s5"># modified times since symlinks aren't relevant.</span>
+                        <span class="s1">can_skip_unmodified_files </span><span class="s2">= </span><span class="s0">True</span>
+                    <span class="s5"># Avoid sub-second precision (see #14665, #19540)</span>
+                    <span class="s1">file_is_unmodified </span><span class="s2">= </span><span class="s1">target_last_modified</span><span class="s2">.</span><span class="s1">replace</span><span class="s2">(</span>
+                        <span class="s1">microsecond</span><span class="s2">=</span><span class="s6">0</span>
+                    <span class="s2">) &gt;= </span><span class="s1">source_last_modified</span><span class="s2">.</span><span class="s1">replace</span><span class="s2">(</span><span class="s1">microsecond</span><span class="s2">=</span><span class="s6">0</span><span class="s2">)</span>
+                    <span class="s0">if </span><span class="s1">file_is_unmodified </span><span class="s0">and </span><span class="s1">can_skip_unmodified_files</span><span class="s2">:</span>
+                        <span class="s0">if </span><span class="s1">prefixed_path </span><span class="s0">not in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">unmodified_files</span><span class="s2">:</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">unmodified_files</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">prefixed_path</span><span class="s2">)</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s4">&quot;Skipping '%s' (not modified)&quot; </span><span class="s2">% </span><span class="s1">path</span><span class="s2">)</span>
+                        <span class="s0">return False</span>
+            <span class="s5"># Then delete the existing file if really needed</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">dry_run</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s4">&quot;Pretending to delete '%s'&quot; </span><span class="s2">% </span><span class="s1">path</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s4">&quot;Deleting '%s'&quot; </span><span class="s2">% </span><span class="s1">path</span><span class="s2">)</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">delete</span><span class="s2">(</span><span class="s1">prefixed_path</span><span class="s2">)</span>
+        <span class="s0">return True</span>
+
+    <span class="s0">def </span><span class="s1">link_file</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">prefixed_path</span><span class="s2">, </span><span class="s1">source_storage</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Attempt to link ``path`` 
+        &quot;&quot;&quot;</span>
+        <span class="s5"># Skip this file if it was already copied earlier</span>
+        <span class="s0">if </span><span class="s1">prefixed_path </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">symlinked_files</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s4">&quot;Skipping '%s' (already linked earlier)&quot; </span><span class="s2">% </span><span class="s1">path</span><span class="s2">)</span>
+        <span class="s5"># Delete the target file if needed or break</span>
+        <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">delete_file</span><span class="s2">(</span><span class="s1">path</span><span class="s2">, </span><span class="s1">prefixed_path</span><span class="s2">, </span><span class="s1">source_storage</span><span class="s2">):</span>
+            <span class="s0">return</span>
+        <span class="s5"># The full path of the source file</span>
+        <span class="s1">source_path </span><span class="s2">= </span><span class="s1">source_storage</span><span class="s2">.</span><span class="s1">path</span><span class="s2">(</span><span class="s1">path</span><span class="s2">)</span>
+        <span class="s5"># Finally link the file</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">dry_run</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s4">&quot;Pretending to link '%s'&quot; </span><span class="s2">% </span><span class="s1">source_path</span><span class="s2">, </span><span class="s1">level</span><span class="s2">=</span><span class="s6">1</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s4">&quot;Linking '%s'&quot; </span><span class="s2">% </span><span class="s1">source_path</span><span class="s2">, </span><span class="s1">level</span><span class="s2">=</span><span class="s6">2</span><span class="s2">)</span>
+            <span class="s1">full_path </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">path</span><span class="s2">(</span><span class="s1">prefixed_path</span><span class="s2">)</span>
+            <span class="s1">os</span><span class="s2">.</span><span class="s1">makedirs</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">dirname</span><span class="s2">(</span><span class="s1">full_path</span><span class="s2">), </span><span class="s1">exist_ok</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">lexists</span><span class="s2">(</span><span class="s1">full_path</span><span class="s2">):</span>
+                    <span class="s1">os</span><span class="s2">.</span><span class="s1">unlink</span><span class="s2">(</span><span class="s1">full_path</span><span class="s2">)</span>
+                <span class="s1">os</span><span class="s2">.</span><span class="s1">symlink</span><span class="s2">(</span><span class="s1">source_path</span><span class="s2">, </span><span class="s1">full_path</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">NotImplementedError</span><span class="s2">:</span>
+                <span class="s0">import </span><span class="s1">platform</span>
+
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                    <span class="s4">&quot;Symlinking is not supported in this &quot;</span>
+                    <span class="s4">&quot;platform (%s).&quot; </span><span class="s2">% </span><span class="s1">platform</span><span class="s2">.</span><span class="s1">platform</span><span class="s2">()</span>
+                <span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">OSError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s1">e</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">prefixed_path </span><span class="s0">not in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">symlinked_files</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">symlinked_files</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">prefixed_path</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">copy_file</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">prefixed_path</span><span class="s2">, </span><span class="s1">source_storage</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Attempt to copy ``path`` with storage 
+        &quot;&quot;&quot;</span>
+        <span class="s5"># Skip this file if it was already copied earlier</span>
+        <span class="s0">if </span><span class="s1">prefixed_path </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">copied_files</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s4">&quot;Skipping '%s' (already copied earlier)&quot; </span><span class="s2">% </span><span class="s1">path</span><span class="s2">)</span>
+        <span class="s5"># Delete the target file if needed or break</span>
+        <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">delete_file</span><span class="s2">(</span><span class="s1">path</span><span class="s2">, </span><span class="s1">prefixed_path</span><span class="s2">, </span><span class="s1">source_storage</span><span class="s2">):</span>
+            <span class="s0">return</span>
+        <span class="s5"># The full path of the source file</span>
+        <span class="s1">source_path </span><span class="s2">= </span><span class="s1">source_storage</span><span class="s2">.</span><span class="s1">path</span><span class="s2">(</span><span class="s1">path</span><span class="s2">)</span>
+        <span class="s5"># Finally start copying</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">dry_run</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s4">&quot;Pretending to copy '%s'&quot; </span><span class="s2">% </span><span class="s1">source_path</span><span class="s2">, </span><span class="s1">level</span><span class="s2">=</span><span class="s6">1</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s4">&quot;Copying '%s'&quot; </span><span class="s2">% </span><span class="s1">source_path</span><span class="s2">, </span><span class="s1">level</span><span class="s2">=</span><span class="s6">2</span><span class="s2">)</span>
+            <span class="s0">with </span><span class="s1">source_storage</span><span class="s2">.</span><span class="s1">open</span><span class="s2">(</span><span class="s1">path</span><span class="s2">) </span><span class="s0">as </span><span class="s1">source_file</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">storage</span><span class="s2">.</span><span class="s1">save</span><span class="s2">(</span><span class="s1">prefixed_path</span><span class="s2">, </span><span class="s1">source_file</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">copied_files</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">prefixed_path</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<html>
+<head>
+<title>caches.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+caches.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">pathlib</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">cache </span><span class="s0">import </span><span class="s1">DEFAULT_CACHE_ALIAS</span><span class="s2">, </span><span class="s1">caches</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">cache</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">filebased </span><span class="s0">import </span><span class="s1">FileBasedCache</span>
+
+<span class="s0">from </span><span class="s2">. </span><span class="s0">import </span><span class="s1">Error</span><span class="s2">, </span><span class="s1">Tags</span><span class="s2">, </span><span class="s1">Warning</span><span class="s2">, </span><span class="s1">register</span>
+
+<span class="s1">E001 </span><span class="s2">= </span><span class="s1">Error</span><span class="s2">(</span>
+    <span class="s3">&quot;You must define a '%s' cache in your CACHES setting.&quot; </span><span class="s2">% </span><span class="s1">DEFAULT_CACHE_ALIAS</span><span class="s2">,</span>
+    <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;caches.E001&quot;</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">(</span><span class="s1">Tags</span><span class="s2">.</span><span class="s1">caches</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">check_default_cache_is_configured</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">DEFAULT_CACHE_ALIAS </span><span class="s0">not in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">CACHES</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s2">[</span><span class="s1">E001</span><span class="s2">]</span>
+    <span class="s0">return </span><span class="s2">[]</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">(</span><span class="s1">Tags</span><span class="s2">.</span><span class="s1">caches</span><span class="s2">, </span><span class="s1">deploy</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">check_cache_location_not_exposed</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s1">errors </span><span class="s2">= []</span>
+    <span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s2">(</span><span class="s3">&quot;MEDIA_ROOT&quot;</span><span class="s2">, </span><span class="s3">&quot;STATIC_ROOT&quot;</span><span class="s2">, </span><span class="s3">&quot;STATICFILES_DIRS&quot;</span><span class="s2">):</span>
+        <span class="s1">setting </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">settings</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">setting</span><span class="s2">:</span>
+            <span class="s0">continue</span>
+        <span class="s0">if </span><span class="s1">name </span><span class="s2">== </span><span class="s3">&quot;STATICFILES_DIRS&quot;</span><span class="s2">:</span>
+            <span class="s1">paths </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+            <span class="s0">for </span><span class="s1">staticfiles_dir </span><span class="s0">in </span><span class="s1">setting</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">staticfiles_dir</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+                    <span class="s1">_</span><span class="s2">, </span><span class="s1">staticfiles_dir </span><span class="s2">= </span><span class="s1">staticfiles_dir</span>
+                <span class="s1">paths</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s1">pathlib</span><span class="s2">.</span><span class="s1">Path</span><span class="s2">(</span><span class="s1">staticfiles_dir</span><span class="s2">).</span><span class="s1">resolve</span><span class="s2">())</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">paths </span><span class="s2">= {</span><span class="s1">pathlib</span><span class="s2">.</span><span class="s1">Path</span><span class="s2">(</span><span class="s1">setting</span><span class="s2">).</span><span class="s1">resolve</span><span class="s2">()}</span>
+        <span class="s0">for </span><span class="s1">alias </span><span class="s0">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">CACHES</span><span class="s2">:</span>
+            <span class="s1">cache </span><span class="s2">= </span><span class="s1">caches</span><span class="s2">[</span><span class="s1">alias</span><span class="s2">]</span>
+            <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">cache</span><span class="s2">, </span><span class="s1">FileBasedCache</span><span class="s2">):</span>
+                <span class="s0">continue</span>
+            <span class="s1">cache_path </span><span class="s2">= </span><span class="s1">pathlib</span><span class="s2">.</span><span class="s1">Path</span><span class="s2">(</span><span class="s1">cache</span><span class="s2">.</span><span class="s1">_dir</span><span class="s2">).</span><span class="s1">resolve</span><span class="s2">()</span>
+            <span class="s0">if </span><span class="s1">any</span><span class="s2">(</span><span class="s1">path </span><span class="s2">== </span><span class="s1">cache_path </span><span class="s0">for </span><span class="s1">path </span><span class="s0">in </span><span class="s1">paths</span><span class="s2">):</span>
+                <span class="s1">relation </span><span class="s2">= </span><span class="s3">&quot;matches&quot;</span>
+            <span class="s0">elif </span><span class="s1">any</span><span class="s2">(</span><span class="s1">path </span><span class="s0">in </span><span class="s1">cache_path</span><span class="s2">.</span><span class="s1">parents </span><span class="s0">for </span><span class="s1">path </span><span class="s0">in </span><span class="s1">paths</span><span class="s2">):</span>
+                <span class="s1">relation </span><span class="s2">= </span><span class="s3">&quot;is inside&quot;</span>
+            <span class="s0">elif </span><span class="s1">any</span><span class="s2">(</span><span class="s1">cache_path </span><span class="s0">in </span><span class="s1">path</span><span class="s2">.</span><span class="s1">parents </span><span class="s0">for </span><span class="s1">path </span><span class="s0">in </span><span class="s1">paths</span><span class="s2">):</span>
+                <span class="s1">relation </span><span class="s2">= </span><span class="s3">&quot;contains&quot;</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">continue</span>
+            <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                <span class="s1">Warning</span><span class="s2">(</span>
+                    <span class="s3">f&quot;Your '</span><span class="s0">{</span><span class="s1">alias</span><span class="s0">}</span><span class="s3">' cache configuration might expose your cache &quot;</span>
+                    <span class="s3">f&quot;or lead to corruption of your data because its LOCATION &quot;</span>
+                    <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">relation</span><span class="s0">} {</span><span class="s1">name</span><span class="s0">}</span><span class="s3">.&quot;</span><span class="s2">,</span>
+                    <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;caches.W002&quot;</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">errors</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">(</span><span class="s1">Tags</span><span class="s2">.</span><span class="s1">caches</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">check_file_based_cache_is_absolute</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s1">errors </span><span class="s2">= []</span>
+    <span class="s0">for </span><span class="s1">alias</span><span class="s2">, </span><span class="s1">config </span><span class="s0">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">CACHES</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+        <span class="s1">cache </span><span class="s2">= </span><span class="s1">caches</span><span class="s2">[</span><span class="s1">alias</span><span class="s2">]</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">cache</span><span class="s2">, </span><span class="s1">FileBasedCache</span><span class="s2">):</span>
+            <span class="s0">continue</span>
+        <span class="s0">if not </span><span class="s1">pathlib</span><span class="s2">.</span><span class="s1">Path</span><span class="s2">(</span><span class="s1">config</span><span class="s2">[</span><span class="s3">&quot;LOCATION&quot;</span><span class="s2">]).</span><span class="s1">is_absolute</span><span class="s2">():</span>
+            <span class="s1">errors</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                <span class="s1">Warning</span><span class="s2">(</span>
+                    <span class="s3">f&quot;Your '</span><span class="s0">{</span><span class="s1">alias</span><span class="s0">}</span><span class="s3">' cache LOCATION path is relative. Use an &quot;</span>
+                    <span class="s3">f&quot;absolute path instead.&quot;</span><span class="s2">,</span>
+                    <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;caches.W003&quot;</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">errors</span>
+</pre>
+</body>
+</html>

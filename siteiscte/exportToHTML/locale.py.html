@@ -1,0 +1,103 @@
+<html>
+<head>
+<title>locale.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+locale.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf</span><span class="s2">.</span><span class="s1">urls</span><span class="s2">.</span><span class="s1">i18n </span><span class="s0">import </span><span class="s1">is_language_prefix_patterns_used</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">HttpResponseRedirect</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">urls </span><span class="s0">import </span><span class="s1">get_script_prefix</span><span class="s2">, </span><span class="s1">is_valid_path</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">translation</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">cache </span><span class="s0">import </span><span class="s1">patch_vary_headers</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">deprecation </span><span class="s0">import </span><span class="s1">MiddlewareMixin</span>
+
+
+<span class="s0">class </span><span class="s1">LocaleMiddleware</span><span class="s2">(</span><span class="s1">MiddlewareMixin</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Parse a request and decide what translation object to install in the 
+    current thread context. This allows pages to be dynamically translated to 
+    the language the user desires (if the language is available). 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">response_redirect_class </span><span class="s2">= </span><span class="s1">HttpResponseRedirect</span>
+
+    <span class="s0">def </span><span class="s1">process_request</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s1">urlconf </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s4">&quot;urlconf&quot;</span><span class="s2">, </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">ROOT_URLCONF</span><span class="s2">)</span>
+        <span class="s2">(</span>
+            <span class="s1">i18n_patterns_used</span><span class="s2">,</span>
+            <span class="s1">prefixed_default_language</span><span class="s2">,</span>
+        <span class="s2">) = </span><span class="s1">is_language_prefix_patterns_used</span><span class="s2">(</span><span class="s1">urlconf</span><span class="s2">)</span>
+        <span class="s1">language </span><span class="s2">= </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language_from_request</span><span class="s2">(</span>
+            <span class="s1">request</span><span class="s2">, </span><span class="s1">check_path</span><span class="s2">=</span><span class="s1">i18n_patterns_used</span>
+        <span class="s2">)</span>
+        <span class="s1">language_from_path </span><span class="s2">= </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language_from_path</span><span class="s2">(</span><span class="s1">request</span><span class="s2">.</span><span class="s1">path_info</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s0">not </span><span class="s1">language_from_path</span>
+            <span class="s0">and </span><span class="s1">i18n_patterns_used</span>
+            <span class="s0">and not </span><span class="s1">prefixed_default_language</span>
+        <span class="s2">):</span>
+            <span class="s1">language </span><span class="s2">= </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">LANGUAGE_CODE</span>
+        <span class="s1">translation</span><span class="s2">.</span><span class="s1">activate</span><span class="s2">(</span><span class="s1">language</span><span class="s2">)</span>
+        <span class="s1">request</span><span class="s2">.</span><span class="s1">LANGUAGE_CODE </span><span class="s2">= </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">process_response</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">response</span><span class="s2">):</span>
+        <span class="s1">language </span><span class="s2">= </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language</span><span class="s2">()</span>
+        <span class="s1">language_from_path </span><span class="s2">= </span><span class="s1">translation</span><span class="s2">.</span><span class="s1">get_language_from_path</span><span class="s2">(</span><span class="s1">request</span><span class="s2">.</span><span class="s1">path_info</span><span class="s2">)</span>
+        <span class="s1">urlconf </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s4">&quot;urlconf&quot;</span><span class="s2">, </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">ROOT_URLCONF</span><span class="s2">)</span>
+        <span class="s2">(</span>
+            <span class="s1">i18n_patterns_used</span><span class="s2">,</span>
+            <span class="s1">prefixed_default_language</span><span class="s2">,</span>
+        <span class="s2">) = </span><span class="s1">is_language_prefix_patterns_used</span><span class="s2">(</span><span class="s1">urlconf</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s1">response</span><span class="s2">.</span><span class="s1">status_code </span><span class="s2">== </span><span class="s5">404</span>
+            <span class="s0">and not </span><span class="s1">language_from_path</span>
+            <span class="s0">and </span><span class="s1">i18n_patterns_used</span>
+            <span class="s0">and </span><span class="s1">prefixed_default_language</span>
+        <span class="s2">):</span>
+            <span class="s6"># Maybe the language code is missing in the URL? Try adding the</span>
+            <span class="s6"># language prefix and redirecting to that URL.</span>
+            <span class="s1">language_path </span><span class="s2">= </span><span class="s4">&quot;/%s%s&quot; </span><span class="s2">% (</span><span class="s1">language</span><span class="s2">, </span><span class="s1">request</span><span class="s2">.</span><span class="s1">path_info</span><span class="s2">)</span>
+            <span class="s1">path_valid </span><span class="s2">= </span><span class="s1">is_valid_path</span><span class="s2">(</span><span class="s1">language_path</span><span class="s2">, </span><span class="s1">urlconf</span><span class="s2">)</span>
+            <span class="s1">path_needs_slash </span><span class="s2">= </span><span class="s0">not </span><span class="s1">path_valid </span><span class="s0">and </span><span class="s2">(</span>
+                <span class="s1">settings</span><span class="s2">.</span><span class="s1">APPEND_SLASH</span>
+                <span class="s0">and not </span><span class="s1">language_path</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s4">&quot;/&quot;</span><span class="s2">)</span>
+                <span class="s0">and </span><span class="s1">is_valid_path</span><span class="s2">(</span><span class="s4">&quot;%s/&quot; </span><span class="s2">% </span><span class="s1">language_path</span><span class="s2">, </span><span class="s1">urlconf</span><span class="s2">)</span>
+            <span class="s2">)</span>
+
+            <span class="s0">if </span><span class="s1">path_valid </span><span class="s0">or </span><span class="s1">path_needs_slash</span><span class="s2">:</span>
+                <span class="s1">script_prefix </span><span class="s2">= </span><span class="s1">get_script_prefix</span><span class="s2">()</span>
+                <span class="s6"># Insert language after the script prefix and before the</span>
+                <span class="s6"># rest of the URL</span>
+                <span class="s1">language_url </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">get_full_path</span><span class="s2">(</span>
+                    <span class="s1">force_append_slash</span><span class="s2">=</span><span class="s1">path_needs_slash</span>
+                <span class="s2">).</span><span class="s1">replace</span><span class="s2">(</span><span class="s1">script_prefix</span><span class="s2">, </span><span class="s4">&quot;%s%s/&quot; </span><span class="s2">% (</span><span class="s1">script_prefix</span><span class="s2">, </span><span class="s1">language</span><span class="s2">), </span><span class="s5">1</span><span class="s2">)</span>
+                <span class="s6"># Redirect to the language-specific URL as detected by</span>
+                <span class="s6"># get_language_from_request(). HTTP caches may cache this</span>
+                <span class="s6"># redirect, so add the Vary header.</span>
+                <span class="s1">redirect </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">response_redirect_class</span><span class="s2">(</span><span class="s1">language_url</span><span class="s2">)</span>
+                <span class="s1">patch_vary_headers</span><span class="s2">(</span><span class="s1">redirect</span><span class="s2">, (</span><span class="s4">&quot;Accept-Language&quot;</span><span class="s2">, </span><span class="s4">&quot;Cookie&quot;</span><span class="s2">))</span>
+                <span class="s0">return </span><span class="s1">redirect</span>
+
+        <span class="s0">if not </span><span class="s2">(</span><span class="s1">i18n_patterns_used </span><span class="s0">and </span><span class="s1">language_from_path</span><span class="s2">):</span>
+            <span class="s1">patch_vary_headers</span><span class="s2">(</span><span class="s1">response</span><span class="s2">, (</span><span class="s4">&quot;Accept-Language&quot;</span><span class="s2">,))</span>
+        <span class="s1">response</span><span class="s2">.</span><span class="s1">headers</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span><span class="s4">&quot;Content-Language&quot;</span><span class="s2">, </span><span class="s1">language</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">response</span>
+</pre>
+</body>
+</html>

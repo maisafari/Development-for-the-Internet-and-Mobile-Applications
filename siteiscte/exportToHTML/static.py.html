@@ -1,0 +1,202 @@
+<html>
+<head>
+<title>static.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+static.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">urllib</span><span class="s2">.</span><span class="s1">parse </span><span class="s0">import </span><span class="s1">quote</span><span class="s2">, </span><span class="s1">urljoin</span>
+
+<span class="s0">from </span><span class="s1">django </span><span class="s0">import </span><span class="s1">template</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">encoding </span><span class="s0">import </span><span class="s1">iri_to_uri</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">html </span><span class="s0">import </span><span class="s1">conditional_escape</span>
+
+<span class="s1">register </span><span class="s2">= </span><span class="s1">template</span><span class="s2">.</span><span class="s1">Library</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">PrefixNode</span><span class="s2">(</span><span class="s1">template</span><span class="s2">.</span><span class="s1">Node</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;&lt;PrefixNode for %r&gt;&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">varname</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">name</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">name </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">template</span><span class="s2">.</span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                <span class="s3">&quot;Prefix nodes must be given a name to return.&quot;</span>
+            <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">varname </span><span class="s2">= </span><span class="s1">varname</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">name</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">handle_token</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Class method to parse prefix node and return a Node. 
+        &quot;&quot;&quot;</span>
+        <span class="s5"># token.split_contents() isn't useful here because tags using this</span>
+        <span class="s5"># method don't accept variable as arguments.</span>
+        <span class="s1">tokens </span><span class="s2">= </span><span class="s1">token</span><span class="s2">.</span><span class="s1">contents</span><span class="s2">.</span><span class="s1">split</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">tokens</span><span class="s2">) &gt; </span><span class="s6">1 </span><span class="s0">and </span><span class="s1">tokens</span><span class="s2">[</span><span class="s6">1</span><span class="s2">] != </span><span class="s3">&quot;as&quot;</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">template</span><span class="s2">.</span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                <span class="s3">&quot;First argument in '%s' must be 'as'&quot; </span><span class="s2">% </span><span class="s1">tokens</span><span class="s2">[</span><span class="s6">0</span><span class="s2">]</span>
+            <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">tokens</span><span class="s2">) &gt; </span><span class="s6">1</span><span class="s2">:</span>
+            <span class="s1">varname </span><span class="s2">= </span><span class="s1">tokens</span><span class="s2">[</span><span class="s6">2</span><span class="s2">]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">varname </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s0">return </span><span class="s1">cls</span><span class="s2">(</span><span class="s1">varname</span><span class="s2">, </span><span class="s1">name</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">handle_simple</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+        <span class="s0">except </span><span class="s1">ImportError</span><span class="s2">:</span>
+            <span class="s1">prefix </span><span class="s2">= </span><span class="s3">&quot;&quot;</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">prefix </span><span class="s2">= </span><span class="s1">iri_to_uri</span><span class="s2">(</span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">settings</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s3">&quot;&quot;</span><span class="s2">))</span>
+        <span class="s0">return </span><span class="s1">prefix</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s1">prefix </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">handle_simple</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">varname </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">prefix</span>
+        <span class="s1">context</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">varname</span><span class="s2">] = </span><span class="s1">prefix</span>
+        <span class="s0">return </span><span class="s3">&quot;&quot;</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span>
+<span class="s0">def </span><span class="s1">get_static_prefix</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Populate a template variable with the static prefix, 
+    ``settings.STATIC_URL``. 
+ 
+    Usage:: 
+ 
+        {% get_static_prefix [as varname] %} 
+ 
+    Examples:: 
+ 
+        {% get_static_prefix %} 
+        {% get_static_prefix as static_prefix %} 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">PrefixNode</span><span class="s2">.</span><span class="s1">handle_token</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">, </span><span class="s3">&quot;STATIC_URL&quot;</span><span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span>
+<span class="s0">def </span><span class="s1">get_media_prefix</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Populate a template variable with the media prefix, 
+    ``settings.MEDIA_URL``. 
+ 
+    Usage:: 
+ 
+        {% get_media_prefix [as varname] %} 
+ 
+    Examples:: 
+ 
+        {% get_media_prefix %} 
+        {% get_media_prefix as media_prefix %} 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">PrefixNode</span><span class="s2">.</span><span class="s1">handle_token</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">, </span><span class="s3">&quot;MEDIA_URL&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">StaticNode</span><span class="s2">(</span><span class="s1">template</span><span class="s2">.</span><span class="s1">Node</span><span class="s2">):</span>
+    <span class="s1">child_nodelists </span><span class="s2">= ()</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">varname</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">path</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">path </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">template</span><span class="s2">.</span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                <span class="s3">&quot;Static template nodes must be given a path to return.&quot;</span>
+            <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">path </span><span class="s2">= </span><span class="s1">path</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">varname </span><span class="s2">= </span><span class="s1">varname</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">(</span>
+            <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s0">}</span><span class="s3">(varname=</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">varname</span><span class="s0">!r}</span><span class="s3">, path=</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">path</span><span class="s0">!r}</span><span class="s3">)&quot;</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">url</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s1">path </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">resolve</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">handle_simple</span><span class="s2">(</span><span class="s1">path</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s1">url </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">url</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">context</span><span class="s2">.</span><span class="s1">autoescape</span><span class="s2">:</span>
+            <span class="s1">url </span><span class="s2">= </span><span class="s1">conditional_escape</span><span class="s2">(</span><span class="s1">url</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">varname </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">url</span>
+        <span class="s1">context</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">varname</span><span class="s2">] = </span><span class="s1">url</span>
+        <span class="s0">return </span><span class="s3">&quot;&quot;</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">handle_simple</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">path</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">is_installed</span><span class="s2">(</span><span class="s3">&quot;django.contrib.staticfiles&quot;</span><span class="s2">):</span>
+            <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">staticfiles</span><span class="s2">.</span><span class="s1">storage </span><span class="s0">import </span><span class="s1">staticfiles_storage</span>
+
+            <span class="s0">return </span><span class="s1">staticfiles_storage</span><span class="s2">.</span><span class="s1">url</span><span class="s2">(</span><span class="s1">path</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">urljoin</span><span class="s2">(</span><span class="s1">PrefixNode</span><span class="s2">.</span><span class="s1">handle_simple</span><span class="s2">(</span><span class="s3">&quot;STATIC_URL&quot;</span><span class="s2">), </span><span class="s1">quote</span><span class="s2">(</span><span class="s1">path</span><span class="s2">))</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">handle_token</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Class method to parse prefix node and return a Node. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">bits </span><span class="s2">= </span><span class="s1">token</span><span class="s2">.</span><span class="s1">split_contents</span><span class="s2">()</span>
+
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">bits</span><span class="s2">) &lt; </span><span class="s6">2</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">template</span><span class="s2">.</span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                <span class="s3">&quot;'%s' takes at least one argument (path to file)&quot; </span><span class="s2">% </span><span class="s1">bits</span><span class="s2">[</span><span class="s6">0</span><span class="s2">]</span>
+            <span class="s2">)</span>
+
+        <span class="s1">path </span><span class="s2">= </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">compile_filter</span><span class="s2">(</span><span class="s1">bits</span><span class="s2">[</span><span class="s6">1</span><span class="s2">])</span>
+
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">bits</span><span class="s2">) &gt;= </span><span class="s6">2 </span><span class="s0">and </span><span class="s1">bits</span><span class="s2">[-</span><span class="s6">2</span><span class="s2">] == </span><span class="s3">&quot;as&quot;</span><span class="s2">:</span>
+            <span class="s1">varname </span><span class="s2">= </span><span class="s1">bits</span><span class="s2">[</span><span class="s6">3</span><span class="s2">]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">varname </span><span class="s2">= </span><span class="s0">None</span>
+
+        <span class="s0">return </span><span class="s1">cls</span><span class="s2">(</span><span class="s1">varname</span><span class="s2">, </span><span class="s1">path</span><span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s3">&quot;static&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">do_static</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Join the given path with the STATIC_URL setting. 
+ 
+    Usage:: 
+ 
+        {% static path [as varname] %} 
+ 
+    Examples:: 
+ 
+        {% static &quot;myapp/css/base.css&quot; %} 
+        {% static variable_with_path %} 
+        {% static &quot;myapp/css/base.css&quot; as admin_base_css %} 
+        {% static variable_with_path as varname %} 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">StaticNode</span><span class="s2">.</span><span class="s1">handle_token</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">static</span><span class="s2">(</span><span class="s1">path</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Given a relative path to a static asset, return the absolute path to the 
+    asset. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">StaticNode</span><span class="s2">.</span><span class="s1">handle_simple</span><span class="s2">(</span><span class="s1">path</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

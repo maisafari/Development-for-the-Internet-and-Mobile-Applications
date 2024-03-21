@@ -1,0 +1,260 @@
+<html>
+<head>
+<title>OLMapWidget.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #6aab73;}
+.s3 { color: #bcbec4;}
+.s4 { color: #cf8e6d;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+OLMapWidget.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/* global ol */</span>
+<span class="s2">'use strict'</span><span class="s3">;</span>
+<span class="s4">class </span><span class="s1">GeometryTypeControl </span><span class="s4">extends </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">control</span><span class="s3">.</span><span class="s1">Control </span><span class="s3">{</span>
+    <span class="s0">// Map control to switch type when geometry type is unknown</span>
+    <span class="s1">constructor</span><span class="s3">(</span><span class="s1">opt_options</span><span class="s3">) {</span>
+        <span class="s4">const </span><span class="s1">options </span><span class="s3">= </span><span class="s1">opt_options </span><span class="s3">|| {};</span>
+
+        <span class="s4">const </span><span class="s1">element </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createElement</span><span class="s3">(</span><span class="s2">'div'</span><span class="s3">);</span>
+        <span class="s1">element</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s2">'switch-type type-' </span><span class="s3">+ </span><span class="s1">options</span><span class="s3">.</span><span class="s1">type </span><span class="s3">+ </span><span class="s2">' ol-control ol-unselectable'</span><span class="s3">;</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">active</span><span class="s3">) {</span>
+            <span class="s1">element</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">add</span><span class="s3">(</span><span class="s2">&quot;type-active&quot;</span><span class="s3">);</span>
+        <span class="s3">}</span>
+
+        <span class="s4">super</span><span class="s3">({</span>
+            <span class="s1">element</span><span class="s3">: </span><span class="s1">element</span><span class="s3">,</span>
+            <span class="s1">target</span><span class="s3">: </span><span class="s1">options</span><span class="s3">.</span><span class="s1">target</span>
+        <span class="s3">});</span>
+        <span class="s4">const </span><span class="s1">self </span><span class="s3">= </span><span class="s4">this</span><span class="s3">;</span>
+        <span class="s4">const </span><span class="s1">switchType </span><span class="s3">= </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+            <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">widget</span><span class="s3">.</span><span class="s1">currentGeometryType </span><span class="s3">!== </span><span class="s1">self</span><span class="s3">) {</span>
+                <span class="s1">options</span><span class="s3">.</span><span class="s1">widget</span><span class="s3">.</span><span class="s1">map</span><span class="s3">.</span><span class="s1">removeInteraction</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">widget</span><span class="s3">.</span><span class="s1">interactions</span><span class="s3">.</span><span class="s1">draw</span><span class="s3">);</span>
+                <span class="s1">options</span><span class="s3">.</span><span class="s1">widget</span><span class="s3">.</span><span class="s1">interactions</span><span class="s3">.</span><span class="s1">draw </span><span class="s3">= </span><span class="s4">new </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">interaction</span><span class="s3">.</span><span class="s1">Draw</span><span class="s3">({</span>
+                    <span class="s1">features</span><span class="s3">: </span><span class="s1">options</span><span class="s3">.</span><span class="s1">widget</span><span class="s3">.</span><span class="s1">featureCollection</span><span class="s3">,</span>
+                    <span class="s1">type</span><span class="s3">: </span><span class="s1">options</span><span class="s3">.</span><span class="s1">type</span>
+                <span class="s3">});</span>
+                <span class="s1">options</span><span class="s3">.</span><span class="s1">widget</span><span class="s3">.</span><span class="s1">map</span><span class="s3">.</span><span class="s1">addInteraction</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">widget</span><span class="s3">.</span><span class="s1">interactions</span><span class="s3">.</span><span class="s1">draw</span><span class="s3">);</span>
+                <span class="s1">options</span><span class="s3">.</span><span class="s1">widget</span><span class="s3">.</span><span class="s1">currentGeometryType</span><span class="s3">.</span><span class="s1">element</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">remove</span><span class="s3">(</span><span class="s2">'type-active'</span><span class="s3">);</span>
+                <span class="s1">options</span><span class="s3">.</span><span class="s1">widget</span><span class="s3">.</span><span class="s1">currentGeometryType </span><span class="s3">= </span><span class="s1">self</span><span class="s3">;</span>
+                <span class="s1">element</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">add</span><span class="s3">(</span><span class="s2">&quot;type-active&quot;</span><span class="s3">);</span>
+            <span class="s3">}</span>
+        <span class="s3">};</span>
+
+        <span class="s1">element</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s1">switchType</span><span class="s3">, </span><span class="s4">false</span><span class="s3">);</span>
+        <span class="s1">element</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'touchstart'</span><span class="s3">, </span><span class="s1">switchType</span><span class="s3">, </span><span class="s4">false</span><span class="s3">);</span>
+    <span class="s3">}</span>
+<span class="s3">}</span>
+
+<span class="s0">// TODO: allow deleting individual features (#8972)</span>
+<span class="s4">class </span><span class="s1">MapWidget </span><span class="s3">{</span>
+    <span class="s1">constructor</span><span class="s3">(</span><span class="s1">options</span><span class="s3">) {</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">map </span><span class="s3">= </span><span class="s4">null</span><span class="s3">;</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">interactions </span><span class="s3">= {</span><span class="s1">draw</span><span class="s3">: </span><span class="s4">null</span><span class="s3">, </span><span class="s1">modify</span><span class="s3">: </span><span class="s4">null</span><span class="s3">};</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">typeChoices </span><span class="s3">= </span><span class="s4">false</span><span class="s3">;</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">ready </span><span class="s3">= </span><span class="s4">false</span><span class="s3">;</span>
+
+        <span class="s0">// Default options</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">options </span><span class="s3">= {</span>
+            <span class="s1">default_lat</span><span class="s3">: </span><span class="s5">0</span><span class="s3">,</span>
+            <span class="s1">default_lon</span><span class="s3">: </span><span class="s5">0</span><span class="s3">,</span>
+            <span class="s1">default_zoom</span><span class="s3">: </span><span class="s5">12</span><span class="s3">,</span>
+            <span class="s1">is_collection</span><span class="s3">: </span><span class="s1">options</span><span class="s3">.</span><span class="s1">geom_name</span><span class="s3">.</span><span class="s1">includes</span><span class="s3">(</span><span class="s2">'Multi'</span><span class="s3">) || </span><span class="s1">options</span><span class="s3">.</span><span class="s1">geom_name</span><span class="s3">.</span><span class="s1">includes</span><span class="s3">(</span><span class="s2">'Collection'</span><span class="s3">)</span>
+        <span class="s3">};</span>
+
+        <span class="s0">// Altering using user-provided options</span>
+        <span class="s4">for </span><span class="s3">(</span><span class="s4">const </span><span class="s1">property </span><span class="s4">in </span><span class="s1">options</span><span class="s3">) {</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">hasOwnProperty</span><span class="s3">(</span><span class="s1">property</span><span class="s3">)) {</span>
+                <span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">[</span><span class="s1">property</span><span class="s3">] = </span><span class="s1">options</span><span class="s3">[</span><span class="s1">property</span><span class="s3">];</span>
+            <span class="s3">}</span>
+        <span class="s3">}</span>
+        <span class="s4">if </span><span class="s3">(!</span><span class="s1">options</span><span class="s3">.</span><span class="s1">base_layer</span><span class="s3">) {</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">base_layer </span><span class="s3">= </span><span class="s4">new </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">layer</span><span class="s3">.</span><span class="s1">Tile</span><span class="s3">({</span><span class="s1">source</span><span class="s3">: </span><span class="s4">new </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">source</span><span class="s3">.</span><span class="s1">OSM</span><span class="s3">()});</span>
+        <span class="s3">}</span>
+
+        <span class="s0">// RemovedInDjango51Warning: when the deprecation ends, remove setting</span>
+        <span class="s0">// width/height (3 lines below).</span>
+        <span class="s4">const </span><span class="s1">mapContainer </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">map_id</span><span class="s3">);</span>
+        <span class="s1">mapContainer</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">width </span><span class="s3">= </span><span class="s2">`</span><span class="s1">$</span><span class="s3">{</span><span class="s1">mapContainer</span><span class="s3">.</span><span class="s1">dataset</span><span class="s3">.</span><span class="s1">width</span><span class="s3">}</span><span class="s2">px`</span><span class="s3">;</span>
+        <span class="s1">mapContainer</span><span class="s3">.</span><span class="s1">style</span><span class="s3">.</span><span class="s1">height </span><span class="s3">= </span><span class="s2">`</span><span class="s1">$</span><span class="s3">{</span><span class="s1">mapContainer</span><span class="s3">.</span><span class="s1">dataset</span><span class="s3">.</span><span class="s1">height</span><span class="s3">}</span><span class="s2">px`</span><span class="s3">;</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">map </span><span class="s3">= </span><span class="s4">this</span><span class="s3">.</span><span class="s1">createMap</span><span class="s3">();</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">featureCollection </span><span class="s3">= </span><span class="s4">new </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">Collection</span><span class="s3">();</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">featureOverlay </span><span class="s3">= </span><span class="s4">new </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">layer</span><span class="s3">.</span><span class="s1">Vector</span><span class="s3">({</span>
+            <span class="s1">map</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">map</span><span class="s3">,</span>
+            <span class="s1">source</span><span class="s3">: </span><span class="s4">new </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">source</span><span class="s3">.</span><span class="s1">Vector</span><span class="s3">({</span>
+                <span class="s1">features</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">featureCollection</span><span class="s3">,</span>
+                <span class="s1">useSpatialIndex</span><span class="s3">: </span><span class="s4">false </span><span class="s0">// improve performance</span>
+            <span class="s3">}),</span>
+            <span class="s1">updateWhileAnimating</span><span class="s3">: </span><span class="s4">true</span><span class="s3">, </span><span class="s0">// optional, for instant visual feedback</span>
+            <span class="s1">updateWhileInteracting</span><span class="s3">: </span><span class="s4">true </span><span class="s0">// optional, for instant visual feedback</span>
+        <span class="s3">});</span>
+
+        <span class="s0">// Populate and set handlers for the feature container</span>
+        <span class="s4">const </span><span class="s1">self </span><span class="s3">= </span><span class="s4">this</span><span class="s3">;</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">featureCollection</span><span class="s3">.</span><span class="s1">on</span><span class="s3">(</span><span class="s2">'add'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">event</span><span class="s3">) {</span>
+            <span class="s4">const </span><span class="s1">feature </span><span class="s3">= </span><span class="s1">event</span><span class="s3">.</span><span class="s1">element</span><span class="s3">;</span>
+            <span class="s1">feature</span><span class="s3">.</span><span class="s1">on</span><span class="s3">(</span><span class="s2">'change'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">() {</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">serializeFeatures</span><span class="s3">();</span>
+            <span class="s3">});</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">ready</span><span class="s3">) {</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">serializeFeatures</span><span class="s3">();</span>
+                <span class="s4">if </span><span class="s3">(!</span><span class="s1">self</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">is_collection</span><span class="s3">) {</span>
+                    <span class="s1">self</span><span class="s3">.</span><span class="s1">disableDrawing</span><span class="s3">(); </span><span class="s0">// Only allow one feature at a time</span>
+                <span class="s3">}</span>
+            <span class="s3">}</span>
+        <span class="s3">});</span>
+
+        <span class="s4">const </span><span class="s1">initial_value </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">id</span><span class="s3">).</span><span class="s1">value</span><span class="s3">;</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">initial_value</span><span class="s3">) {</span>
+            <span class="s4">const </span><span class="s1">jsonFormat </span><span class="s3">= </span><span class="s4">new </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">format</span><span class="s3">.</span><span class="s1">GeoJSON</span><span class="s3">();</span>
+            <span class="s4">const </span><span class="s1">features </span><span class="s3">= </span><span class="s1">jsonFormat</span><span class="s3">.</span><span class="s1">readFeatures</span><span class="s3">(</span><span class="s2">'{&quot;type&quot;: &quot;Feature&quot;, &quot;geometry&quot;: ' </span><span class="s3">+ </span><span class="s1">initial_value </span><span class="s3">+ </span><span class="s2">'}'</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">extent </span><span class="s3">= </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">extent</span><span class="s3">.</span><span class="s1">createEmpty</span><span class="s3">();</span>
+            <span class="s1">features</span><span class="s3">.</span><span class="s1">forEach</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">feature</span><span class="s3">) {</span>
+                <span class="s4">this</span><span class="s3">.</span><span class="s1">featureOverlay</span><span class="s3">.</span><span class="s1">getSource</span><span class="s3">().</span><span class="s1">addFeature</span><span class="s3">(</span><span class="s1">feature</span><span class="s3">);</span>
+                <span class="s1">ol</span><span class="s3">.</span><span class="s1">extent</span><span class="s3">.</span><span class="s1">extend</span><span class="s3">(</span><span class="s1">extent</span><span class="s3">, </span><span class="s1">feature</span><span class="s3">.</span><span class="s1">getGeometry</span><span class="s3">().</span><span class="s1">getExtent</span><span class="s3">());</span>
+            <span class="s3">}, </span><span class="s4">this</span><span class="s3">);</span>
+            <span class="s0">// Center/zoom the map</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">map</span><span class="s3">.</span><span class="s1">getView</span><span class="s3">().</span><span class="s1">fit</span><span class="s3">(</span><span class="s1">extent</span><span class="s3">, {</span><span class="s1">minResolution</span><span class="s3">: </span><span class="s5">1</span><span class="s3">});</span>
+        <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">map</span><span class="s3">.</span><span class="s1">getView</span><span class="s3">().</span><span class="s1">setCenter</span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">defaultCenter</span><span class="s3">());</span>
+        <span class="s3">}</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">createInteractions</span><span class="s3">();</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">initial_value </span><span class="s3">&amp;&amp; !</span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">is_collection</span><span class="s3">) {</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">disableDrawing</span><span class="s3">();</span>
+        <span class="s3">}</span>
+        <span class="s4">const </span><span class="s1">clearNode </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">map</span><span class="s3">.</span><span class="s1">getTarget</span><span class="s3">()).</span><span class="s1">nextElementSibling</span><span class="s3">;</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">clearNode</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">contains</span><span class="s3">(</span><span class="s2">'clear_features'</span><span class="s3">)) {</span>
+            <span class="s1">clearNode</span><span class="s3">.</span><span class="s1">querySelector</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">).</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, (</span><span class="s1">ev</span><span class="s3">) =&gt; {</span>
+                <span class="s1">ev</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">clearFeatures</span><span class="s3">();</span>
+            <span class="s3">});</span>
+        <span class="s3">}</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">ready </span><span class="s3">= </span><span class="s4">true</span><span class="s3">;</span>
+    <span class="s3">}</span>
+
+    <span class="s1">createMap</span><span class="s3">() {</span>
+        <span class="s4">return new </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">Map</span><span class="s3">({</span>
+            <span class="s1">target</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">map_id</span><span class="s3">,</span>
+            <span class="s1">layers</span><span class="s3">: [</span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">base_layer</span><span class="s3">],</span>
+            <span class="s1">view</span><span class="s3">: </span><span class="s4">new </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">View</span><span class="s3">({</span>
+                <span class="s1">zoom</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">default_zoom</span>
+            <span class="s3">})</span>
+        <span class="s3">});</span>
+    <span class="s3">}</span>
+
+    <span class="s1">createInteractions</span><span class="s3">() {</span>
+        <span class="s0">// Initialize the modify interaction</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">interactions</span><span class="s3">.</span><span class="s1">modify </span><span class="s3">= </span><span class="s4">new </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">interaction</span><span class="s3">.</span><span class="s1">Modify</span><span class="s3">({</span>
+            <span class="s1">features</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">featureCollection</span><span class="s3">,</span>
+            <span class="s1">deleteCondition</span><span class="s3">: </span><span class="s4">function</span><span class="s3">(</span><span class="s1">event</span><span class="s3">) {</span>
+                <span class="s4">return </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">events</span><span class="s3">.</span><span class="s1">condition</span><span class="s3">.</span><span class="s1">shiftKeyOnly</span><span class="s3">(</span><span class="s1">event</span><span class="s3">) &amp;&amp;</span>
+                    <span class="s1">ol</span><span class="s3">.</span><span class="s1">events</span><span class="s3">.</span><span class="s1">condition</span><span class="s3">.</span><span class="s1">singleClick</span><span class="s3">(</span><span class="s1">event</span><span class="s3">);</span>
+            <span class="s3">}</span>
+        <span class="s3">});</span>
+
+        <span class="s0">// Initialize the draw interaction</span>
+        <span class="s4">let </span><span class="s1">geomType </span><span class="s3">= </span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">geom_name</span><span class="s3">;</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">geomType </span><span class="s3">=== </span><span class="s2">&quot;Geometry&quot; </span><span class="s3">|| </span><span class="s1">geomType </span><span class="s3">=== </span><span class="s2">&quot;GeometryCollection&quot;</span><span class="s3">) {</span>
+            <span class="s0">// Default to Point, but create icons to switch type</span>
+            <span class="s1">geomType </span><span class="s3">= </span><span class="s2">&quot;Point&quot;</span><span class="s3">;</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">currentGeometryType </span><span class="s3">= </span><span class="s4">new </span><span class="s1">GeometryTypeControl</span><span class="s3">({</span><span class="s1">widget</span><span class="s3">: </span><span class="s4">this</span><span class="s3">, </span><span class="s1">type</span><span class="s3">: </span><span class="s2">&quot;Point&quot;</span><span class="s3">, </span><span class="s1">active</span><span class="s3">: </span><span class="s4">true</span><span class="s3">});</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">map</span><span class="s3">.</span><span class="s1">addControl</span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">currentGeometryType</span><span class="s3">);</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">map</span><span class="s3">.</span><span class="s1">addControl</span><span class="s3">(</span><span class="s4">new </span><span class="s1">GeometryTypeControl</span><span class="s3">({</span><span class="s1">widget</span><span class="s3">: </span><span class="s4">this</span><span class="s3">, </span><span class="s1">type</span><span class="s3">: </span><span class="s2">&quot;LineString&quot;</span><span class="s3">, </span><span class="s1">active</span><span class="s3">: </span><span class="s4">false</span><span class="s3">}));</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">map</span><span class="s3">.</span><span class="s1">addControl</span><span class="s3">(</span><span class="s4">new </span><span class="s1">GeometryTypeControl</span><span class="s3">({</span><span class="s1">widget</span><span class="s3">: </span><span class="s4">this</span><span class="s3">, </span><span class="s1">type</span><span class="s3">: </span><span class="s2">&quot;Polygon&quot;</span><span class="s3">, </span><span class="s1">active</span><span class="s3">: </span><span class="s4">false</span><span class="s3">}));</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">typeChoices </span><span class="s3">= </span><span class="s4">true</span><span class="s3">;</span>
+        <span class="s3">}</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">interactions</span><span class="s3">.</span><span class="s1">draw </span><span class="s3">= </span><span class="s4">new </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">interaction</span><span class="s3">.</span><span class="s1">Draw</span><span class="s3">({</span>
+            <span class="s1">features</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">featureCollection</span><span class="s3">,</span>
+            <span class="s1">type</span><span class="s3">: </span><span class="s1">geomType</span>
+        <span class="s3">});</span>
+
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">map</span><span class="s3">.</span><span class="s1">addInteraction</span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">interactions</span><span class="s3">.</span><span class="s1">draw</span><span class="s3">);</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">map</span><span class="s3">.</span><span class="s1">addInteraction</span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">interactions</span><span class="s3">.</span><span class="s1">modify</span><span class="s3">);</span>
+    <span class="s3">}</span>
+
+    <span class="s1">defaultCenter</span><span class="s3">() {</span>
+        <span class="s4">const </span><span class="s1">center </span><span class="s3">= [</span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">default_lon</span><span class="s3">, </span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">default_lat</span><span class="s3">];</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">map_srid</span><span class="s3">) {</span>
+            <span class="s4">return </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">proj</span><span class="s3">.</span><span class="s1">transform</span><span class="s3">(</span><span class="s1">center</span><span class="s3">, </span><span class="s2">'EPSG:4326'</span><span class="s3">, </span><span class="s4">this</span><span class="s3">.</span><span class="s1">map</span><span class="s3">.</span><span class="s1">getView</span><span class="s3">().</span><span class="s1">getProjection</span><span class="s3">());</span>
+        <span class="s3">}</span>
+        <span class="s4">return </span><span class="s1">center</span><span class="s3">;</span>
+    <span class="s3">}</span>
+
+    <span class="s1">enableDrawing</span><span class="s3">() {</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">interactions</span><span class="s3">.</span><span class="s1">draw</span><span class="s3">.</span><span class="s1">setActive</span><span class="s3">(</span><span class="s4">true</span><span class="s3">);</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">typeChoices</span><span class="s3">) {</span>
+            <span class="s0">// Show geometry type icons</span>
+            <span class="s4">const </span><span class="s1">divs </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementsByClassName</span><span class="s3">(</span><span class="s2">&quot;switch-type&quot;</span><span class="s3">);</span>
+            <span class="s4">for </span><span class="s3">(</span><span class="s4">let </span><span class="s1">i </span><span class="s3">= </span><span class="s5">0</span><span class="s3">; </span><span class="s1">i </span><span class="s3">!== </span><span class="s1">divs</span><span class="s3">.</span><span class="s1">length</span><span class="s3">; </span><span class="s1">i</span><span class="s3">++) {</span>
+                <span class="s1">divs</span><span class="s3">[</span><span class="s1">i</span><span class="s3">].</span><span class="s1">style</span><span class="s3">.</span><span class="s1">visibility </span><span class="s3">= </span><span class="s2">&quot;visible&quot;</span><span class="s3">;</span>
+            <span class="s3">}</span>
+        <span class="s3">}</span>
+    <span class="s3">}</span>
+
+    <span class="s1">disableDrawing</span><span class="s3">() {</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">interactions</span><span class="s3">.</span><span class="s1">draw</span><span class="s3">) {</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">interactions</span><span class="s3">.</span><span class="s1">draw</span><span class="s3">.</span><span class="s1">setActive</span><span class="s3">(</span><span class="s4">false</span><span class="s3">);</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">typeChoices</span><span class="s3">) {</span>
+                <span class="s0">// Hide geometry type icons</span>
+                <span class="s4">const </span><span class="s1">divs </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementsByClassName</span><span class="s3">(</span><span class="s2">&quot;switch-type&quot;</span><span class="s3">);</span>
+                <span class="s4">for </span><span class="s3">(</span><span class="s4">let </span><span class="s1">i </span><span class="s3">= </span><span class="s5">0</span><span class="s3">; </span><span class="s1">i </span><span class="s3">!== </span><span class="s1">divs</span><span class="s3">.</span><span class="s1">length</span><span class="s3">; </span><span class="s1">i</span><span class="s3">++) {</span>
+                    <span class="s1">divs</span><span class="s3">[</span><span class="s1">i</span><span class="s3">].</span><span class="s1">style</span><span class="s3">.</span><span class="s1">visibility </span><span class="s3">= </span><span class="s2">&quot;hidden&quot;</span><span class="s3">;</span>
+                <span class="s3">}</span>
+            <span class="s3">}</span>
+        <span class="s3">}</span>
+    <span class="s3">}</span>
+
+    <span class="s1">clearFeatures</span><span class="s3">() {</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">featureCollection</span><span class="s3">.</span><span class="s1">clear</span><span class="s3">();</span>
+        <span class="s0">// Empty textarea widget</span>
+        <span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">id</span><span class="s3">).</span><span class="s1">value </span><span class="s3">= </span><span class="s2">''</span><span class="s3">;</span>
+        <span class="s4">this</span><span class="s3">.</span><span class="s1">enableDrawing</span><span class="s3">();</span>
+    <span class="s3">}</span>
+
+    <span class="s1">serializeFeatures</span><span class="s3">() {</span>
+        <span class="s0">// Three use cases: GeometryCollection, multigeometries, and single geometry</span>
+        <span class="s4">let </span><span class="s1">geometry </span><span class="s3">= </span><span class="s4">null</span><span class="s3">;</span>
+        <span class="s4">const </span><span class="s1">features </span><span class="s3">= </span><span class="s4">this</span><span class="s3">.</span><span class="s1">featureOverlay</span><span class="s3">.</span><span class="s1">getSource</span><span class="s3">().</span><span class="s1">getFeatures</span><span class="s3">();</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">is_collection</span><span class="s3">) {</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">geom_name </span><span class="s3">=== </span><span class="s2">&quot;GeometryCollection&quot;</span><span class="s3">) {</span>
+                <span class="s4">const </span><span class="s1">geometries </span><span class="s3">= [];</span>
+                <span class="s4">for </span><span class="s3">(</span><span class="s4">let </span><span class="s1">i </span><span class="s3">= </span><span class="s5">0</span><span class="s3">; </span><span class="s1">i </span><span class="s3">&lt; </span><span class="s1">features</span><span class="s3">.</span><span class="s1">length</span><span class="s3">; </span><span class="s1">i</span><span class="s3">++) {</span>
+                    <span class="s1">geometries</span><span class="s3">.</span><span class="s1">push</span><span class="s3">(</span><span class="s1">features</span><span class="s3">[</span><span class="s1">i</span><span class="s3">].</span><span class="s1">getGeometry</span><span class="s3">());</span>
+                <span class="s3">}</span>
+                <span class="s1">geometry </span><span class="s3">= </span><span class="s4">new </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">geom</span><span class="s3">.</span><span class="s1">GeometryCollection</span><span class="s3">(</span><span class="s1">geometries</span><span class="s3">);</span>
+            <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+                <span class="s1">geometry </span><span class="s3">= </span><span class="s1">features</span><span class="s3">[</span><span class="s5">0</span><span class="s3">].</span><span class="s1">getGeometry</span><span class="s3">().</span><span class="s1">clone</span><span class="s3">();</span>
+                <span class="s4">for </span><span class="s3">(</span><span class="s4">let </span><span class="s1">j </span><span class="s3">= </span><span class="s5">1</span><span class="s3">; </span><span class="s1">j </span><span class="s3">&lt; </span><span class="s1">features</span><span class="s3">.</span><span class="s1">length</span><span class="s3">; </span><span class="s1">j</span><span class="s3">++) {</span>
+                    <span class="s4">switch </span><span class="s3">(</span><span class="s1">geometry</span><span class="s3">.</span><span class="s1">getType</span><span class="s3">()) {</span>
+                    <span class="s4">case </span><span class="s2">&quot;MultiPoint&quot;</span><span class="s3">:</span>
+                        <span class="s1">geometry</span><span class="s3">.</span><span class="s1">appendPoint</span><span class="s3">(</span><span class="s1">features</span><span class="s3">[</span><span class="s1">j</span><span class="s3">].</span><span class="s1">getGeometry</span><span class="s3">().</span><span class="s1">getPoint</span><span class="s3">(</span><span class="s5">0</span><span class="s3">));</span>
+                        <span class="s4">break</span><span class="s3">;</span>
+                    <span class="s4">case </span><span class="s2">&quot;MultiLineString&quot;</span><span class="s3">:</span>
+                        <span class="s1">geometry</span><span class="s3">.</span><span class="s1">appendLineString</span><span class="s3">(</span><span class="s1">features</span><span class="s3">[</span><span class="s1">j</span><span class="s3">].</span><span class="s1">getGeometry</span><span class="s3">().</span><span class="s1">getLineString</span><span class="s3">(</span><span class="s5">0</span><span class="s3">));</span>
+                        <span class="s4">break</span><span class="s3">;</span>
+                    <span class="s4">case </span><span class="s2">&quot;MultiPolygon&quot;</span><span class="s3">:</span>
+                        <span class="s1">geometry</span><span class="s3">.</span><span class="s1">appendPolygon</span><span class="s3">(</span><span class="s1">features</span><span class="s3">[</span><span class="s1">j</span><span class="s3">].</span><span class="s1">getGeometry</span><span class="s3">().</span><span class="s1">getPolygon</span><span class="s3">(</span><span class="s5">0</span><span class="s3">));</span>
+                    <span class="s3">}</span>
+                <span class="s3">}</span>
+            <span class="s3">}</span>
+        <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">features</span><span class="s3">[</span><span class="s5">0</span><span class="s3">]) {</span>
+                <span class="s1">geometry </span><span class="s3">= </span><span class="s1">features</span><span class="s3">[</span><span class="s5">0</span><span class="s3">].</span><span class="s1">getGeometry</span><span class="s3">();</span>
+            <span class="s3">}</span>
+        <span class="s3">}</span>
+        <span class="s4">const </span><span class="s1">jsonFormat </span><span class="s3">= </span><span class="s4">new </span><span class="s1">ol</span><span class="s3">.</span><span class="s1">format</span><span class="s3">.</span><span class="s1">GeoJSON</span><span class="s3">();</span>
+        <span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">id</span><span class="s3">).</span><span class="s1">value </span><span class="s3">= </span><span class="s1">jsonFormat</span><span class="s3">.</span><span class="s1">writeGeometry</span><span class="s3">(</span><span class="s1">geometry</span><span class="s3">);</span>
+    <span class="s3">}</span>
+<span class="s3">}</span>
+</pre>
+</body>
+</html>

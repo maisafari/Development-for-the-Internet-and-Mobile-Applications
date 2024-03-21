@@ -1,0 +1,82 @@
+<html>
+<head>
+<title>autoreload.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+autoreload.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">pathlib </span><span class="s0">import </span><span class="s1">Path</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">dispatch </span><span class="s0">import </span><span class="s1">receiver</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template </span><span class="s0">import </span><span class="s1">engines</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">django </span><span class="s0">import </span><span class="s1">DjangoTemplates</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">_os </span><span class="s0">import </span><span class="s1">to_path</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">autoreload </span><span class="s0">import </span><span class="s1">autoreload_started</span><span class="s2">, </span><span class="s1">file_changed</span><span class="s2">, </span><span class="s1">is_django_path</span>
+
+
+<span class="s0">def </span><span class="s1">get_template_directories</span><span class="s2">():</span>
+    <span class="s3"># Iterate through each template backend and find</span>
+    <span class="s3"># any template_loader that has a 'get_dirs' method.</span>
+    <span class="s3"># Collect the directories, filtering out Django templates.</span>
+    <span class="s1">cwd </span><span class="s2">= </span><span class="s1">Path</span><span class="s2">.</span><span class="s1">cwd</span><span class="s2">()</span>
+    <span class="s1">items </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+    <span class="s0">for </span><span class="s1">backend </span><span class="s0">in </span><span class="s1">engines</span><span class="s2">.</span><span class="s1">all</span><span class="s2">():</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">backend</span><span class="s2">, </span><span class="s1">DjangoTemplates</span><span class="s2">):</span>
+            <span class="s0">continue</span>
+
+        <span class="s1">items</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">cwd </span><span class="s2">/ </span><span class="s1">to_path</span><span class="s2">(</span><span class="s1">dir</span><span class="s2">) </span><span class="s0">for </span><span class="s1">dir </span><span class="s0">in </span><span class="s1">backend</span><span class="s2">.</span><span class="s1">engine</span><span class="s2">.</span><span class="s1">dirs </span><span class="s0">if </span><span class="s1">dir</span><span class="s2">)</span>
+
+        <span class="s0">for </span><span class="s1">loader </span><span class="s0">in </span><span class="s1">backend</span><span class="s2">.</span><span class="s1">engine</span><span class="s2">.</span><span class="s1">template_loaders</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">loader</span><span class="s2">, </span><span class="s4">&quot;get_dirs&quot;</span><span class="s2">):</span>
+                <span class="s0">continue</span>
+            <span class="s1">items</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span>
+                <span class="s1">cwd </span><span class="s2">/ </span><span class="s1">to_path</span><span class="s2">(</span><span class="s1">directory</span><span class="s2">)</span>
+                <span class="s0">for </span><span class="s1">directory </span><span class="s0">in </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">get_dirs</span><span class="s2">()</span>
+                <span class="s0">if </span><span class="s1">directory </span><span class="s0">and not </span><span class="s1">is_django_path</span><span class="s2">(</span><span class="s1">directory</span><span class="s2">)</span>
+            <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">items</span>
+
+
+<span class="s0">def </span><span class="s1">reset_loaders</span><span class="s2">():</span>
+    <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">forms</span><span class="s2">.</span><span class="s1">renderers </span><span class="s0">import </span><span class="s1">get_default_renderer</span>
+
+    <span class="s0">for </span><span class="s1">backend </span><span class="s0">in </span><span class="s1">engines</span><span class="s2">.</span><span class="s1">all</span><span class="s2">():</span>
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">backend</span><span class="s2">, </span><span class="s1">DjangoTemplates</span><span class="s2">):</span>
+            <span class="s0">continue</span>
+        <span class="s0">for </span><span class="s1">loader </span><span class="s0">in </span><span class="s1">backend</span><span class="s2">.</span><span class="s1">engine</span><span class="s2">.</span><span class="s1">template_loaders</span><span class="s2">:</span>
+            <span class="s1">loader</span><span class="s2">.</span><span class="s1">reset</span><span class="s2">()</span>
+
+    <span class="s1">backend </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">get_default_renderer</span><span class="s2">(), </span><span class="s4">&quot;engine&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">backend</span><span class="s2">, </span><span class="s1">DjangoTemplates</span><span class="s2">):</span>
+        <span class="s0">for </span><span class="s1">loader </span><span class="s0">in </span><span class="s1">backend</span><span class="s2">.</span><span class="s1">engine</span><span class="s2">.</span><span class="s1">template_loaders</span><span class="s2">:</span>
+            <span class="s1">loader</span><span class="s2">.</span><span class="s1">reset</span><span class="s2">()</span>
+
+
+<span class="s2">@</span><span class="s1">receiver</span><span class="s2">(</span><span class="s1">autoreload_started</span><span class="s2">, </span><span class="s1">dispatch_uid</span><span class="s2">=</span><span class="s4">&quot;template_loaders_watch_changes&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">watch_for_template_changes</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s0">for </span><span class="s1">directory </span><span class="s0">in </span><span class="s1">get_template_directories</span><span class="s2">():</span>
+        <span class="s1">sender</span><span class="s2">.</span><span class="s1">watch_dir</span><span class="s2">(</span><span class="s1">directory</span><span class="s2">, </span><span class="s4">&quot;**/*&quot;</span><span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">receiver</span><span class="s2">(</span><span class="s1">file_changed</span><span class="s2">, </span><span class="s1">dispatch_uid</span><span class="s2">=</span><span class="s4">&quot;template_loaders_file_changed&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">template_changed</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">, </span><span class="s1">file_path</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">file_path</span><span class="s2">.</span><span class="s1">suffix </span><span class="s2">== </span><span class="s4">&quot;.py&quot;</span><span class="s2">:</span>
+        <span class="s0">return</span>
+    <span class="s0">for </span><span class="s1">template_dir </span><span class="s0">in </span><span class="s1">get_template_directories</span><span class="s2">():</span>
+        <span class="s0">if </span><span class="s1">template_dir </span><span class="s0">in </span><span class="s1">file_path</span><span class="s2">.</span><span class="s1">parents</span><span class="s2">:</span>
+            <span class="s1">reset_loaders</span><span class="s2">()</span>
+            <span class="s0">return True</span>
+</pre>
+</body>
+</html>

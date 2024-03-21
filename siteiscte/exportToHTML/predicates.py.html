@@ -1,0 +1,71 @@
+<html>
+<head>
+<title>predicates.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+predicates.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+ This module houses the GEOS ctypes prototype functions for the 
+ unary and binary predicate operations on geometries. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">c_byte</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">, </span><span class="s1">c_double</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">libgeos </span><span class="s2">import </span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOSFuncFactory</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">prototypes</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s2">import </span><span class="s1">check_predicate</span>
+
+
+<span class="s4"># ## Binary &amp; unary predicate factories ##</span>
+<span class="s2">class </span><span class="s1">UnaryPredicate</span><span class="s3">(</span><span class="s1">GEOSFuncFactory</span><span class="s3">):</span>
+    <span class="s0">&quot;For GEOS unary predicate functions.&quot;</span>
+    <span class="s1">argtypes </span><span class="s3">= [</span><span class="s1">GEOM_PTR</span><span class="s3">]</span>
+    <span class="s1">restype </span><span class="s3">= </span><span class="s1">c_byte</span>
+    <span class="s1">errcheck </span><span class="s3">= </span><span class="s1">staticmethod</span><span class="s3">(</span><span class="s1">check_predicate</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">BinaryPredicate</span><span class="s3">(</span><span class="s1">UnaryPredicate</span><span class="s3">):</span>
+    <span class="s0">&quot;For GEOS binary predicate functions.&quot;</span>
+    <span class="s1">argtypes </span><span class="s3">= [</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOM_PTR</span><span class="s3">]</span>
+
+
+<span class="s4"># ## Unary Predicates ##</span>
+<span class="s1">geos_hasz </span><span class="s3">= </span><span class="s1">UnaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSHasZ&quot;</span><span class="s3">)</span>
+<span class="s1">geos_isclosed </span><span class="s3">= </span><span class="s1">UnaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSisClosed&quot;</span><span class="s3">)</span>
+<span class="s1">geos_isempty </span><span class="s3">= </span><span class="s1">UnaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSisEmpty&quot;</span><span class="s3">)</span>
+<span class="s1">geos_isring </span><span class="s3">= </span><span class="s1">UnaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSisRing&quot;</span><span class="s3">)</span>
+<span class="s1">geos_issimple </span><span class="s3">= </span><span class="s1">UnaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSisSimple&quot;</span><span class="s3">)</span>
+<span class="s1">geos_isvalid </span><span class="s3">= </span><span class="s1">UnaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSisValid&quot;</span><span class="s3">)</span>
+
+<span class="s4"># ## Binary Predicates ##</span>
+<span class="s1">geos_contains </span><span class="s3">= </span><span class="s1">BinaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSContains&quot;</span><span class="s3">)</span>
+<span class="s1">geos_covers </span><span class="s3">= </span><span class="s1">BinaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSCovers&quot;</span><span class="s3">)</span>
+<span class="s1">geos_crosses </span><span class="s3">= </span><span class="s1">BinaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSCrosses&quot;</span><span class="s3">)</span>
+<span class="s1">geos_disjoint </span><span class="s3">= </span><span class="s1">BinaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSDisjoint&quot;</span><span class="s3">)</span>
+<span class="s1">geos_equals </span><span class="s3">= </span><span class="s1">BinaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSEquals&quot;</span><span class="s3">)</span>
+<span class="s1">geos_equalsexact </span><span class="s3">= </span><span class="s1">BinaryPredicate</span><span class="s3">(</span>
+    <span class="s5">&quot;GEOSEqualsExact&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">geos_equalsidentical </span><span class="s3">= </span><span class="s1">BinaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSEqualsIdentical&quot;</span><span class="s3">)</span>
+<span class="s1">geos_intersects </span><span class="s3">= </span><span class="s1">BinaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSIntersects&quot;</span><span class="s3">)</span>
+<span class="s1">geos_overlaps </span><span class="s3">= </span><span class="s1">BinaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSOverlaps&quot;</span><span class="s3">)</span>
+<span class="s1">geos_relatepattern </span><span class="s3">= </span><span class="s1">BinaryPredicate</span><span class="s3">(</span>
+    <span class="s5">&quot;GEOSRelatePattern&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">c_char_p</span><span class="s3">]</span>
+<span class="s3">)</span>
+<span class="s1">geos_touches </span><span class="s3">= </span><span class="s1">BinaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSTouches&quot;</span><span class="s3">)</span>
+<span class="s1">geos_within </span><span class="s3">= </span><span class="s1">BinaryPredicate</span><span class="s3">(</span><span class="s5">&quot;GEOSWithin&quot;</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

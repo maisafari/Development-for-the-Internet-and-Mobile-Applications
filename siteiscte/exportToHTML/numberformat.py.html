@@ -1,0 +1,128 @@
+<html>
+<head>
+<title>numberformat.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #2aacb8;}
+.s4 { color: #6aab73;}
+.s5 { color: #5f826b; font-style: italic;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+numberformat.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">decimal </span><span class="s0">import </span><span class="s1">Decimal</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">safestring </span><span class="s0">import </span><span class="s1">mark_safe</span>
+
+
+<span class="s0">def </span><span class="s1">format</span><span class="s2">(</span>
+    <span class="s1">number</span><span class="s2">,</span>
+    <span class="s1">decimal_sep</span><span class="s2">,</span>
+    <span class="s1">decimal_pos</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s1">grouping</span><span class="s2">=</span><span class="s3">0</span><span class="s2">,</span>
+    <span class="s1">thousand_sep</span><span class="s2">=</span><span class="s4">&quot;&quot;</span><span class="s2">,</span>
+    <span class="s1">force_grouping</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+    <span class="s1">use_l10n</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+<span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Get a number (as a number or string), and return it as a string, 
+    using formats defined as arguments: 
+ 
+    * decimal_sep: Decimal separator symbol (for example &quot;.&quot;) 
+    * decimal_pos: Number of decimal positions 
+    * grouping: Number of digits in every group limited by thousand separator. 
+        For non-uniform digit grouping, it can be a sequence with the number 
+        of digit group sizes following the format used by the Python locale 
+        module in locale.localeconv() LC_NUMERIC grouping (e.g. (3, 2, 0)). 
+    * thousand_sep: Thousand separator symbol (for example &quot;,&quot;) 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">number </span><span class="s0">is None or </span><span class="s1">number </span><span class="s2">== </span><span class="s4">&quot;&quot;</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">mark_safe</span><span class="s2">(</span><span class="s1">number</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">use_l10n </span><span class="s0">is None</span><span class="s2">:</span>
+        <span class="s1">use_l10n </span><span class="s2">= </span><span class="s0">True</span>
+    <span class="s1">use_grouping </span><span class="s2">= </span><span class="s1">use_l10n </span><span class="s0">and </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">USE_THOUSAND_SEPARATOR</span>
+    <span class="s1">use_grouping </span><span class="s2">= </span><span class="s1">use_grouping </span><span class="s0">or </span><span class="s1">force_grouping</span>
+    <span class="s1">use_grouping </span><span class="s2">= </span><span class="s1">use_grouping </span><span class="s0">and </span><span class="s1">grouping </span><span class="s2">!= </span><span class="s3">0</span>
+    <span class="s6"># Make the common case fast</span>
+    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">number</span><span class="s2">, </span><span class="s1">int</span><span class="s2">) </span><span class="s0">and not </span><span class="s1">use_grouping </span><span class="s0">and not </span><span class="s1">decimal_pos</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">mark_safe</span><span class="s2">(</span><span class="s1">number</span><span class="s2">)</span>
+    <span class="s6"># sign</span>
+    <span class="s1">sign </span><span class="s2">= </span><span class="s4">&quot;&quot;</span>
+    <span class="s6"># Treat potentially very large/small floats as Decimals.</span>
+    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">number</span><span class="s2">, </span><span class="s1">float</span><span class="s2">) </span><span class="s0">and </span><span class="s4">&quot;e&quot; </span><span class="s0">in </span><span class="s1">str</span><span class="s2">(</span><span class="s1">number</span><span class="s2">).</span><span class="s1">lower</span><span class="s2">():</span>
+        <span class="s1">number </span><span class="s2">= </span><span class="s1">Decimal</span><span class="s2">(</span><span class="s1">str</span><span class="s2">(</span><span class="s1">number</span><span class="s2">))</span>
+    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">number</span><span class="s2">, </span><span class="s1">Decimal</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">decimal_pos </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s6"># If the provided number is too small to affect any of the visible</span>
+            <span class="s6"># decimal places, consider it equal to '0'.</span>
+            <span class="s1">cutoff </span><span class="s2">= </span><span class="s1">Decimal</span><span class="s2">(</span><span class="s4">&quot;0.&quot; </span><span class="s2">+ </span><span class="s4">&quot;1&quot;</span><span class="s2">.</span><span class="s1">rjust</span><span class="s2">(</span><span class="s1">decimal_pos</span><span class="s2">, </span><span class="s4">&quot;0&quot;</span><span class="s2">))</span>
+            <span class="s0">if </span><span class="s1">abs</span><span class="s2">(</span><span class="s1">number</span><span class="s2">) &lt; </span><span class="s1">cutoff</span><span class="s2">:</span>
+                <span class="s1">number </span><span class="s2">= </span><span class="s1">Decimal</span><span class="s2">(</span><span class="s4">&quot;0&quot;</span><span class="s2">)</span>
+
+        <span class="s6"># Format values with more than 200 digits (an arbitrary cutoff) using</span>
+        <span class="s6"># scientific notation to avoid high memory usage in {:f}'.format().</span>
+        <span class="s1">_</span><span class="s2">, </span><span class="s1">digits</span><span class="s2">, </span><span class="s1">exponent </span><span class="s2">= </span><span class="s1">number</span><span class="s2">.</span><span class="s1">as_tuple</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">abs</span><span class="s2">(</span><span class="s1">exponent</span><span class="s2">) + </span><span class="s1">len</span><span class="s2">(</span><span class="s1">digits</span><span class="s2">) &gt; </span><span class="s3">200</span><span class="s2">:</span>
+            <span class="s1">number </span><span class="s2">= </span><span class="s4">&quot;{:e}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">number</span><span class="s2">)</span>
+            <span class="s1">coefficient</span><span class="s2">, </span><span class="s1">exponent </span><span class="s2">= </span><span class="s1">number</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s4">&quot;e&quot;</span><span class="s2">)</span>
+            <span class="s6"># Format the coefficient.</span>
+            <span class="s1">coefficient </span><span class="s2">= </span><span class="s1">format</span><span class="s2">(</span>
+                <span class="s1">coefficient</span><span class="s2">,</span>
+                <span class="s1">decimal_sep</span><span class="s2">,</span>
+                <span class="s1">decimal_pos</span><span class="s2">,</span>
+                <span class="s1">grouping</span><span class="s2">,</span>
+                <span class="s1">thousand_sep</span><span class="s2">,</span>
+                <span class="s1">force_grouping</span><span class="s2">,</span>
+                <span class="s1">use_l10n</span><span class="s2">,</span>
+            <span class="s2">)</span>
+            <span class="s0">return </span><span class="s4">&quot;{}e{}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">coefficient</span><span class="s2">, </span><span class="s1">exponent</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">str_number </span><span class="s2">= </span><span class="s4">&quot;{:f}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">number</span><span class="s2">)</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">str_number </span><span class="s2">= </span><span class="s1">str</span><span class="s2">(</span><span class="s1">number</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">str_number</span><span class="s2">[</span><span class="s3">0</span><span class="s2">] == </span><span class="s4">&quot;-&quot;</span><span class="s2">:</span>
+        <span class="s1">sign </span><span class="s2">= </span><span class="s4">&quot;-&quot;</span>
+        <span class="s1">str_number </span><span class="s2">= </span><span class="s1">str_number</span><span class="s2">[</span><span class="s3">1</span><span class="s2">:]</span>
+    <span class="s6"># decimal part</span>
+    <span class="s0">if </span><span class="s4">&quot;.&quot; </span><span class="s0">in </span><span class="s1">str_number</span><span class="s2">:</span>
+        <span class="s1">int_part</span><span class="s2">, </span><span class="s1">dec_part </span><span class="s2">= </span><span class="s1">str_number</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s4">&quot;.&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">decimal_pos </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">dec_part </span><span class="s2">= </span><span class="s1">dec_part</span><span class="s2">[:</span><span class="s1">decimal_pos</span><span class="s2">]</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">int_part</span><span class="s2">, </span><span class="s1">dec_part </span><span class="s2">= </span><span class="s1">str_number</span><span class="s2">, </span><span class="s4">&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">decimal_pos </span><span class="s0">is not None</span><span class="s2">:</span>
+        <span class="s1">dec_part </span><span class="s2">+= </span><span class="s4">&quot;0&quot; </span><span class="s2">* (</span><span class="s1">decimal_pos </span><span class="s2">- </span><span class="s1">len</span><span class="s2">(</span><span class="s1">dec_part</span><span class="s2">))</span>
+    <span class="s1">dec_part </span><span class="s2">= </span><span class="s1">dec_part </span><span class="s0">and </span><span class="s1">decimal_sep </span><span class="s2">+ </span><span class="s1">dec_part</span>
+    <span class="s6"># grouping</span>
+    <span class="s0">if </span><span class="s1">use_grouping</span><span class="s2">:</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s6"># if grouping is a sequence</span>
+            <span class="s1">intervals </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">grouping</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">TypeError</span><span class="s2">:</span>
+            <span class="s6"># grouping is a single value</span>
+            <span class="s1">intervals </span><span class="s2">= [</span><span class="s1">grouping</span><span class="s2">, </span><span class="s3">0</span><span class="s2">]</span>
+        <span class="s1">active_interval </span><span class="s2">= </span><span class="s1">intervals</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s3">0</span><span class="s2">)</span>
+        <span class="s1">int_part_gd </span><span class="s2">= </span><span class="s4">&quot;&quot;</span>
+        <span class="s1">cnt </span><span class="s2">= </span><span class="s3">0</span>
+        <span class="s0">for </span><span class="s1">digit </span><span class="s0">in </span><span class="s1">int_part</span><span class="s2">[::-</span><span class="s3">1</span><span class="s2">]:</span>
+            <span class="s0">if </span><span class="s1">cnt </span><span class="s0">and </span><span class="s1">cnt </span><span class="s2">== </span><span class="s1">active_interval</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">intervals</span><span class="s2">:</span>
+                    <span class="s1">active_interval </span><span class="s2">= </span><span class="s1">intervals</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s3">0</span><span class="s2">) </span><span class="s0">or </span><span class="s1">active_interval</span>
+                <span class="s1">int_part_gd </span><span class="s2">+= </span><span class="s1">thousand_sep</span><span class="s2">[::-</span><span class="s3">1</span><span class="s2">]</span>
+                <span class="s1">cnt </span><span class="s2">= </span><span class="s3">0</span>
+            <span class="s1">int_part_gd </span><span class="s2">+= </span><span class="s1">digit</span>
+            <span class="s1">cnt </span><span class="s2">+= </span><span class="s3">1</span>
+        <span class="s1">int_part </span><span class="s2">= </span><span class="s1">int_part_gd</span><span class="s2">[::-</span><span class="s3">1</span><span class="s2">]</span>
+    <span class="s0">return </span><span class="s1">sign </span><span class="s2">+ </span><span class="s1">int_part </span><span class="s2">+ </span><span class="s1">dec_part</span>
+</pre>
+</body>
+</html>

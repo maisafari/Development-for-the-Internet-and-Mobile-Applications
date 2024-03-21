@@ -1,0 +1,146 @@
+<html>
+<head>
+<title>autocomplete.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #2aacb8;}
+.s5 { color: #6aab73;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+autocomplete.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">NotRegistered</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">FieldDoesNotExist</span><span class="s2">, </span><span class="s1">PermissionDenied</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">Http404</span><span class="s2">, </span><span class="s1">JsonResponse</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">views</span><span class="s2">.</span><span class="s1">generic</span><span class="s2">.</span><span class="s1">list </span><span class="s0">import </span><span class="s1">BaseListView</span>
+
+
+<span class="s0">class </span><span class="s1">AutocompleteJsonView</span><span class="s2">(</span><span class="s1">BaseListView</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;Handle AutocompleteWidget's AJAX requests for data.&quot;&quot;&quot;</span>
+
+    <span class="s1">paginate_by </span><span class="s2">= </span><span class="s4">20</span>
+    <span class="s1">admin_site </span><span class="s2">= </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">get</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return a JsonResponse with search results as defined in 
+        serialize_result(), by default: 
+        { 
+            results: [{id: &quot;123&quot; text: &quot;foo&quot;}], 
+            pagination: {more: true} 
+        } 
+        &quot;&quot;&quot;</span>
+        <span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">term</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">source_field</span><span class="s2">,</span>
+            <span class="s1">to_field_name</span><span class="s2">,</span>
+        <span class="s2">) = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">process_request</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+
+        <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">has_perm</span><span class="s2">(</span><span class="s1">request</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">PermissionDenied</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">object_list </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_queryset</span><span class="s2">()</span>
+        <span class="s1">context </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_context_data</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">JsonResponse</span><span class="s2">(</span>
+            <span class="s2">{</span>
+                <span class="s5">&quot;results&quot;</span><span class="s2">: [</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">serialize_result</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">to_field_name</span><span class="s2">)</span>
+                    <span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">context</span><span class="s2">[</span><span class="s5">&quot;object_list&quot;</span><span class="s2">]</span>
+                <span class="s2">],</span>
+                <span class="s5">&quot;pagination&quot;</span><span class="s2">: {</span><span class="s5">&quot;more&quot;</span><span class="s2">: </span><span class="s1">context</span><span class="s2">[</span><span class="s5">&quot;page_obj&quot;</span><span class="s2">].</span><span class="s1">has_next</span><span class="s2">()},</span>
+            <span class="s2">}</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">serialize_result</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">, </span><span class="s1">to_field_name</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Convert the provided model object to a dictionary that is added to the 
+        results list. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s2">{</span><span class="s5">&quot;id&quot;</span><span class="s2">: </span><span class="s1">str</span><span class="s2">(</span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">to_field_name</span><span class="s2">)), </span><span class="s5">&quot;text&quot;</span><span class="s2">: </span><span class="s1">str</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">)}</span>
+
+    <span class="s0">def </span><span class="s1">get_paginator</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Use the ModelAdmin's paginator.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">get_paginator</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">request</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_queryset</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Return queryset based on ModelAdmin.get_search_results().&quot;&quot;&quot;</span>
+        <span class="s1">qs </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">get_queryset</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s1">qs </span><span class="s2">= </span><span class="s1">qs</span><span class="s2">.</span><span class="s1">complex_filter</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">source_field</span><span class="s2">.</span><span class="s1">get_limit_choices_to</span><span class="s2">())</span>
+        <span class="s1">qs</span><span class="s2">, </span><span class="s1">search_use_distinct </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">get_search_results</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">request</span><span class="s2">, </span><span class="s1">qs</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">term</span>
+        <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">search_use_distinct</span><span class="s2">:</span>
+            <span class="s1">qs </span><span class="s2">= </span><span class="s1">qs</span><span class="s2">.</span><span class="s1">distinct</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">qs</span>
+
+    <span class="s0">def </span><span class="s1">process_request</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Validate request integrity, extract and return request parameters. 
+ 
+        Since the subsequent view permission check requires the target model 
+        admin, which is determined here, raise PermissionDenied if the 
+        requested app, model or field are malformed. 
+ 
+        Raise Http404 if the target model admin is not configured properly with 
+        search_fields. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">term </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;term&quot;</span><span class="s2">, </span><span class="s5">&quot;&quot;</span><span class="s2">)</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">app_label </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span><span class="s2">[</span><span class="s5">&quot;app_label&quot;</span><span class="s2">]</span>
+            <span class="s1">model_name </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span><span class="s2">[</span><span class="s5">&quot;model_name&quot;</span><span class="s2">]</span>
+            <span class="s1">field_name </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span><span class="s2">[</span><span class="s5">&quot;field_name&quot;</span><span class="s2">]</span>
+        <span class="s0">except </span><span class="s1">KeyError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">PermissionDenied </span><span class="s0">from </span><span class="s1">e</span>
+
+        <span class="s6"># Retrieve objects from parameters.</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">source_model </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">LookupError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">PermissionDenied </span><span class="s0">from </span><span class="s1">e</span>
+
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">source_field </span><span class="s2">= </span><span class="s1">source_model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">FieldDoesNotExist </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">PermissionDenied </span><span class="s0">from </span><span class="s1">e</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">remote_model </span><span class="s2">= </span><span class="s1">source_field</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model</span>
+        <span class="s0">except </span><span class="s1">AttributeError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">PermissionDenied </span><span class="s0">from </span><span class="s1">e</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">model_admin </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">admin_site</span><span class="s2">.</span><span class="s1">get_model_admin</span><span class="s2">(</span><span class="s1">remote_model</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">NotRegistered </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">PermissionDenied </span><span class="s0">from </span><span class="s1">e</span>
+
+        <span class="s6"># Validate suitability of objects.</span>
+        <span class="s0">if not </span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">get_search_fields</span><span class="s2">(</span><span class="s1">request</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">Http404</span><span class="s2">(</span>
+                <span class="s5">&quot;%s must have search_fields for the autocomplete_view.&quot;</span>
+                <span class="s2">% </span><span class="s1">type</span><span class="s2">(</span><span class="s1">model_admin</span><span class="s2">).</span><span class="s1">__qualname__</span>
+            <span class="s2">)</span>
+
+        <span class="s1">to_field_name </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span>
+            <span class="s1">source_field</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">, </span><span class="s5">&quot;field_name&quot;</span><span class="s2">, </span><span class="s1">remote_model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">attname</span>
+        <span class="s2">)</span>
+        <span class="s1">to_field_name </span><span class="s2">= </span><span class="s1">remote_model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">to_field_name</span><span class="s2">).</span><span class="s1">attname</span>
+        <span class="s0">if not </span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">to_field_allowed</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">to_field_name</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">PermissionDenied</span>
+
+        <span class="s0">return </span><span class="s1">term</span><span class="s2">, </span><span class="s1">model_admin</span><span class="s2">, </span><span class="s1">source_field</span><span class="s2">, </span><span class="s1">to_field_name</span>
+
+    <span class="s0">def </span><span class="s1">has_perm</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Check if user has permission to access the related model.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">has_view_permission</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s1">obj</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

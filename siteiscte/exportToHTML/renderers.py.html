@@ -1,0 +1,132 @@
+<html>
+<head>
+<title>renderers.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+renderers.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">functools</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+<span class="s0">from </span><span class="s1">pathlib </span><span class="s0">import </span><span class="s1">Path</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">django </span><span class="s0">import </span><span class="s1">DjangoTemplates</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template</span><span class="s2">.</span><span class="s1">loader </span><span class="s0">import </span><span class="s1">get_template</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">deprecation </span><span class="s0">import </span><span class="s1">RemovedInDjango60Warning</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">module_loading </span><span class="s0">import </span><span class="s1">import_string</span>
+
+
+<span class="s2">@</span><span class="s1">functools</span><span class="s2">.</span><span class="s1">lru_cache</span>
+<span class="s0">def </span><span class="s1">get_default_renderer</span><span class="s2">():</span>
+    <span class="s1">renderer_class </span><span class="s2">= </span><span class="s1">import_string</span><span class="s2">(</span><span class="s1">settings</span><span class="s2">.</span><span class="s1">FORM_RENDERER</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">renderer_class</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">BaseRenderer</span><span class="s2">:</span>
+    <span class="s1">form_template_name </span><span class="s2">= </span><span class="s3">&quot;django/forms/div.html&quot;</span>
+    <span class="s1">formset_template_name </span><span class="s2">= </span><span class="s3">&quot;django/forms/formsets/div.html&quot;</span>
+    <span class="s1">field_template_name </span><span class="s2">= </span><span class="s3">&quot;django/forms/field.html&quot;</span>
+
+    <span class="s0">def </span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">):</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span><span class="s2">(</span><span class="s3">&quot;subclasses must implement get_template()&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">, </span><span class="s1">context</span><span class="s2">, </span><span class="s1">request</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">template </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">template</span><span class="s2">.</span><span class="s1">render</span><span class="s2">(</span><span class="s1">context</span><span class="s2">, </span><span class="s1">request</span><span class="s2">=</span><span class="s1">request</span><span class="s2">).</span><span class="s1">strip</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">EngineMixin</span><span class="s2">:</span>
+    <span class="s0">def </span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">engine</span><span class="s2">.</span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">engine</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">backend</span><span class="s2">(</span>
+            <span class="s2">{</span>
+                <span class="s3">&quot;APP_DIRS&quot;</span><span class="s2">: </span><span class="s0">True</span><span class="s2">,</span>
+                <span class="s3">&quot;DIRS&quot;</span><span class="s2">: [</span><span class="s1">Path</span><span class="s2">(</span><span class="s1">__file__</span><span class="s2">).</span><span class="s1">parent </span><span class="s2">/ </span><span class="s1">self</span><span class="s2">.</span><span class="s1">backend</span><span class="s2">.</span><span class="s1">app_dirname</span><span class="s2">],</span>
+                <span class="s3">&quot;NAME&quot;</span><span class="s2">: </span><span class="s3">&quot;djangoforms&quot;</span><span class="s2">,</span>
+                <span class="s3">&quot;OPTIONS&quot;</span><span class="s2">: {},</span>
+            <span class="s2">}</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">DjangoTemplates</span><span class="s2">(</span><span class="s1">EngineMixin</span><span class="s2">, </span><span class="s1">BaseRenderer</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Load Django templates from the built-in widget templates in 
+    django/forms/templates and from apps' 'templates' directory. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">backend </span><span class="s2">= </span><span class="s1">DjangoTemplates</span>
+
+
+<span class="s0">class </span><span class="s1">Jinja2</span><span class="s2">(</span><span class="s1">EngineMixin</span><span class="s2">, </span><span class="s1">BaseRenderer</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Load Jinja2 templates from the built-in widget templates in 
+    django/forms/jinja2 and from apps' 'jinja2' directory. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">backend</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">jinja2 </span><span class="s0">import </span><span class="s1">Jinja2</span>
+
+        <span class="s0">return </span><span class="s1">Jinja2</span>
+
+
+<span class="s5"># RemovedInDjango60Warning.</span>
+<span class="s0">class </span><span class="s1">DjangoDivFormRenderer</span><span class="s2">(</span><span class="s1">DjangoTemplates</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Load Django templates from django/forms/templates and from apps' 
+    'templates' directory and use the 'div.html' template to render forms and 
+    formsets. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">warnings</span><span class="s2">.</span><span class="s1">warn</span><span class="s2">(</span>
+            <span class="s3">&quot;The DjangoDivFormRenderer transitional form renderer is deprecated. Use &quot;</span>
+            <span class="s3">&quot;DjangoTemplates instead.&quot;</span><span class="s2">,</span>
+            <span class="s1">RemovedInDjango60Warning</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+
+<span class="s5"># RemovedInDjango60Warning.</span>
+<span class="s0">class </span><span class="s1">Jinja2DivFormRenderer</span><span class="s2">(</span><span class="s1">Jinja2</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Load Jinja2 templates from the built-in widget templates in 
+    django/forms/jinja2 and from apps' 'jinja2' directory. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">warnings</span><span class="s2">.</span><span class="s1">warn</span><span class="s2">(</span>
+            <span class="s3">&quot;The Jinja2DivFormRenderer transitional form renderer is deprecated. Use &quot;</span>
+            <span class="s3">&quot;Jinja2 instead.&quot;</span><span class="s2">,</span>
+            <span class="s1">RemovedInDjango60Warning</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">TemplatesSetting</span><span class="s2">(</span><span class="s1">BaseRenderer</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Load templates using template.loader.get_template() which is configured 
+    based on settings.TEMPLATES. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

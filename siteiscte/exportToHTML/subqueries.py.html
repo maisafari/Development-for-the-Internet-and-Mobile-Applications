@@ -1,0 +1,197 @@
+<html>
+<head>
+<title>subqueries.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+subqueries.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Query subclasses which provide extra functionality beyond simple data retrieval. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">exceptions </span><span class="s2">import </span><span class="s1">FieldError</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db</span><span class="s3">.</span><span class="s1">models</span><span class="s3">.</span><span class="s1">sql</span><span class="s3">.</span><span class="s1">constants </span><span class="s2">import </span><span class="s1">CURSOR</span><span class="s3">, </span><span class="s1">GET_ITERATOR_CHUNK_SIZE</span><span class="s3">, </span><span class="s1">NO_RESULTS</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db</span><span class="s3">.</span><span class="s1">models</span><span class="s3">.</span><span class="s1">sql</span><span class="s3">.</span><span class="s1">query </span><span class="s2">import </span><span class="s1">Query</span>
+
+<span class="s1">__all__ </span><span class="s3">= [</span><span class="s4">&quot;DeleteQuery&quot;</span><span class="s3">, </span><span class="s4">&quot;UpdateQuery&quot;</span><span class="s3">, </span><span class="s4">&quot;InsertQuery&quot;</span><span class="s3">, </span><span class="s4">&quot;AggregateQuery&quot;</span><span class="s3">]</span>
+
+
+<span class="s2">class </span><span class="s1">DeleteQuery</span><span class="s3">(</span><span class="s1">Query</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;A DELETE SQL query.&quot;&quot;&quot;</span>
+
+    <span class="s1">compiler </span><span class="s3">= </span><span class="s4">&quot;SQLDeleteCompiler&quot;</span>
+
+    <span class="s2">def </span><span class="s1">do_query</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">table</span><span class="s3">, </span><span class="s1">where</span><span class="s3">, </span><span class="s1">using</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">alias_map </span><span class="s3">= {</span><span class="s1">table</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">alias_map</span><span class="s3">[</span><span class="s1">table</span><span class="s3">]}</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">where </span><span class="s3">= </span><span class="s1">where</span>
+        <span class="s1">cursor </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_compiler</span><span class="s3">(</span><span class="s1">using</span><span class="s3">).</span><span class="s1">execute_sql</span><span class="s3">(</span><span class="s1">CURSOR</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">cursor</span><span class="s3">:</span>
+            <span class="s2">with </span><span class="s1">cursor</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">cursor</span><span class="s3">.</span><span class="s1">rowcount</span>
+        <span class="s2">return </span><span class="s5">0</span>
+
+    <span class="s2">def </span><span class="s1">delete_batch</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">pk_list</span><span class="s3">, </span><span class="s1">using</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Set up and execute delete queries for all the objects in pk_list. 
+ 
+        More than one physical query may be executed if there are a 
+        lot of values in pk_list. 
+        &quot;&quot;&quot;</span>
+        <span class="s6"># number of objects deleted</span>
+        <span class="s1">num_deleted </span><span class="s3">= </span><span class="s5">0</span>
+        <span class="s1">field </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_meta</span><span class="s3">().</span><span class="s1">pk</span>
+        <span class="s2">for </span><span class="s1">offset </span><span class="s2">in </span><span class="s1">range</span><span class="s3">(</span><span class="s5">0</span><span class="s3">, </span><span class="s1">len</span><span class="s3">(</span><span class="s1">pk_list</span><span class="s3">), </span><span class="s1">GET_ITERATOR_CHUNK_SIZE</span><span class="s3">):</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">clear_where</span><span class="s3">()</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">add_filter</span><span class="s3">(</span>
+                <span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">field</span><span class="s3">.</span><span class="s1">attname</span><span class="s2">}</span><span class="s4">__in&quot;</span><span class="s3">,</span>
+                <span class="s1">pk_list</span><span class="s3">[</span><span class="s1">offset </span><span class="s3">: </span><span class="s1">offset </span><span class="s3">+ </span><span class="s1">GET_ITERATOR_CHUNK_SIZE</span><span class="s3">],</span>
+            <span class="s3">)</span>
+            <span class="s1">num_deleted </span><span class="s3">+= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">do_query</span><span class="s3">(</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">get_meta</span><span class="s3">().</span><span class="s1">db_table</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">where</span><span class="s3">, </span><span class="s1">using</span><span class="s3">=</span><span class="s1">using</span>
+            <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">num_deleted</span>
+
+
+<span class="s2">class </span><span class="s1">UpdateQuery</span><span class="s3">(</span><span class="s1">Query</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;An UPDATE SQL query.&quot;&quot;&quot;</span>
+
+    <span class="s1">compiler </span><span class="s3">= </span><span class="s4">&quot;SQLUpdateCompiler&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(*</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_setup_query</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">_setup_query</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Run on initialization and at the end of chaining. Any attributes that 
+        would normally be set in __init__() should go here instead. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">values </span><span class="s3">= []</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">related_ids </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">related_updates </span><span class="s3">= {}</span>
+
+    <span class="s2">def </span><span class="s1">clone</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">obj </span><span class="s3">= </span><span class="s1">super</span><span class="s3">().</span><span class="s1">clone</span><span class="s3">()</span>
+        <span class="s1">obj</span><span class="s3">.</span><span class="s1">related_updates </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">related_updates</span><span class="s3">.</span><span class="s1">copy</span><span class="s3">()</span>
+        <span class="s2">return </span><span class="s1">obj</span>
+
+    <span class="s2">def </span><span class="s1">update_batch</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">pk_list</span><span class="s3">, </span><span class="s1">values</span><span class="s3">, </span><span class="s1">using</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">add_update_values</span><span class="s3">(</span><span class="s1">values</span><span class="s3">)</span>
+        <span class="s2">for </span><span class="s1">offset </span><span class="s2">in </span><span class="s1">range</span><span class="s3">(</span><span class="s5">0</span><span class="s3">, </span><span class="s1">len</span><span class="s3">(</span><span class="s1">pk_list</span><span class="s3">), </span><span class="s1">GET_ITERATOR_CHUNK_SIZE</span><span class="s3">):</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">clear_where</span><span class="s3">()</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">add_filter</span><span class="s3">(</span>
+                <span class="s4">&quot;pk__in&quot;</span><span class="s3">, </span><span class="s1">pk_list</span><span class="s3">[</span><span class="s1">offset </span><span class="s3">: </span><span class="s1">offset </span><span class="s3">+ </span><span class="s1">GET_ITERATOR_CHUNK_SIZE</span><span class="s3">]</span>
+            <span class="s3">)</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">get_compiler</span><span class="s3">(</span><span class="s1">using</span><span class="s3">).</span><span class="s1">execute_sql</span><span class="s3">(</span><span class="s1">NO_RESULTS</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">add_update_values</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">values</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Convert a dictionary of field name to value mappings into an update 
+        query. This is the entry point for the public update() method on 
+        querysets. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">values_seq </span><span class="s3">= []</span>
+        <span class="s2">for </span><span class="s1">name</span><span class="s3">, </span><span class="s1">val </span><span class="s2">in </span><span class="s1">values</span><span class="s3">.</span><span class="s1">items</span><span class="s3">():</span>
+            <span class="s1">field </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_meta</span><span class="s3">().</span><span class="s1">get_field</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+            <span class="s1">direct </span><span class="s3">= (</span>
+                <span class="s2">not </span><span class="s3">(</span><span class="s1">field</span><span class="s3">.</span><span class="s1">auto_created </span><span class="s2">and not </span><span class="s1">field</span><span class="s3">.</span><span class="s1">concrete</span><span class="s3">) </span><span class="s2">or not </span><span class="s1">field</span><span class="s3">.</span><span class="s1">concrete</span>
+            <span class="s3">)</span>
+            <span class="s1">model </span><span class="s3">= </span><span class="s1">field</span><span class="s3">.</span><span class="s1">model</span><span class="s3">.</span><span class="s1">_meta</span><span class="s3">.</span><span class="s1">concrete_model</span>
+            <span class="s2">if not </span><span class="s1">direct </span><span class="s2">or </span><span class="s3">(</span><span class="s1">field</span><span class="s3">.</span><span class="s1">is_relation </span><span class="s2">and </span><span class="s1">field</span><span class="s3">.</span><span class="s1">many_to_many</span><span class="s3">):</span>
+                <span class="s2">raise </span><span class="s1">FieldError</span><span class="s3">(</span>
+                    <span class="s4">&quot;Cannot update model field %r (only non-relations and &quot;</span>
+                    <span class="s4">&quot;foreign keys permitted).&quot; </span><span class="s3">% </span><span class="s1">field</span>
+                <span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">model </span><span class="s2">is not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_meta</span><span class="s3">().</span><span class="s1">concrete_model</span><span class="s3">:</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">add_related_update</span><span class="s3">(</span><span class="s1">model</span><span class="s3">, </span><span class="s1">field</span><span class="s3">, </span><span class="s1">val</span><span class="s3">)</span>
+                <span class="s2">continue</span>
+            <span class="s1">values_seq</span><span class="s3">.</span><span class="s1">append</span><span class="s3">((</span><span class="s1">field</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">val</span><span class="s3">))</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">add_update_fields</span><span class="s3">(</span><span class="s1">values_seq</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">add_update_fields</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">values_seq</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Append a sequence of (field, model, value) triples to the internal list 
+        that will be used to generate the UPDATE query. Might be more usefully 
+        called add_update_targets() to hint at the extra information here. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">for </span><span class="s1">field</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">val </span><span class="s2">in </span><span class="s1">values_seq</span><span class="s3">:</span>
+            <span class="s6"># Omit generated fields.</span>
+            <span class="s2">if </span><span class="s1">field</span><span class="s3">.</span><span class="s1">generated</span><span class="s3">:</span>
+                <span class="s2">continue</span>
+            <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">val</span><span class="s3">, </span><span class="s4">&quot;resolve_expression&quot;</span><span class="s3">):</span>
+                <span class="s6"># Resolve expressions here so that annotations are no longer needed</span>
+                <span class="s1">val </span><span class="s3">= </span><span class="s1">val</span><span class="s3">.</span><span class="s1">resolve_expression</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">allow_joins</span><span class="s3">=</span><span class="s2">False</span><span class="s3">, </span><span class="s1">for_save</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">values</span><span class="s3">.</span><span class="s1">append</span><span class="s3">((</span><span class="s1">field</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">val</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">add_related_update</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">field</span><span class="s3">, </span><span class="s1">value</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Add (name, value) to an update query for an ancestor model. 
+ 
+        Update are coalesced so that only one update query per ancestor is run. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">related_updates</span><span class="s3">.</span><span class="s1">setdefault</span><span class="s3">(</span><span class="s1">model</span><span class="s3">, []).</span><span class="s1">append</span><span class="s3">((</span><span class="s1">field</span><span class="s3">, </span><span class="s2">None</span><span class="s3">, </span><span class="s1">value</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">get_related_updates</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return a list of query objects: one for each update required to an 
+        ancestor model. Each query will have the same filtering conditions as 
+        the current query but will only update a single table. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">related_updates</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s3">[]</span>
+        <span class="s1">result </span><span class="s3">= []</span>
+        <span class="s2">for </span><span class="s1">model</span><span class="s3">, </span><span class="s1">values </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">related_updates</span><span class="s3">.</span><span class="s1">items</span><span class="s3">():</span>
+            <span class="s1">query </span><span class="s3">= </span><span class="s1">UpdateQuery</span><span class="s3">(</span><span class="s1">model</span><span class="s3">)</span>
+            <span class="s1">query</span><span class="s3">.</span><span class="s1">values </span><span class="s3">= </span><span class="s1">values</span>
+            <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">related_ids </span><span class="s2">is not None</span><span class="s3">:</span>
+                <span class="s1">query</span><span class="s3">.</span><span class="s1">add_filter</span><span class="s3">(</span><span class="s4">&quot;pk__in&quot;</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">related_ids</span><span class="s3">[</span><span class="s1">model</span><span class="s3">])</span>
+            <span class="s1">result</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">query</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">result</span>
+
+
+<span class="s2">class </span><span class="s1">InsertQuery</span><span class="s3">(</span><span class="s1">Query</span><span class="s3">):</span>
+    <span class="s1">compiler </span><span class="s3">= </span><span class="s4">&quot;SQLInsertCompiler&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, </span><span class="s1">on_conflict</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">update_fields</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">unique_fields</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, **</span><span class="s1">kwargs</span>
+    <span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(*</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">fields </span><span class="s3">= []</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">objs </span><span class="s3">= []</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">on_conflict </span><span class="s3">= </span><span class="s1">on_conflict</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">update_fields </span><span class="s3">= </span><span class="s1">update_fields </span><span class="s2">or </span><span class="s3">[]</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">unique_fields </span><span class="s3">= </span><span class="s1">unique_fields </span><span class="s2">or </span><span class="s3">[]</span>
+
+    <span class="s2">def </span><span class="s1">insert_values</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">fields</span><span class="s3">, </span><span class="s1">objs</span><span class="s3">, </span><span class="s1">raw</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">fields </span><span class="s3">= </span><span class="s1">fields</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">objs </span><span class="s3">= </span><span class="s1">objs</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">raw </span><span class="s3">= </span><span class="s1">raw</span>
+
+
+<span class="s2">class </span><span class="s1">AggregateQuery</span><span class="s3">(</span><span class="s1">Query</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Take another query as a parameter to the FROM clause and only select the 
+    elements in the provided list. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">compiler </span><span class="s3">= </span><span class="s4">&quot;SQLAggregateCompiler&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">model</span><span class="s3">, </span><span class="s1">inner_query</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">inner_query </span><span class="s3">= </span><span class="s1">inner_query</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">model</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

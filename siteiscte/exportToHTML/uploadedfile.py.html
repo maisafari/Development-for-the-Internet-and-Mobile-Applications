@@ -1,0 +1,174 @@
+<html>
+<head>
+<title>uploadedfile.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+.s7 { color: #a5c261;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+uploadedfile.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Classes representing uploaded files. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">from </span><span class="s1">io </span><span class="s2">import </span><span class="s1">BytesIO</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf </span><span class="s2">import </span><span class="s1">settings</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">files </span><span class="s2">import </span><span class="s1">temp </span><span class="s2">as </span><span class="s1">tempfile</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">files</span><span class="s3">.</span><span class="s1">base </span><span class="s2">import </span><span class="s1">File</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">files</span><span class="s3">.</span><span class="s1">utils </span><span class="s2">import </span><span class="s1">validate_file_name</span>
+
+<span class="s1">__all__ </span><span class="s3">= (</span>
+    <span class="s4">&quot;UploadedFile&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;TemporaryUploadedFile&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;InMemoryUploadedFile&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;SimpleUploadedFile&quot;</span><span class="s3">,</span>
+<span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">UploadedFile</span><span class="s3">(</span><span class="s1">File</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    An abstract uploaded file (``TemporaryUploadedFile`` and 
+    ``InMemoryUploadedFile`` are the built-in concrete subclasses). 
+ 
+    An ``UploadedFile`` object behaves somewhat like a file object and 
+    represents some file data that the user submitted with a form. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">file</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">name</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">content_type</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">size</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">charset</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">content_type_extra</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+    <span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">file</span><span class="s3">, </span><span class="s1">name</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">size </span><span class="s3">= </span><span class="s1">size</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">content_type </span><span class="s3">= </span><span class="s1">content_type</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">charset </span><span class="s3">= </span><span class="s1">charset</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">content_type_extra </span><span class="s3">= </span><span class="s1">content_type_extra</span>
+
+    <span class="s2">def </span><span class="s1">__repr__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s4">&quot;&lt;%s: %s (%s)&gt;&quot; </span><span class="s3">% (</span><span class="s1">self</span><span class="s3">.</span><span class="s1">__class__</span><span class="s3">.</span><span class="s1">__name__</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">name</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">content_type</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_get_name</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_name</span>
+
+    <span class="s2">def </span><span class="s1">_set_name</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+        <span class="s5"># Sanitize the file name so that it can't be dangerous.</span>
+        <span class="s2">if </span><span class="s1">name </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s5"># Just use the basename of the file -- anything else is dangerous.</span>
+            <span class="s1">name </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">basename</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+
+            <span class="s5"># File names longer than 255 characters can cause problems on older OSes.</span>
+            <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">name</span><span class="s3">) &gt; </span><span class="s6">255</span><span class="s3">:</span>
+                <span class="s1">name</span><span class="s3">, </span><span class="s1">ext </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">splitext</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+                <span class="s1">ext </span><span class="s3">= </span><span class="s1">ext</span><span class="s3">[:</span><span class="s6">255</span><span class="s3">]</span>
+                <span class="s1">name </span><span class="s3">= </span><span class="s1">name</span><span class="s3">[: </span><span class="s6">255 </span><span class="s3">- </span><span class="s1">len</span><span class="s3">(</span><span class="s1">ext</span><span class="s3">)] + </span><span class="s1">ext</span>
+
+            <span class="s1">name </span><span class="s3">= </span><span class="s1">validate_file_name</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_name </span><span class="s3">= </span><span class="s1">name</span>
+
+    <span class="s1">name </span><span class="s3">= </span><span class="s1">property</span><span class="s3">(</span><span class="s1">_get_name</span><span class="s3">, </span><span class="s1">_set_name</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">TemporaryUploadedFile</span><span class="s3">(</span><span class="s1">UploadedFile</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    A file uploaded to a temporary location (i.e. stream-to-disk). 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">content_type</span><span class="s3">, </span><span class="s1">size</span><span class="s3">, </span><span class="s1">charset</span><span class="s3">, </span><span class="s1">content_type_extra</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">_</span><span class="s3">, </span><span class="s1">ext </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">splitext</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+        <span class="s1">file </span><span class="s3">= </span><span class="s1">tempfile</span><span class="s3">.</span><span class="s1">NamedTemporaryFile</span><span class="s3">(</span>
+            <span class="s1">suffix</span><span class="s3">=</span><span class="s4">&quot;.upload&quot; </span><span class="s3">+ </span><span class="s1">ext</span><span class="s3">, </span><span class="s1">dir</span><span class="s3">=</span><span class="s1">settings</span><span class="s3">.</span><span class="s1">FILE_UPLOAD_TEMP_DIR</span>
+        <span class="s3">)</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">file</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">content_type</span><span class="s3">, </span><span class="s1">size</span><span class="s3">, </span><span class="s1">charset</span><span class="s3">, </span><span class="s1">content_type_extra</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">temporary_file_path</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Return the full path of this file.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">name</span>
+
+    <span class="s2">def </span><span class="s1">close</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">close</span><span class="s3">()</span>
+        <span class="s2">except </span><span class="s1">FileNotFoundError</span><span class="s3">:</span>
+            <span class="s5"># The file was moved or deleted before the tempfile could unlink</span>
+            <span class="s5"># it. Still sets self.file.close_called and calls</span>
+            <span class="s5"># self.file.file.close() before the exception.</span>
+            <span class="s2">pass</span>
+
+
+<span class="s2">class </span><span class="s1">InMemoryUploadedFile</span><span class="s3">(</span><span class="s1">UploadedFile</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    A file uploaded into memory (i.e. stream-to-memory). 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">file</span><span class="s3">,</span>
+        <span class="s1">field_name</span><span class="s3">,</span>
+        <span class="s1">name</span><span class="s3">,</span>
+        <span class="s1">content_type</span><span class="s3">,</span>
+        <span class="s1">size</span><span class="s3">,</span>
+        <span class="s1">charset</span><span class="s3">,</span>
+        <span class="s1">content_type_extra</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+    <span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">file</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">content_type</span><span class="s3">, </span><span class="s1">size</span><span class="s3">, </span><span class="s1">charset</span><span class="s3">, </span><span class="s1">content_type_extra</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">field_name </span><span class="s3">= </span><span class="s1">field_name</span>
+
+    <span class="s2">def </span><span class="s1">open</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">mode</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">seek</span><span class="s3">(</span><span class="s6">0</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+    <span class="s2">def </span><span class="s1">chunks</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">chunk_size</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">seek</span><span class="s3">(</span><span class="s6">0</span><span class="s3">)</span>
+        <span class="s2">yield </span><span class="s1">self</span><span class="s3">.</span><span class="s1">read</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">multiple_chunks</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">chunk_size</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s5"># Since it's in memory, we'll never have multiple chunks.</span>
+        <span class="s2">return False</span>
+
+
+<span class="s2">class </span><span class="s1">SimpleUploadedFile</span><span class="s3">(</span><span class="s1">InMemoryUploadedFile</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    A simple representation of a file, which just has content, size, and a name. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">content</span><span class="s3">, </span><span class="s1">content_type</span><span class="s3">=</span><span class="s4">&quot;text/plain&quot;</span><span class="s3">):</span>
+        <span class="s1">content </span><span class="s3">= </span><span class="s1">content </span><span class="s2">or </span><span class="s7">b&quot;&quot;</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span>
+            <span class="s1">BytesIO</span><span class="s3">(</span><span class="s1">content</span><span class="s3">), </span><span class="s2">None</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">content_type</span><span class="s3">, </span><span class="s1">len</span><span class="s3">(</span><span class="s1">content</span><span class="s3">), </span><span class="s2">None</span><span class="s3">, </span><span class="s2">None</span>
+        <span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">classmethod</span>
+    <span class="s2">def </span><span class="s1">from_dict</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">, </span><span class="s1">file_dict</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Create a SimpleUploadedFile object from a dictionary with keys: 
+           - filename 
+           - content-type 
+           - content 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">cls</span><span class="s3">(</span>
+            <span class="s1">file_dict</span><span class="s3">[</span><span class="s4">&quot;filename&quot;</span><span class="s3">],</span>
+            <span class="s1">file_dict</span><span class="s3">[</span><span class="s4">&quot;content&quot;</span><span class="s3">],</span>
+            <span class="s1">file_dict</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;content-type&quot;</span><span class="s3">, </span><span class="s4">&quot;text/plain&quot;</span><span class="s3">),</span>
+        <span class="s3">)</span>
+</pre>
+</body>
+</html>

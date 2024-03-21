@@ -1,0 +1,96 @@
+<html>
+<head>
+<title>inspect.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #2aacb8;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #7a7e85;}
+.s6 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+inspect.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">functools</span>
+<span class="s0">import </span><span class="s1">inspect</span>
+
+
+<span class="s2">@</span><span class="s1">functools</span><span class="s2">.</span><span class="s1">lru_cache</span><span class="s2">(</span><span class="s1">maxsize</span><span class="s2">=</span><span class="s3">512</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">_get_func_parameters</span><span class="s2">(</span><span class="s1">func</span><span class="s2">, </span><span class="s1">remove_first</span><span class="s2">):</span>
+    <span class="s1">parameters </span><span class="s2">= </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">signature</span><span class="s2">(</span><span class="s1">func</span><span class="s2">).</span><span class="s1">parameters</span><span class="s2">.</span><span class="s1">values</span><span class="s2">())</span>
+    <span class="s0">if </span><span class="s1">remove_first</span><span class="s2">:</span>
+        <span class="s1">parameters </span><span class="s2">= </span><span class="s1">parameters</span><span class="s2">[</span><span class="s3">1</span><span class="s2">:]</span>
+    <span class="s0">return </span><span class="s1">parameters</span>
+
+
+<span class="s0">def </span><span class="s1">_get_callable_parameters</span><span class="s2">(</span><span class="s1">meth_or_func</span><span class="s2">):</span>
+    <span class="s1">is_method </span><span class="s2">= </span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">ismethod</span><span class="s2">(</span><span class="s1">meth_or_func</span><span class="s2">)</span>
+    <span class="s1">func </span><span class="s2">= </span><span class="s1">meth_or_func</span><span class="s2">.</span><span class="s1">__func__ </span><span class="s0">if </span><span class="s1">is_method </span><span class="s0">else </span><span class="s1">meth_or_func</span>
+    <span class="s0">return </span><span class="s1">_get_func_parameters</span><span class="s2">(</span><span class="s1">func</span><span class="s2">, </span><span class="s1">remove_first</span><span class="s2">=</span><span class="s1">is_method</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">get_func_args</span><span class="s2">(</span><span class="s1">func</span><span class="s2">):</span>
+    <span class="s1">params </span><span class="s2">= </span><span class="s1">_get_callable_parameters</span><span class="s2">(</span><span class="s1">func</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s2">[</span>
+        <span class="s1">param</span><span class="s2">.</span><span class="s1">name</span>
+        <span class="s0">for </span><span class="s1">param </span><span class="s0">in </span><span class="s1">params</span>
+        <span class="s0">if </span><span class="s1">param</span><span class="s2">.</span><span class="s1">kind </span><span class="s2">== </span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">Parameter</span><span class="s2">.</span><span class="s1">POSITIONAL_OR_KEYWORD</span>
+    <span class="s2">]</span>
+
+
+<span class="s0">def </span><span class="s1">get_func_full_args</span><span class="s2">(</span><span class="s1">func</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Return a list of (argument name, default value) tuples. If the argument 
+    does not have a default value, omit it in the tuple. Arguments such as 
+    *args and **kwargs are also included. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">params </span><span class="s2">= </span><span class="s1">_get_callable_parameters</span><span class="s2">(</span><span class="s1">func</span><span class="s2">)</span>
+    <span class="s1">args </span><span class="s2">= []</span>
+    <span class="s0">for </span><span class="s1">param </span><span class="s0">in </span><span class="s1">params</span><span class="s2">:</span>
+        <span class="s1">name </span><span class="s2">= </span><span class="s1">param</span><span class="s2">.</span><span class="s1">name</span>
+        <span class="s5"># Ignore 'self'</span>
+        <span class="s0">if </span><span class="s1">name </span><span class="s2">== </span><span class="s6">&quot;self&quot;</span><span class="s2">:</span>
+            <span class="s0">continue</span>
+        <span class="s0">if </span><span class="s1">param</span><span class="s2">.</span><span class="s1">kind </span><span class="s2">== </span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">Parameter</span><span class="s2">.</span><span class="s1">VAR_POSITIONAL</span><span class="s2">:</span>
+            <span class="s1">name </span><span class="s2">= </span><span class="s6">&quot;*&quot; </span><span class="s2">+ </span><span class="s1">name</span>
+        <span class="s0">elif </span><span class="s1">param</span><span class="s2">.</span><span class="s1">kind </span><span class="s2">== </span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">Parameter</span><span class="s2">.</span><span class="s1">VAR_KEYWORD</span><span class="s2">:</span>
+            <span class="s1">name </span><span class="s2">= </span><span class="s6">&quot;**&quot; </span><span class="s2">+ </span><span class="s1">name</span>
+        <span class="s0">if </span><span class="s1">param</span><span class="s2">.</span><span class="s1">default </span><span class="s2">!= </span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">Parameter</span><span class="s2">.</span><span class="s1">empty</span><span class="s2">:</span>
+            <span class="s1">args</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">name</span><span class="s2">, </span><span class="s1">param</span><span class="s2">.</span><span class="s1">default</span><span class="s2">))</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">args</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">name</span><span class="s2">,))</span>
+    <span class="s0">return </span><span class="s1">args</span>
+
+
+<span class="s0">def </span><span class="s1">func_accepts_kwargs</span><span class="s2">(</span><span class="s1">func</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot;Return True if function 'func' accepts keyword arguments **kwargs.&quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">any</span><span class="s2">(</span><span class="s1">p </span><span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">_get_callable_parameters</span><span class="s2">(</span><span class="s1">func</span><span class="s2">) </span><span class="s0">if </span><span class="s1">p</span><span class="s2">.</span><span class="s1">kind </span><span class="s2">== </span><span class="s1">p</span><span class="s2">.</span><span class="s1">VAR_KEYWORD</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">func_accepts_var_args</span><span class="s2">(</span><span class="s1">func</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Return True if function 'func' accepts positional arguments *args. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">any</span><span class="s2">(</span><span class="s1">p </span><span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">_get_callable_parameters</span><span class="s2">(</span><span class="s1">func</span><span class="s2">) </span><span class="s0">if </span><span class="s1">p</span><span class="s2">.</span><span class="s1">kind </span><span class="s2">== </span><span class="s1">p</span><span class="s2">.</span><span class="s1">VAR_POSITIONAL</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">method_has_no_args</span><span class="s2">(</span><span class="s1">meth</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot;Return True if a method only accepts 'self'.&quot;&quot;&quot;</span>
+    <span class="s1">count </span><span class="s2">= </span><span class="s1">len</span><span class="s2">(</span>
+        <span class="s2">[</span><span class="s1">p </span><span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">_get_callable_parameters</span><span class="s2">(</span><span class="s1">meth</span><span class="s2">) </span><span class="s0">if </span><span class="s1">p</span><span class="s2">.</span><span class="s1">kind </span><span class="s2">== </span><span class="s1">p</span><span class="s2">.</span><span class="s1">POSITIONAL_OR_KEYWORD</span><span class="s2">]</span>
+    <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">count </span><span class="s2">== </span><span class="s3">0 </span><span class="s0">if </span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">ismethod</span><span class="s2">(</span><span class="s1">meth</span><span class="s2">) </span><span class="s0">else </span><span class="s1">count </span><span class="s2">== </span><span class="s3">1</span>
+
+
+<span class="s0">def </span><span class="s1">func_supports_parameter</span><span class="s2">(</span><span class="s1">func</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">any</span><span class="s2">(</span><span class="s1">param</span><span class="s2">.</span><span class="s1">name </span><span class="s2">== </span><span class="s1">name </span><span class="s0">for </span><span class="s1">param </span><span class="s0">in </span><span class="s1">_get_callable_parameters</span><span class="s2">(</span><span class="s1">func</span><span class="s2">))</span>
+</pre>
+</body>
+</html>

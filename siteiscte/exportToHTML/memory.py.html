@@ -1,0 +1,313 @@
+<html>
+<head>
+<title>memory.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+memory.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Based on dj-inmemorystorage (BSD) by Cody Soyland, Seán Hayes, Tore Birkeland, 
+and Nick Presta. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">errno</span>
+<span class="s2">import </span><span class="s1">io</span>
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">import </span><span class="s1">pathlib</span>
+<span class="s2">from </span><span class="s1">urllib</span><span class="s3">.</span><span class="s1">parse </span><span class="s2">import </span><span class="s1">urljoin</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf </span><span class="s2">import </span><span class="s1">settings</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">files</span><span class="s3">.</span><span class="s1">base </span><span class="s2">import </span><span class="s1">ContentFile</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">signals </span><span class="s2">import </span><span class="s1">setting_changed</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">_os </span><span class="s2">import </span><span class="s1">safe_join</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">deconstruct </span><span class="s2">import </span><span class="s1">deconstructible</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">encoding </span><span class="s2">import </span><span class="s1">filepath_to_uri</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">functional </span><span class="s2">import </span><span class="s1">cached_property</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">timezone </span><span class="s2">import </span><span class="s1">now</span>
+
+<span class="s2">from </span><span class="s3">.</span><span class="s1">base </span><span class="s2">import </span><span class="s1">Storage</span>
+<span class="s2">from </span><span class="s3">.</span><span class="s1">mixins </span><span class="s2">import </span><span class="s1">StorageSettingsMixin</span>
+
+<span class="s1">__all__ </span><span class="s3">= (</span><span class="s4">&quot;InMemoryStorage&quot;</span><span class="s3">,)</span>
+
+
+<span class="s2">class </span><span class="s1">TimingMixin</span><span class="s3">:</span>
+    <span class="s2">def </span><span class="s1">_initialize_times</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">created_time </span><span class="s3">= </span><span class="s1">now</span><span class="s3">()</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">accessed_time </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">created_time</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">modified_time </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">created_time</span>
+
+    <span class="s2">def </span><span class="s1">_update_accessed_time</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">accessed_time </span><span class="s3">= </span><span class="s1">now</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">_update_modified_time</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">modified_time </span><span class="s3">= </span><span class="s1">now</span><span class="s3">()</span>
+
+
+<span class="s2">class </span><span class="s1">InMemoryFileNode</span><span class="s3">(</span><span class="s1">ContentFile</span><span class="s3">, </span><span class="s1">TimingMixin</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Helper class representing an in-memory file node. 
+ 
+    Handle unicode/bytes conversion during I/O operations and record creation, 
+    modification, and access times. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">content</span><span class="s3">=</span><span class="s4">&quot;&quot;</span><span class="s3">, </span><span class="s1">name</span><span class="s3">=</span><span class="s4">&quot;&quot;</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">file </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_content_type </span><span class="s3">= </span><span class="s1">type</span><span class="s3">(</span><span class="s1">content</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_initialize_stream</span><span class="s3">()</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_initialize_times</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">open</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">mode</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_convert_stream_content</span><span class="s3">(</span><span class="s1">mode</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_update_accessed_time</span><span class="s3">()</span>
+        <span class="s2">return </span><span class="s1">super</span><span class="s3">().</span><span class="s1">open</span><span class="s3">(</span><span class="s1">mode</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">write</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">data</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">write</span><span class="s3">(</span><span class="s1">data</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_update_modified_time</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">_initialize_stream</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Initialize underlying stream according to the content type.&quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">file </span><span class="s3">= </span><span class="s1">io</span><span class="s3">.</span><span class="s1">BytesIO</span><span class="s3">() </span><span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_content_type </span><span class="s3">== </span><span class="s1">bytes </span><span class="s2">else </span><span class="s1">io</span><span class="s3">.</span><span class="s1">StringIO</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">_convert_stream_content</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">mode</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Convert actual file content according to the opening mode.&quot;&quot;&quot;</span>
+        <span class="s1">new_content_type </span><span class="s3">= </span><span class="s1">bytes </span><span class="s2">if </span><span class="s4">&quot;b&quot; </span><span class="s2">in </span><span class="s1">mode </span><span class="s2">else </span><span class="s1">str</span>
+        <span class="s5"># No conversion needed.</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_content_type </span><span class="s3">== </span><span class="s1">new_content_type</span><span class="s3">:</span>
+            <span class="s2">return</span>
+
+        <span class="s1">content </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">getvalue</span><span class="s3">()</span>
+        <span class="s1">content </span><span class="s3">= </span><span class="s1">content</span><span class="s3">.</span><span class="s1">encode</span><span class="s3">() </span><span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">content</span><span class="s3">, </span><span class="s1">str</span><span class="s3">) </span><span class="s2">else </span><span class="s1">content</span><span class="s3">.</span><span class="s1">decode</span><span class="s3">()</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_content_type </span><span class="s3">= </span><span class="s1">new_content_type</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_initialize_stream</span><span class="s3">()</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">write</span><span class="s3">(</span><span class="s1">content</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">InMemoryDirNode</span><span class="s3">(</span><span class="s1">TimingMixin</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Helper class representing an in-memory directory node. 
+ 
+    Handle path navigation of directory trees, creating missing nodes if 
+    needed. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_children </span><span class="s3">= {}</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_initialize_times</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">path</span><span class="s3">, </span><span class="s1">create_if_missing</span><span class="s3">=</span><span class="s2">False</span><span class="s3">, </span><span class="s1">leaf_cls</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">check_exists</span><span class="s3">=</span><span class="s2">True</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Navigate current directory tree, returning node matching path or 
+        creating a new one, if missing. 
+        - path: path of the node to search 
+        - create_if_missing: create nodes if not exist. Defaults to False. 
+        - leaf_cls: expected type of leaf node. Defaults to None. 
+        - check_exists: if True and the leaf node does not exist, raise a 
+          FileNotFoundError. Defaults to True. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">path_segments </span><span class="s3">= </span><span class="s1">list</span><span class="s3">(</span><span class="s1">pathlib</span><span class="s3">.</span><span class="s1">Path</span><span class="s3">(</span><span class="s1">path</span><span class="s3">).</span><span class="s1">parts</span><span class="s3">)</span>
+        <span class="s1">current_node </span><span class="s3">= </span><span class="s1">self</span>
+
+        <span class="s2">while </span><span class="s1">path_segments</span><span class="s3">:</span>
+            <span class="s1">path_segment </span><span class="s3">= </span><span class="s1">path_segments</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">(</span><span class="s6">0</span><span class="s3">)</span>
+            <span class="s5"># If current node is a file node and there are unprocessed</span>
+            <span class="s5"># segments, raise an error.</span>
+            <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">current_node</span><span class="s3">, </span><span class="s1">InMemoryFileNode</span><span class="s3">):</span>
+                <span class="s1">path_segments </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s1">path</span><span class="s3">)</span>
+                <span class="s1">current_path </span><span class="s3">= </span><span class="s4">&quot;/&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span>
+                    <span class="s1">path_segments</span><span class="s3">[: </span><span class="s1">path_segments</span><span class="s3">.</span><span class="s1">index</span><span class="s3">(</span><span class="s1">path_segment</span><span class="s3">)]</span>
+                <span class="s3">)</span>
+                <span class="s2">raise </span><span class="s1">NotADirectoryError</span><span class="s3">(</span>
+                    <span class="s1">errno</span><span class="s3">.</span><span class="s1">ENOTDIR</span><span class="s3">, </span><span class="s1">os</span><span class="s3">.</span><span class="s1">strerror</span><span class="s3">(</span><span class="s1">errno</span><span class="s3">.</span><span class="s1">ENOTDIR</span><span class="s3">), </span><span class="s1">current_path</span>
+                <span class="s3">)</span>
+            <span class="s1">current_node </span><span class="s3">= </span><span class="s1">current_node</span><span class="s3">.</span><span class="s1">_resolve_child</span><span class="s3">(</span>
+                <span class="s1">path_segment</span><span class="s3">,</span>
+                <span class="s1">create_if_missing</span><span class="s3">,</span>
+                <span class="s1">leaf_cls </span><span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">path_segments</span><span class="s3">) == </span><span class="s6">0 </span><span class="s2">else </span><span class="s1">InMemoryDirNode</span><span class="s3">,</span>
+            <span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">current_node </span><span class="s2">is None</span><span class="s3">:</span>
+                <span class="s2">break</span>
+
+        <span class="s2">if </span><span class="s1">current_node </span><span class="s2">is None and </span><span class="s1">check_exists</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">FileNotFoundError</span><span class="s3">(</span><span class="s1">errno</span><span class="s3">.</span><span class="s1">ENOENT</span><span class="s3">, </span><span class="s1">os</span><span class="s3">.</span><span class="s1">strerror</span><span class="s3">(</span><span class="s1">errno</span><span class="s3">.</span><span class="s1">ENOENT</span><span class="s3">), </span><span class="s1">path</span><span class="s3">)</span>
+
+        <span class="s5"># If a leaf_cls is not None, check if leaf node is of right type.</span>
+        <span class="s2">if </span><span class="s1">leaf_cls </span><span class="s2">and not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">current_node</span><span class="s3">, </span><span class="s1">leaf_cls</span><span class="s3">):</span>
+            <span class="s1">error_cls</span><span class="s3">, </span><span class="s1">error_code </span><span class="s3">= (</span>
+                <span class="s3">(</span><span class="s1">NotADirectoryError</span><span class="s3">, </span><span class="s1">errno</span><span class="s3">.</span><span class="s1">ENOTDIR</span><span class="s3">)</span>
+                <span class="s2">if </span><span class="s1">leaf_cls </span><span class="s2">is </span><span class="s1">InMemoryDirNode</span>
+                <span class="s2">else </span><span class="s3">(</span><span class="s1">IsADirectoryError</span><span class="s3">, </span><span class="s1">errno</span><span class="s3">.</span><span class="s1">EISDIR</span><span class="s3">)</span>
+            <span class="s3">)</span>
+            <span class="s2">raise </span><span class="s1">error_cls</span><span class="s3">(</span><span class="s1">error_code</span><span class="s3">, </span><span class="s1">os</span><span class="s3">.</span><span class="s1">strerror</span><span class="s3">(</span><span class="s1">error_code</span><span class="s3">), </span><span class="s1">path</span><span class="s3">)</span>
+
+        <span class="s2">return </span><span class="s1">current_node</span>
+
+    <span class="s2">def </span><span class="s1">_resolve_child</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">path_segment</span><span class="s3">, </span><span class="s1">create_if_missing</span><span class="s3">, </span><span class="s1">child_cls</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">create_if_missing</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_update_accessed_time</span><span class="s3">()</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_update_modified_time</span><span class="s3">()</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_children</span><span class="s3">.</span><span class="s1">setdefault</span><span class="s3">(</span><span class="s1">path_segment</span><span class="s3">, </span><span class="s1">child_cls</span><span class="s3">())</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_children</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">path_segment</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">listdir</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">directories</span><span class="s3">, </span><span class="s1">files </span><span class="s3">= [], []</span>
+        <span class="s2">for </span><span class="s1">name</span><span class="s3">, </span><span class="s1">entry </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_children</span><span class="s3">.</span><span class="s1">items</span><span class="s3">():</span>
+            <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">entry</span><span class="s3">, </span><span class="s1">InMemoryDirNode</span><span class="s3">):</span>
+                <span class="s1">directories</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s1">files</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">directories</span><span class="s3">, </span><span class="s1">files</span>
+
+    <span class="s2">def </span><span class="s1">remove_child</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">name </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_children</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_update_accessed_time</span><span class="s3">()</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_update_modified_time</span><span class="s3">()</span>
+            <span class="s2">del </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_children</span><span class="s3">[</span><span class="s1">name</span><span class="s3">]</span>
+
+
+<span class="s3">@</span><span class="s1">deconstructible</span><span class="s3">(</span><span class="s1">path</span><span class="s3">=</span><span class="s4">&quot;django.core.files.storage.InMemoryStorage&quot;</span><span class="s3">)</span>
+<span class="s2">class </span><span class="s1">InMemoryStorage</span><span class="s3">(</span><span class="s1">Storage</span><span class="s3">, </span><span class="s1">StorageSettingsMixin</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;A storage saving files in memory.&quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">location</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">base_url</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">file_permissions_mode</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">directory_permissions_mode</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+    <span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_location </span><span class="s3">= </span><span class="s1">location</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_base_url </span><span class="s3">= </span><span class="s1">base_url</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_file_permissions_mode </span><span class="s3">= </span><span class="s1">file_permissions_mode</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_directory_permissions_mode </span><span class="s3">= </span><span class="s1">directory_permissions_mode</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_root </span><span class="s3">= </span><span class="s1">InMemoryDirNode</span><span class="s3">()</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_resolve</span><span class="s3">(</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">base_location</span><span class="s3">, </span><span class="s1">create_if_missing</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">leaf_cls</span><span class="s3">=</span><span class="s1">InMemoryDirNode</span>
+        <span class="s3">)</span>
+        <span class="s1">setting_changed</span><span class="s3">.</span><span class="s1">connect</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_clear_cached_properties</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">base_location</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_value_or_setting</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_location</span><span class="s3">, </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">MEDIA_ROOT</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">location</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">abspath</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">base_location</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">base_url</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_base_url </span><span class="s2">is not None and not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_base_url</span><span class="s3">.</span><span class="s1">endswith</span><span class="s3">(</span><span class="s4">&quot;/&quot;</span><span class="s3">):</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_base_url </span><span class="s3">+= </span><span class="s4">&quot;/&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_value_or_setting</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_base_url</span><span class="s3">, </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">MEDIA_URL</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">file_permissions_mode</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_value_or_setting</span><span class="s3">(</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_file_permissions_mode</span><span class="s3">, </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">FILE_UPLOAD_PERMISSIONS</span>
+        <span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">directory_permissions_mode</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_value_or_setting</span><span class="s3">(</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_directory_permissions_mode</span><span class="s3">, </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">FILE_UPLOAD_DIRECTORY_PERMISSIONS</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_relative_path</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+        <span class="s1">full_path </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">path</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">relpath</span><span class="s3">(</span><span class="s1">full_path</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">location</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_resolve</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">create_if_missing</span><span class="s3">=</span><span class="s2">False</span><span class="s3">, </span><span class="s1">leaf_cls</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">check_exists</span><span class="s3">=</span><span class="s2">True</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">relative_path </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_relative_path</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_root</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span>
+                <span class="s1">relative_path</span><span class="s3">,</span>
+                <span class="s1">create_if_missing</span><span class="s3">=</span><span class="s1">create_if_missing</span><span class="s3">,</span>
+                <span class="s1">leaf_cls</span><span class="s3">=</span><span class="s1">leaf_cls</span><span class="s3">,</span>
+                <span class="s1">check_exists</span><span class="s3">=</span><span class="s1">check_exists</span><span class="s3">,</span>
+            <span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">NotADirectoryError </span><span class="s2">as </span><span class="s1">exc</span><span class="s3">:</span>
+            <span class="s1">absolute_path </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">path</span><span class="s3">(</span><span class="s1">exc</span><span class="s3">.</span><span class="s1">filename</span><span class="s3">)</span>
+            <span class="s2">raise </span><span class="s1">FileExistsError</span><span class="s3">(</span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">absolute_path</span><span class="s2">} </span><span class="s4">exists and is not a directory.&quot;</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_open</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">mode</span><span class="s3">=</span><span class="s4">&quot;rb&quot;</span><span class="s3">):</span>
+        <span class="s1">create_if_missing </span><span class="s3">= </span><span class="s4">&quot;w&quot; </span><span class="s2">in </span><span class="s1">mode</span>
+        <span class="s1">file_node </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_resolve</span><span class="s3">(</span>
+            <span class="s1">name</span><span class="s3">, </span><span class="s1">create_if_missing</span><span class="s3">=</span><span class="s1">create_if_missing</span><span class="s3">, </span><span class="s1">leaf_cls</span><span class="s3">=</span><span class="s1">InMemoryFileNode</span>
+        <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">file_node</span><span class="s3">.</span><span class="s1">open</span><span class="s3">(</span><span class="s1">mode</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_save</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">content</span><span class="s3">):</span>
+        <span class="s1">file_node </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_resolve</span><span class="s3">(</span>
+            <span class="s1">name</span><span class="s3">, </span><span class="s1">create_if_missing</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">leaf_cls</span><span class="s3">=</span><span class="s1">InMemoryFileNode</span>
+        <span class="s3">)</span>
+        <span class="s1">fd </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s2">for </span><span class="s1">chunk </span><span class="s2">in </span><span class="s1">content</span><span class="s3">.</span><span class="s1">chunks</span><span class="s3">():</span>
+            <span class="s2">if </span><span class="s1">fd </span><span class="s2">is None</span><span class="s3">:</span>
+                <span class="s1">mode </span><span class="s3">= </span><span class="s4">&quot;wb&quot; </span><span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">chunk</span><span class="s3">, </span><span class="s1">bytes</span><span class="s3">) </span><span class="s2">else </span><span class="s4">&quot;wt&quot;</span>
+                <span class="s1">fd </span><span class="s3">= </span><span class="s1">file_node</span><span class="s3">.</span><span class="s1">open</span><span class="s3">(</span><span class="s1">mode</span><span class="s3">)</span>
+            <span class="s1">fd</span><span class="s3">.</span><span class="s1">write</span><span class="s3">(</span><span class="s1">chunk</span><span class="s3">)</span>
+
+        <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">content</span><span class="s3">, </span><span class="s4">&quot;temporary_file_path&quot;</span><span class="s3">):</span>
+            <span class="s1">os</span><span class="s3">.</span><span class="s1">remove</span><span class="s3">(</span><span class="s1">content</span><span class="s3">.</span><span class="s1">temporary_file_path</span><span class="s3">())</span>
+
+        <span class="s1">file_node</span><span class="s3">.</span><span class="s1">modified_time </span><span class="s3">= </span><span class="s1">now</span><span class="s3">()</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_relative_path</span><span class="s3">(</span><span class="s1">name</span><span class="s3">).</span><span class="s1">replace</span><span class="s3">(</span><span class="s4">&quot;</span><span class="s2">\\</span><span class="s4">&quot;</span><span class="s3">, </span><span class="s4">&quot;/&quot;</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">path</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">safe_join</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">location</span><span class="s3">, </span><span class="s1">name</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">delete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+        <span class="s1">path</span><span class="s3">, </span><span class="s1">filename </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+        <span class="s1">dir_node </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_resolve</span><span class="s3">(</span><span class="s1">path</span><span class="s3">, </span><span class="s1">check_exists</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">dir_node </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s2">return None</span>
+        <span class="s1">dir_node</span><span class="s3">.</span><span class="s1">remove_child</span><span class="s3">(</span><span class="s1">filename</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">exists</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_resolve</span><span class="s3">(</span><span class="s1">name</span><span class="s3">, </span><span class="s1">check_exists</span><span class="s3">=</span><span class="s2">False</span><span class="s3">) </span><span class="s2">is not None</span>
+
+    <span class="s2">def </span><span class="s1">listdir</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">path</span><span class="s3">):</span>
+        <span class="s1">node </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_resolve</span><span class="s3">(</span><span class="s1">path</span><span class="s3">, </span><span class="s1">leaf_cls</span><span class="s3">=</span><span class="s1">InMemoryDirNode</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">node</span><span class="s3">.</span><span class="s1">listdir</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">size</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_open</span><span class="s3">(</span><span class="s1">name</span><span class="s3">, </span><span class="s4">&quot;rb&quot;</span><span class="s3">).</span><span class="s1">file</span><span class="s3">.</span><span class="s1">getvalue</span><span class="s3">())</span>
+
+    <span class="s2">def </span><span class="s1">url</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">base_url </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span><span class="s4">&quot;This file is not accessible via a URL.&quot;</span><span class="s3">)</span>
+        <span class="s1">url </span><span class="s3">= </span><span class="s1">filepath_to_uri</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">url </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">url </span><span class="s3">= </span><span class="s1">url</span><span class="s3">.</span><span class="s1">lstrip</span><span class="s3">(</span><span class="s4">&quot;/&quot;</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">urljoin</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">base_url</span><span class="s3">, </span><span class="s1">url</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_accessed_time</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+        <span class="s1">file_node </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_resolve</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">file_node</span><span class="s3">.</span><span class="s1">accessed_time</span>
+
+    <span class="s2">def </span><span class="s1">get_created_time</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+        <span class="s1">file_node </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_resolve</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">file_node</span><span class="s3">.</span><span class="s1">created_time</span>
+
+    <span class="s2">def </span><span class="s1">get_modified_time</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+        <span class="s1">file_node </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_resolve</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">file_node</span><span class="s3">.</span><span class="s1">modified_time</span>
+</pre>
+</body>
+</html>

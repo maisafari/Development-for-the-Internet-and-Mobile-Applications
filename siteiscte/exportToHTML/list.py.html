@@ -1,0 +1,243 @@
+<html>
+<head>
+<title>list.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #2aacb8;}
+.s5 { color: #6aab73;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+list.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">paginator </span><span class="s0">import </span><span class="s1">InvalidPage</span><span class="s2">, </span><span class="s1">Paginator</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">QuerySet</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">Http404</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">translation </span><span class="s0">import </span><span class="s1">gettext </span><span class="s0">as </span><span class="s1">_</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">views</span><span class="s2">.</span><span class="s1">generic</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">ContextMixin</span><span class="s2">, </span><span class="s1">TemplateResponseMixin</span><span class="s2">, </span><span class="s1">View</span>
+
+
+<span class="s0">class </span><span class="s1">MultipleObjectMixin</span><span class="s2">(</span><span class="s1">ContextMixin</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;A mixin for views manipulating multiple objects.&quot;&quot;&quot;</span>
+
+    <span class="s1">allow_empty </span><span class="s2">= </span><span class="s0">True</span>
+    <span class="s1">queryset </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">model </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">paginate_by </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">paginate_orphans </span><span class="s2">= </span><span class="s4">0</span>
+    <span class="s1">context_object_name </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">paginator_class </span><span class="s2">= </span><span class="s1">Paginator</span>
+    <span class="s1">page_kwarg </span><span class="s2">= </span><span class="s5">&quot;page&quot;</span>
+    <span class="s1">ordering </span><span class="s2">= </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">get_queryset</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the list of items for this view. 
+ 
+        The return value must be an iterable and may be an instance of 
+        `QuerySet` in which case `QuerySet` specific behavior will be enabled. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">queryset </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">queryset </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">queryset</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">queryset</span><span class="s2">, </span><span class="s1">QuerySet</span><span class="s2">):</span>
+                <span class="s1">queryset </span><span class="s2">= </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">all</span><span class="s2">()</span>
+        <span class="s0">elif </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">queryset </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">.</span><span class="s1">all</span><span class="s2">()</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                <span class="s5">&quot;%(cls)s is missing a QuerySet. Define &quot;</span>
+                <span class="s5">&quot;%(cls)s.model, %(cls)s.queryset, or override &quot;</span>
+                <span class="s5">&quot;%(cls)s.get_queryset().&quot; </span><span class="s2">% {</span><span class="s5">&quot;cls&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">}</span>
+            <span class="s2">)</span>
+        <span class="s1">ordering </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_ordering</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">ordering</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">ordering</span><span class="s2">, </span><span class="s1">str</span><span class="s2">):</span>
+                <span class="s1">ordering </span><span class="s2">= (</span><span class="s1">ordering</span><span class="s2">,)</span>
+            <span class="s1">queryset </span><span class="s2">= </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">order_by</span><span class="s2">(*</span><span class="s1">ordering</span><span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s1">queryset</span>
+
+    <span class="s0">def </span><span class="s1">get_ordering</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Return the field or fields to use for ordering the queryset.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">ordering</span>
+
+    <span class="s0">def </span><span class="s1">paginate_queryset</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">queryset</span><span class="s2">, </span><span class="s1">page_size</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Paginate the queryset, if needed.&quot;&quot;&quot;</span>
+        <span class="s1">paginator </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_paginator</span><span class="s2">(</span>
+            <span class="s1">queryset</span><span class="s2">,</span>
+            <span class="s1">page_size</span><span class="s2">,</span>
+            <span class="s1">orphans</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_paginate_orphans</span><span class="s2">(),</span>
+            <span class="s1">allow_empty_first_page</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_allow_empty</span><span class="s2">(),</span>
+        <span class="s2">)</span>
+        <span class="s1">page_kwarg </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">page_kwarg</span>
+        <span class="s1">page </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">kwargs</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">page_kwarg</span><span class="s2">) </span><span class="s0">or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">page_kwarg</span><span class="s2">) </span><span class="s0">or </span><span class="s4">1</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">page_number </span><span class="s2">= </span><span class="s1">int</span><span class="s2">(</span><span class="s1">page</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">ValueError</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">page </span><span class="s2">== </span><span class="s5">&quot;last&quot;</span><span class="s2">:</span>
+                <span class="s1">page_number </span><span class="s2">= </span><span class="s1">paginator</span><span class="s2">.</span><span class="s1">num_pages</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">Http404</span><span class="s2">(</span>
+                    <span class="s1">_</span><span class="s2">(</span><span class="s5">&quot;Page is not “last”, nor can it be converted to an int.&quot;</span><span class="s2">)</span>
+                <span class="s2">)</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">page </span><span class="s2">= </span><span class="s1">paginator</span><span class="s2">.</span><span class="s1">page</span><span class="s2">(</span><span class="s1">page_number</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s2">(</span><span class="s1">paginator</span><span class="s2">, </span><span class="s1">page</span><span class="s2">, </span><span class="s1">page</span><span class="s2">.</span><span class="s1">object_list</span><span class="s2">, </span><span class="s1">page</span><span class="s2">.</span><span class="s1">has_other_pages</span><span class="s2">())</span>
+        <span class="s0">except </span><span class="s1">InvalidPage </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">Http404</span><span class="s2">(</span>
+                <span class="s1">_</span><span class="s2">(</span><span class="s5">&quot;Invalid page (%(page_number)s): %(message)s&quot;</span><span class="s2">)</span>
+                <span class="s2">% {</span><span class="s5">&quot;page_number&quot;</span><span class="s2">: </span><span class="s1">page_number</span><span class="s2">, </span><span class="s5">&quot;message&quot;</span><span class="s2">: </span><span class="s1">str</span><span class="s2">(</span><span class="s1">e</span><span class="s2">)}</span>
+            <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_paginate_by</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">queryset</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Get the number of items to paginate by, or ``None`` for no pagination. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">paginate_by</span>
+
+    <span class="s0">def </span><span class="s1">get_paginator</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">queryset</span><span class="s2">, </span><span class="s1">per_page</span><span class="s2">, </span><span class="s1">orphans</span><span class="s2">=</span><span class="s4">0</span><span class="s2">, </span><span class="s1">allow_empty_first_page</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, **</span><span class="s1">kwargs</span>
+    <span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Return an instance of the paginator for this view.&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">paginator_class</span><span class="s2">(</span>
+            <span class="s1">queryset</span><span class="s2">,</span>
+            <span class="s1">per_page</span><span class="s2">,</span>
+            <span class="s1">orphans</span><span class="s2">=</span><span class="s1">orphans</span><span class="s2">,</span>
+            <span class="s1">allow_empty_first_page</span><span class="s2">=</span><span class="s1">allow_empty_first_page</span><span class="s2">,</span>
+            <span class="s2">**</span><span class="s1">kwargs</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_paginate_orphans</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the maximum number of orphans extend the last page by when 
+        paginating. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">paginate_orphans</span>
+
+    <span class="s0">def </span><span class="s1">get_allow_empty</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return ``True`` if the view should display empty lists and ``False`` 
+        if a 404 should be raised instead. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">allow_empty</span>
+
+    <span class="s0">def </span><span class="s1">get_context_object_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">object_list</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Get the name of the item to be used in the context.&quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">context_object_name</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">context_object_name</span>
+        <span class="s0">elif </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">object_list</span><span class="s2">, </span><span class="s5">&quot;model&quot;</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s5">&quot;%s_list&quot; </span><span class="s2">% </span><span class="s1">object_list</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return None</span>
+
+    <span class="s0">def </span><span class="s1">get_context_data</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *, </span><span class="s1">object_list</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Get the context for this view.&quot;&quot;&quot;</span>
+        <span class="s1">queryset </span><span class="s2">= </span><span class="s1">object_list </span><span class="s0">if </span><span class="s1">object_list </span><span class="s0">is not None else </span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_list</span>
+        <span class="s1">page_size </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_paginate_by</span><span class="s2">(</span><span class="s1">queryset</span><span class="s2">)</span>
+        <span class="s1">context_object_name </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_context_object_name</span><span class="s2">(</span><span class="s1">queryset</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">page_size</span><span class="s2">:</span>
+            <span class="s1">paginator</span><span class="s2">, </span><span class="s1">page</span><span class="s2">, </span><span class="s1">queryset</span><span class="s2">, </span><span class="s1">is_paginated </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">paginate_queryset</span><span class="s2">(</span>
+                <span class="s1">queryset</span><span class="s2">, </span><span class="s1">page_size</span>
+            <span class="s2">)</span>
+            <span class="s1">context </span><span class="s2">= {</span>
+                <span class="s5">&quot;paginator&quot;</span><span class="s2">: </span><span class="s1">paginator</span><span class="s2">,</span>
+                <span class="s5">&quot;page_obj&quot;</span><span class="s2">: </span><span class="s1">page</span><span class="s2">,</span>
+                <span class="s5">&quot;is_paginated&quot;</span><span class="s2">: </span><span class="s1">is_paginated</span><span class="s2">,</span>
+                <span class="s5">&quot;object_list&quot;</span><span class="s2">: </span><span class="s1">queryset</span><span class="s2">,</span>
+            <span class="s2">}</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">context </span><span class="s2">= {</span>
+                <span class="s5">&quot;paginator&quot;</span><span class="s2">: </span><span class="s0">None</span><span class="s2">,</span>
+                <span class="s5">&quot;page_obj&quot;</span><span class="s2">: </span><span class="s0">None</span><span class="s2">,</span>
+                <span class="s5">&quot;is_paginated&quot;</span><span class="s2">: </span><span class="s0">False</span><span class="s2">,</span>
+                <span class="s5">&quot;object_list&quot;</span><span class="s2">: </span><span class="s1">queryset</span><span class="s2">,</span>
+            <span class="s2">}</span>
+        <span class="s0">if </span><span class="s1">context_object_name </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">context</span><span class="s2">[</span><span class="s1">context_object_name</span><span class="s2">] = </span><span class="s1">queryset</span>
+        <span class="s1">context</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_context_data</span><span class="s2">(**</span><span class="s1">context</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">BaseListView</span><span class="s2">(</span><span class="s1">MultipleObjectMixin</span><span class="s2">, </span><span class="s1">View</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;A base view for displaying a list of objects.&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">get</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">object_list </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_queryset</span><span class="s2">()</span>
+        <span class="s1">allow_empty </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_allow_empty</span><span class="s2">()</span>
+
+        <span class="s0">if not </span><span class="s1">allow_empty</span><span class="s2">:</span>
+            <span class="s6"># When pagination is enabled and object_list is a queryset,</span>
+            <span class="s6"># it's better to do a cheap query than to load the unpaginated</span>
+            <span class="s6"># queryset in memory.</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_paginate_by</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_list</span><span class="s2">) </span><span class="s0">is not None and </span><span class="s1">hasattr</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">object_list</span><span class="s2">, </span><span class="s5">&quot;exists&quot;</span>
+            <span class="s2">):</span>
+                <span class="s1">is_empty </span><span class="s2">= </span><span class="s0">not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_list</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">()</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">is_empty </span><span class="s2">= </span><span class="s0">not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_list</span>
+            <span class="s0">if </span><span class="s1">is_empty</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">Http404</span><span class="s2">(</span>
+                    <span class="s1">_</span><span class="s2">(</span><span class="s5">&quot;Empty list and “%(class_name)s.allow_empty” is False.&quot;</span><span class="s2">)</span>
+                    <span class="s2">% {</span>
+                        <span class="s5">&quot;class_name&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">,</span>
+                    <span class="s2">}</span>
+                <span class="s2">)</span>
+        <span class="s1">context </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_context_data</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">render_to_response</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">MultipleObjectTemplateResponseMixin</span><span class="s2">(</span><span class="s1">TemplateResponseMixin</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;Mixin for responding with a template and list of objects.&quot;&quot;&quot;</span>
+
+    <span class="s1">template_name_suffix </span><span class="s2">= </span><span class="s5">&quot;_list&quot;</span>
+
+    <span class="s0">def </span><span class="s1">get_template_names</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return a list of template names to be used for the request. Must return 
+        a list. May not be called if render_to_response is overridden. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">names </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_template_names</span><span class="s2">()</span>
+        <span class="s0">except </span><span class="s1">ImproperlyConfigured</span><span class="s2">:</span>
+            <span class="s6"># If template_name isn't specified, it's not a problem --</span>
+            <span class="s6"># we just start with an empty list.</span>
+            <span class="s1">names </span><span class="s2">= []</span>
+
+        <span class="s6"># If the list is a queryset, we'll invent a template name based on the</span>
+        <span class="s6"># app and model name. This name gets put at the end of the template</span>
+        <span class="s6"># name list so that user-supplied names override the automatically-</span>
+        <span class="s6"># generated ones.</span>
+        <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_list</span><span class="s2">, </span><span class="s5">&quot;model&quot;</span><span class="s2">):</span>
+            <span class="s1">opts </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_list</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span>
+            <span class="s1">names</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                <span class="s5">&quot;%s/%s%s.html&quot;</span>
+                <span class="s2">% (</span><span class="s1">opts</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">template_name_suffix</span><span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s0">elif not </span><span class="s1">names</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                <span class="s5">&quot;%(cls)s requires either a 'template_name' attribute &quot;</span>
+                <span class="s5">&quot;or a get_queryset() method that returns a QuerySet.&quot;</span>
+                <span class="s2">% {</span>
+                    <span class="s5">&quot;cls&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">,</span>
+                <span class="s2">}</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">names</span>
+
+
+<span class="s0">class </span><span class="s1">ListView</span><span class="s2">(</span><span class="s1">MultipleObjectTemplateResponseMixin</span><span class="s2">, </span><span class="s1">BaseListView</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Render some list of objects, set by `self.model` or `self.queryset`. 
+    `self.queryset` can actually be any iterable of items, not just a queryset. 
+    &quot;&quot;&quot;</span>
+</pre>
+</body>
+</html>

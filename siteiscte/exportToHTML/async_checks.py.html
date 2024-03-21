@@ -1,0 +1,36 @@
+<html>
+<head>
+<title>async_checks.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+async_checks.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">os</span>
+
+<span class="s0">from </span><span class="s2">. </span><span class="s0">import </span><span class="s1">Error</span><span class="s2">, </span><span class="s1">Tags</span><span class="s2">, </span><span class="s1">register</span>
+
+<span class="s1">E001 </span><span class="s2">= </span><span class="s1">Error</span><span class="s2">(</span>
+    <span class="s3">&quot;You should not set the DJANGO_ALLOW_ASYNC_UNSAFE environment variable in &quot;</span>
+    <span class="s3">&quot;deployment. This disables async safety protection.&quot;</span><span class="s2">,</span>
+    <span class="s1">id</span><span class="s2">=</span><span class="s3">&quot;async.E001&quot;</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">(</span><span class="s1">Tags</span><span class="s2">.</span><span class="s1">async_support</span><span class="s2">, </span><span class="s1">deploy</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">check_async_unsafe</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">environ</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;DJANGO_ALLOW_ASYNC_UNSAFE&quot;</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">[</span><span class="s1">E001</span><span class="s2">]</span>
+    <span class="s0">return </span><span class="s2">[]</span>
+</pre>
+</body>
+</html>

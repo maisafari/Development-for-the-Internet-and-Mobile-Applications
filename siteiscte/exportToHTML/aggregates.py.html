@@ -1,0 +1,120 @@
+<html>
+<head>
+<title>aggregates.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #2aacb8;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+aggregates.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">fields </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">ExtentField</span><span class="s2">,</span>
+    <span class="s1">GeometryCollectionField</span><span class="s2">,</span>
+    <span class="s1">GeometryField</span><span class="s2">,</span>
+    <span class="s1">LineStringField</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">Aggregate</span><span class="s2">, </span><span class="s1">Func</span><span class="s2">, </span><span class="s1">Value</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+
+<span class="s1">__all__ </span><span class="s2">= [</span><span class="s3">&quot;Collect&quot;</span><span class="s2">, </span><span class="s3">&quot;Extent&quot;</span><span class="s2">, </span><span class="s3">&quot;Extent3D&quot;</span><span class="s2">, </span><span class="s3">&quot;MakeLine&quot;</span><span class="s2">, </span><span class="s3">&quot;Union&quot;</span><span class="s2">]</span>
+
+
+<span class="s0">class </span><span class="s1">GeoAggregate</span><span class="s2">(</span><span class="s1">Aggregate</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">is_extent </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">output_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field_class</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">source_expressions</span><span class="s2">[</span><span class="s4">0</span><span class="s2">].</span><span class="s1">output_field</span><span class="s2">.</span><span class="s1">srid</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">function</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s5"># this will be called again in parent, but it's needed now - before</span>
+        <span class="s5"># we get the spatial_aggregate_name</span>
+        <span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">check_expression_support</span><span class="s2">(</span><span class="s1">self</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">as_sql</span><span class="s2">(</span>
+            <span class="s1">compiler</span><span class="s2">,</span>
+            <span class="s1">connection</span><span class="s2">,</span>
+            <span class="s1">function</span><span class="s2">=</span><span class="s1">function </span><span class="s0">or </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">spatial_aggregate_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">),</span>
+            <span class="s2">**</span><span class="s1">extra_context</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_oracle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_extent</span><span class="s2">:</span>
+            <span class="s1">tolerance </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">extra</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;tolerance&quot;</span><span class="s2">) </span><span class="s0">or </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s3">&quot;tolerance&quot;</span><span class="s2">, </span><span class="s4">0.05</span><span class="s2">)</span>
+            <span class="s1">clone </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+            <span class="s1">source_expressions </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_source_expressions</span><span class="s2">()</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">:</span>
+                <span class="s1">source_expressions</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">()</span>
+            <span class="s1">spatial_type_expr </span><span class="s2">= </span><span class="s1">Func</span><span class="s2">(</span>
+                <span class="s2">*</span><span class="s1">source_expressions</span><span class="s2">,</span>
+                <span class="s1">Value</span><span class="s2">(</span><span class="s1">tolerance</span><span class="s2">),</span>
+                <span class="s1">function</span><span class="s2">=</span><span class="s3">&quot;SDOAGGRTYPE&quot;</span><span class="s2">,</span>
+                <span class="s1">output_field</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">,</span>
+            <span class="s2">)</span>
+            <span class="s1">source_expressions </span><span class="s2">= [</span><span class="s1">spatial_type_expr</span><span class="s2">]</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">:</span>
+                <span class="s1">source_expressions</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">)</span>
+            <span class="s1">clone</span><span class="s2">.</span><span class="s1">set_source_expressions</span><span class="s2">(</span><span class="s1">source_expressions</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">clone</span><span class="s2">.</span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">resolve_expression</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">query</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">allow_joins</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">reuse</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">summarize</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">for_save</span><span class="s2">=</span><span class="s0">False</span>
+    <span class="s2">):</span>
+        <span class="s1">c </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">resolve_expression</span><span class="s2">(</span><span class="s1">query</span><span class="s2">, </span><span class="s1">allow_joins</span><span class="s2">, </span><span class="s1">reuse</span><span class="s2">, </span><span class="s1">summarize</span><span class="s2">, </span><span class="s1">for_save</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">c</span><span class="s2">.</span><span class="s1">get_source_fields</span><span class="s2">():</span>
+            <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s3">&quot;geom_type&quot;</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s3">&quot;Geospatial aggregates only allowed on geometry fields.&quot;</span>
+                <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">c</span>
+
+
+<span class="s0">class </span><span class="s1">Collect</span><span class="s2">(</span><span class="s1">GeoAggregate</span><span class="s2">):</span>
+    <span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;Collect&quot;</span>
+    <span class="s1">output_field_class </span><span class="s2">= </span><span class="s1">GeometryCollectionField</span>
+
+
+<span class="s0">class </span><span class="s1">Extent</span><span class="s2">(</span><span class="s1">GeoAggregate</span><span class="s2">):</span>
+    <span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;Extent&quot;</span>
+    <span class="s1">is_extent </span><span class="s2">= </span><span class="s3">&quot;2D&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">expression</span><span class="s2">, **</span><span class="s1">extra</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">expression</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">=</span><span class="s1">ExtentField</span><span class="s2">(), **</span><span class="s1">extra</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">convert_value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">expression</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">convert_extent</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">Extent3D</span><span class="s2">(</span><span class="s1">GeoAggregate</span><span class="s2">):</span>
+    <span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;Extent3D&quot;</span>
+    <span class="s1">is_extent </span><span class="s2">= </span><span class="s3">&quot;3D&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">expression</span><span class="s2">, **</span><span class="s1">extra</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">expression</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">=</span><span class="s1">ExtentField</span><span class="s2">(), **</span><span class="s1">extra</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">convert_value</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">expression</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">convert_extent3d</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">MakeLine</span><span class="s2">(</span><span class="s1">GeoAggregate</span><span class="s2">):</span>
+    <span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;MakeLine&quot;</span>
+    <span class="s1">output_field_class </span><span class="s2">= </span><span class="s1">LineStringField</span>
+
+
+<span class="s0">class </span><span class="s1">Union</span><span class="s2">(</span><span class="s1">GeoAggregate</span><span class="s2">):</span>
+    <span class="s1">name </span><span class="s2">= </span><span class="s3">&quot;Union&quot;</span>
+    <span class="s1">output_field_class </span><span class="s2">= </span><span class="s1">GeometryField</span>
+</pre>
+</body>
+</html>

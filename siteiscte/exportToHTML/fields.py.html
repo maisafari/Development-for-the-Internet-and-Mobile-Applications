@@ -1,0 +1,870 @@
+<html>
+<head>
+<title>fields.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+fields.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">functools</span>
+<span class="s0">import </span><span class="s1">itertools</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+<span class="s0">from </span><span class="s1">collections </span><span class="s0">import </span><span class="s1">defaultdict</span>
+
+<span class="s0">from </span><span class="s1">asgiref</span><span class="s2">.</span><span class="s1">sync </span><span class="s0">import </span><span class="s1">sync_to_async</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">contenttypes</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">ContentType</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core </span><span class="s0">import </span><span class="s1">checks</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">FieldDoesNotExist</span><span class="s2">, </span><span class="s1">ObjectDoesNotExist</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">, </span><span class="s1">models</span><span class="s2">, </span><span class="s1">router</span><span class="s2">, </span><span class="s1">transaction</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">DO_NOTHING</span><span class="s2">, </span><span class="s1">ForeignObject</span><span class="s2">, </span><span class="s1">ForeignObjectRel</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">ModelBase</span><span class="s2">, </span><span class="s1">make_foreign_order_accessors</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">.</span><span class="s1">mixins </span><span class="s0">import </span><span class="s1">FieldCacheMixin</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">fields</span><span class="s2">.</span><span class="s1">related </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">ReverseManyToOneDescriptor</span><span class="s2">,</span>
+    <span class="s1">lazy_related_operation</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">query_utils </span><span class="s0">import </span><span class="s1">PathInfo</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">sql </span><span class="s0">import </span><span class="s1">AND</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">sql</span><span class="s2">.</span><span class="s1">where </span><span class="s0">import </span><span class="s1">WhereNode</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">AltersData</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">deprecation </span><span class="s0">import </span><span class="s1">RemovedInDjango60Warning</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+
+
+<span class="s0">class </span><span class="s1">GenericForeignKey</span><span class="s2">(</span><span class="s1">FieldCacheMixin</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Provide a generic many-to-one relation through the ``content_type`` and 
+    ``object_id`` fields. 
+ 
+    This class also doubles as an accessor to the related object (similar to 
+    ForwardManyToOneDescriptor) by adding itself as a model attribute. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s4"># Field flags</span>
+    <span class="s1">auto_created </span><span class="s2">= </span><span class="s0">False</span>
+    <span class="s1">concrete </span><span class="s2">= </span><span class="s0">False</span>
+    <span class="s1">editable </span><span class="s2">= </span><span class="s0">False</span>
+    <span class="s1">hidden </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s1">is_relation </span><span class="s2">= </span><span class="s0">True</span>
+    <span class="s1">many_to_many </span><span class="s2">= </span><span class="s0">False</span>
+    <span class="s1">many_to_one </span><span class="s2">= </span><span class="s0">True</span>
+    <span class="s1">one_to_many </span><span class="s2">= </span><span class="s0">False</span>
+    <span class="s1">one_to_one </span><span class="s2">= </span><span class="s0">False</span>
+    <span class="s1">related_model </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">remote_field </span><span class="s2">= </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">ct_field</span><span class="s2">=</span><span class="s5">&quot;content_type&quot;</span><span class="s2">, </span><span class="s1">fk_field</span><span class="s2">=</span><span class="s5">&quot;object_id&quot;</span><span class="s2">, </span><span class="s1">for_concrete_model</span><span class="s2">=</span><span class="s0">True</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field </span><span class="s2">= </span><span class="s1">ct_field</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">fk_field </span><span class="s2">= </span><span class="s1">fk_field</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">for_concrete_model </span><span class="s2">= </span><span class="s1">for_concrete_model</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">editable </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">rel </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">column </span><span class="s2">= </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">contribute_to_class</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">cls</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">name</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">model </span><span class="s2">= </span><span class="s1">cls</span>
+        <span class="s1">cls</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">add_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">private</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+        <span class="s1">setattr</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_filter_kwargs_for_object</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;See corresponding method on Field&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s2">{</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">fk_field</span><span class="s2">: </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fk_field</span><span class="s2">),</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">: </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">),</span>
+        <span class="s2">}</span>
+
+    <span class="s0">def </span><span class="s1">get_forward_related_filter</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;See corresponding method on RelatedField&quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s2">{</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">fk_field</span><span class="s2">: </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">: </span><span class="s1">ContentType</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">get_for_model</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">).</span><span class="s1">pk</span><span class="s2">,</span>
+        <span class="s2">}</span>
+
+    <span class="s0">def </span><span class="s1">__str__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">model </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span>
+        <span class="s0">return </span><span class="s5">&quot;%s.%s&quot; </span><span class="s2">% (</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">label</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">check</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">[</span>
+            <span class="s2">*</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_check_field_name</span><span class="s2">(),</span>
+            <span class="s2">*</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_check_object_id_field</span><span class="s2">(),</span>
+            <span class="s2">*</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_check_content_type_field</span><span class="s2">(),</span>
+        <span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">_check_field_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s5">&quot;_&quot;</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s2">[</span>
+                <span class="s1">checks</span><span class="s2">.</span><span class="s1">Error</span><span class="s2">(</span>
+                    <span class="s5">&quot;Field names must not end with an underscore.&quot;</span><span class="s2">,</span>
+                    <span class="s1">obj</span><span class="s2">=</span><span class="s1">self</span><span class="s2">,</span>
+                    <span class="s1">id</span><span class="s2">=</span><span class="s5">&quot;fields.E001&quot;</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s2">[]</span>
+
+    <span class="s0">def </span><span class="s1">_check_object_id_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">fk_field</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">FieldDoesNotExist</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s2">[</span>
+                <span class="s1">checks</span><span class="s2">.</span><span class="s1">Error</span><span class="s2">(</span>
+                    <span class="s5">&quot;The GenericForeignKey object ID references the &quot;</span>
+                    <span class="s5">&quot;nonexistent field '%s'.&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fk_field</span><span class="s2">,</span>
+                    <span class="s1">obj</span><span class="s2">=</span><span class="s1">self</span><span class="s2">,</span>
+                    <span class="s1">id</span><span class="s2">=</span><span class="s5">&quot;contenttypes.E001&quot;</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s2">[]</span>
+
+    <span class="s0">def </span><span class="s1">_check_content_type_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Check if field named `field_name` in model `model` exists and is a 
+        valid content_type field (is a ForeignKey to ContentType). 
+        &quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">field </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">FieldDoesNotExist</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s2">[</span>
+                <span class="s1">checks</span><span class="s2">.</span><span class="s1">Error</span><span class="s2">(</span>
+                    <span class="s5">&quot;The GenericForeignKey content type references the &quot;</span>
+                    <span class="s5">&quot;nonexistent field '%s.%s'.&quot;</span>
+                    <span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">object_name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">),</span>
+                    <span class="s1">obj</span><span class="s2">=</span><span class="s1">self</span><span class="s2">,</span>
+                    <span class="s1">id</span><span class="s2">=</span><span class="s5">&quot;contenttypes.E002&quot;</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">ForeignKey</span><span class="s2">):</span>
+                <span class="s0">return </span><span class="s2">[</span>
+                    <span class="s1">checks</span><span class="s2">.</span><span class="s1">Error</span><span class="s2">(</span>
+                        <span class="s5">&quot;'%s.%s' is not a ForeignKey.&quot;</span>
+                        <span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">object_name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">),</span>
+                        <span class="s1">hint</span><span class="s2">=(</span>
+                            <span class="s5">&quot;GenericForeignKeys must use a ForeignKey to &quot;</span>
+                            <span class="s5">&quot;'contenttypes.ContentType' as the 'content_type' field.&quot;</span>
+                        <span class="s2">),</span>
+                        <span class="s1">obj</span><span class="s2">=</span><span class="s1">self</span><span class="s2">,</span>
+                        <span class="s1">id</span><span class="s2">=</span><span class="s5">&quot;contenttypes.E003&quot;</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">]</span>
+            <span class="s0">elif </span><span class="s1">field</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model </span><span class="s2">!= </span><span class="s1">ContentType</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s2">[</span>
+                    <span class="s1">checks</span><span class="s2">.</span><span class="s1">Error</span><span class="s2">(</span>
+                        <span class="s5">&quot;'%s.%s' is not a ForeignKey to 'contenttypes.ContentType'.&quot;</span>
+                        <span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">object_name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">),</span>
+                        <span class="s1">hint</span><span class="s2">=(</span>
+                            <span class="s5">&quot;GenericForeignKeys must use a ForeignKey to &quot;</span>
+                            <span class="s5">&quot;'contenttypes.ContentType' as the 'content_type' field.&quot;</span>
+                        <span class="s2">),</span>
+                        <span class="s1">obj</span><span class="s2">=</span><span class="s1">self</span><span class="s2">,</span>
+                        <span class="s1">id</span><span class="s2">=</span><span class="s5">&quot;contenttypes.E004&quot;</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">]</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s2">[]</span>
+
+    <span class="s0">def </span><span class="s1">get_cache_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+
+    <span class="s0">def </span><span class="s1">get_content_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">id</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">model</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">obj </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">ContentType</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">db_manager</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">.</span><span class="s1">_state</span><span class="s2">.</span><span class="s1">db</span><span class="s2">).</span><span class="s1">get_for_model</span><span class="s2">(</span>
+                <span class="s1">obj</span><span class="s2">, </span><span class="s1">for_concrete_model</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">for_concrete_model</span>
+            <span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">id </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">ContentType</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">db_manager</span><span class="s2">(</span><span class="s1">using</span><span class="s2">).</span><span class="s1">get_for_id</span><span class="s2">(</span><span class="s1">id</span><span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">model </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">ContentType</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">db_manager</span><span class="s2">(</span><span class="s1">using</span><span class="s2">).</span><span class="s1">get_for_model</span><span class="s2">(</span>
+                <span class="s1">model</span><span class="s2">, </span><span class="s1">for_concrete_model</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">for_concrete_model</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s4"># This should never happen. I love comments like this, don't you?</span>
+            <span class="s0">raise </span><span class="s1">Exception</span><span class="s2">(</span><span class="s5">&quot;Impossible arguments to GFK.get_content_type!&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_prefetch_queryset</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">instances</span><span class="s2">, </span><span class="s1">queryset</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">warnings</span><span class="s2">.</span><span class="s1">warn</span><span class="s2">(</span>
+            <span class="s5">&quot;get_prefetch_queryset() is deprecated. Use get_prefetch_querysets() &quot;</span>
+            <span class="s5">&quot;instead.&quot;</span><span class="s2">,</span>
+            <span class="s1">RemovedInDjango60Warning</span><span class="s2">,</span>
+            <span class="s1">stacklevel</span><span class="s2">=</span><span class="s6">2</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">queryset </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_prefetch_querysets</span><span class="s2">(</span><span class="s1">instances</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_prefetch_querysets</span><span class="s2">(</span><span class="s1">instances</span><span class="s2">, [</span><span class="s1">queryset</span><span class="s2">])</span>
+
+    <span class="s0">def </span><span class="s1">get_prefetch_querysets</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">instances</span><span class="s2">, </span><span class="s1">querysets</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">custom_queryset_dict </span><span class="s2">= {}</span>
+        <span class="s0">if </span><span class="s1">querysets </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">for </span><span class="s1">queryset </span><span class="s0">in </span><span class="s1">querysets</span><span class="s2">:</span>
+                <span class="s1">ct_id </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_content_type</span><span class="s2">(</span>
+                    <span class="s1">model</span><span class="s2">=</span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">query</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">db</span>
+                <span class="s2">).</span><span class="s1">pk</span>
+                <span class="s0">if </span><span class="s1">ct_id </span><span class="s0">in </span><span class="s1">custom_queryset_dict</span><span class="s2">:</span>
+                    <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                        <span class="s5">&quot;Only one queryset is allowed for each content type.&quot;</span>
+                    <span class="s2">)</span>
+                <span class="s1">custom_queryset_dict</span><span class="s2">[</span><span class="s1">ct_id</span><span class="s2">] = </span><span class="s1">queryset</span>
+
+        <span class="s4"># For efficiency, group the instances by content type and then do one</span>
+        <span class="s4"># query per model</span>
+        <span class="s1">fk_dict </span><span class="s2">= </span><span class="s1">defaultdict</span><span class="s2">(</span><span class="s1">set</span><span class="s2">)</span>
+        <span class="s4"># We need one instance for each group in order to get the right db:</span>
+        <span class="s1">instance_dict </span><span class="s2">= {}</span>
+        <span class="s1">ct_attname </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">).</span><span class="s1">get_attname</span><span class="s2">()</span>
+        <span class="s0">for </span><span class="s1">instance </span><span class="s0">in </span><span class="s1">instances</span><span class="s2">:</span>
+            <span class="s4"># We avoid looking for values if either ct_id or fkey value is None</span>
+            <span class="s1">ct_id </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">, </span><span class="s1">ct_attname</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">ct_id </span><span class="s0">is not None</span><span class="s2">:</span>
+                <span class="s1">fk_val </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fk_field</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">fk_val </span><span class="s0">is not None</span><span class="s2">:</span>
+                    <span class="s1">fk_dict</span><span class="s2">[</span><span class="s1">ct_id</span><span class="s2">].</span><span class="s1">add</span><span class="s2">(</span><span class="s1">fk_val</span><span class="s2">)</span>
+                    <span class="s1">instance_dict</span><span class="s2">[</span><span class="s1">ct_id</span><span class="s2">] = </span><span class="s1">instance</span>
+
+        <span class="s1">ret_val </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">ct_id</span><span class="s2">, </span><span class="s1">fkeys </span><span class="s0">in </span><span class="s1">fk_dict</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s0">if </span><span class="s1">ct_id </span><span class="s0">in </span><span class="s1">custom_queryset_dict</span><span class="s2">:</span>
+                <span class="s4"># Return values from the custom queryset, if provided.</span>
+                <span class="s1">ret_val</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">custom_queryset_dict</span><span class="s2">[</span><span class="s1">ct_id</span><span class="s2">].</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">pk__in</span><span class="s2">=</span><span class="s1">fkeys</span><span class="s2">))</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">instance </span><span class="s2">= </span><span class="s1">instance_dict</span><span class="s2">[</span><span class="s1">ct_id</span><span class="s2">]</span>
+                <span class="s1">ct </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_content_type</span><span class="s2">(</span><span class="s1">id</span><span class="s2">=</span><span class="s1">ct_id</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s1">instance</span><span class="s2">.</span><span class="s1">_state</span><span class="s2">.</span><span class="s1">db</span><span class="s2">)</span>
+                <span class="s1">ret_val</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">ct</span><span class="s2">.</span><span class="s1">get_all_objects_for_this_type</span><span class="s2">(</span><span class="s1">pk__in</span><span class="s2">=</span><span class="s1">fkeys</span><span class="s2">))</span>
+
+        <span class="s4"># For doing the join in Python, we have to match both the FK val and the</span>
+        <span class="s4"># content type, so we use a callable that returns a (fk, class) pair.</span>
+        <span class="s0">def </span><span class="s1">gfk_key</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">):</span>
+            <span class="s1">ct_id </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">ct_attname</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">ct_id </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s0">return None</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">model </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_content_type</span><span class="s2">(</span>
+                    <span class="s1">id</span><span class="s2">=</span><span class="s1">ct_id</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s1">obj</span><span class="s2">.</span><span class="s1">_state</span><span class="s2">.</span><span class="s1">db</span>
+                <span class="s2">).</span><span class="s1">model_class</span><span class="s2">()</span>
+                <span class="s0">return </span><span class="s2">(</span>
+                    <span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">get_prep_value</span><span class="s2">(</span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fk_field</span><span class="s2">)),</span>
+                    <span class="s1">model</span><span class="s2">,</span>
+                <span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s2">(</span>
+            <span class="s1">ret_val</span><span class="s2">,</span>
+            <span class="s0">lambda </span><span class="s1">obj</span><span class="s2">: (</span><span class="s1">obj</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">),</span>
+            <span class="s1">gfk_key</span><span class="s2">,</span>
+            <span class="s0">True</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">,</span>
+            <span class="s0">False</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__get__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">instance</span><span class="s2">, </span><span class="s1">cls</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">instance </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span>
+
+        <span class="s4"># Don't use getattr(instance, self.ct_field) here because that might</span>
+        <span class="s4"># reload the same ContentType over and over (#5570). Instead, get the</span>
+        <span class="s4"># content type ID here, and later when the actual instance is needed,</span>
+        <span class="s4"># use ContentType.objects.get_for_id(), which has a global cache.</span>
+        <span class="s1">f </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">)</span>
+        <span class="s1">ct_id </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">, </span><span class="s1">f</span><span class="s2">.</span><span class="s1">get_attname</span><span class="s2">(), </span><span class="s0">None</span><span class="s2">)</span>
+        <span class="s1">pk_val </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fk_field</span><span class="s2">)</span>
+
+        <span class="s1">rel_obj </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_cached_value</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">, </span><span class="s1">default</span><span class="s2">=</span><span class="s0">None</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">rel_obj </span><span class="s0">is None and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_cached</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">rel_obj</span>
+        <span class="s0">if </span><span class="s1">rel_obj </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">ct_match </span><span class="s2">= (</span>
+                <span class="s1">ct_id </span><span class="s2">== </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_content_type</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">=</span><span class="s1">rel_obj</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s1">instance</span><span class="s2">.</span><span class="s1">_state</span><span class="s2">.</span><span class="s1">db</span><span class="s2">).</span><span class="s1">id</span>
+            <span class="s2">)</span>
+            <span class="s1">pk_match </span><span class="s2">= </span><span class="s1">ct_match </span><span class="s0">and </span><span class="s1">rel_obj</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">to_python</span><span class="s2">(</span><span class="s1">pk_val</span><span class="s2">) == </span><span class="s1">rel_obj</span><span class="s2">.</span><span class="s1">pk</span>
+            <span class="s0">if </span><span class="s1">pk_match</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">rel_obj</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">rel_obj </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s0">if </span><span class="s1">ct_id </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">ct </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_content_type</span><span class="s2">(</span><span class="s1">id</span><span class="s2">=</span><span class="s1">ct_id</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s1">instance</span><span class="s2">.</span><span class="s1">_state</span><span class="s2">.</span><span class="s1">db</span><span class="s2">)</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">rel_obj </span><span class="s2">= </span><span class="s1">ct</span><span class="s2">.</span><span class="s1">get_object_for_this_type</span><span class="s2">(</span><span class="s1">pk</span><span class="s2">=</span><span class="s1">pk_val</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">ObjectDoesNotExist</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">set_cached_value</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">, </span><span class="s1">rel_obj</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">rel_obj</span>
+
+    <span class="s0">def </span><span class="s1">__set__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">instance</span><span class="s2">, </span><span class="s1">value</span><span class="s2">):</span>
+        <span class="s1">ct </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">fk </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s0">if </span><span class="s1">value </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">ct </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_content_type</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">=</span><span class="s1">value</span><span class="s2">)</span>
+            <span class="s1">fk </span><span class="s2">= </span><span class="s1">value</span><span class="s2">.</span><span class="s1">pk</span>
+
+        <span class="s1">setattr</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">ct_field</span><span class="s2">, </span><span class="s1">ct</span><span class="s2">)</span>
+        <span class="s1">setattr</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">fk_field</span><span class="s2">, </span><span class="s1">fk</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">set_cached_value</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">, </span><span class="s1">value</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">GenericRel</span><span class="s2">(</span><span class="s1">ForeignObjectRel</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Used by GenericRelation to store information about the relation. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">field</span><span class="s2">,</span>
+        <span class="s1">to</span><span class="s2">,</span>
+        <span class="s1">related_name</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">related_query_name</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">limit_choices_to</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span>
+            <span class="s1">field</span><span class="s2">,</span>
+            <span class="s1">to</span><span class="s2">,</span>
+            <span class="s1">related_name</span><span class="s2">=</span><span class="s1">related_query_name </span><span class="s0">or </span><span class="s5">&quot;+&quot;</span><span class="s2">,</span>
+            <span class="s1">related_query_name</span><span class="s2">=</span><span class="s1">related_query_name</span><span class="s2">,</span>
+            <span class="s1">limit_choices_to</span><span class="s2">=</span><span class="s1">limit_choices_to</span><span class="s2">,</span>
+            <span class="s1">on_delete</span><span class="s2">=</span><span class="s1">DO_NOTHING</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">GenericRelation</span><span class="s2">(</span><span class="s1">ForeignObject</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Provide a reverse to a relation created by a GenericForeignKey. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s4"># Field flags</span>
+    <span class="s1">auto_created </span><span class="s2">= </span><span class="s0">False</span>
+    <span class="s1">empty_strings_allowed </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s1">many_to_many </span><span class="s2">= </span><span class="s0">False</span>
+    <span class="s1">many_to_one </span><span class="s2">= </span><span class="s0">False</span>
+    <span class="s1">one_to_many </span><span class="s2">= </span><span class="s0">True</span>
+    <span class="s1">one_to_one </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s1">rel_class </span><span class="s2">= </span><span class="s1">GenericRel</span>
+
+    <span class="s1">mti_inherited </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">to</span><span class="s2">,</span>
+        <span class="s1">object_id_field</span><span class="s2">=</span><span class="s5">&quot;object_id&quot;</span><span class="s2">,</span>
+        <span class="s1">content_type_field</span><span class="s2">=</span><span class="s5">&quot;content_type&quot;</span><span class="s2">,</span>
+        <span class="s1">for_concrete_model</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+        <span class="s1">related_query_name</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s1">limit_choices_to</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+        <span class="s2">**</span><span class="s1">kwargs</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s1">kwargs</span><span class="s2">[</span><span class="s5">&quot;rel&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">rel_class</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">,</span>
+            <span class="s1">to</span><span class="s2">,</span>
+            <span class="s1">related_query_name</span><span class="s2">=</span><span class="s1">related_query_name</span><span class="s2">,</span>
+            <span class="s1">limit_choices_to</span><span class="s2">=</span><span class="s1">limit_choices_to</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+        <span class="s4"># Reverse relations are always nullable (Django can't enforce that a</span>
+        <span class="s4"># foreign key on the related model points to this model).</span>
+        <span class="s1">kwargs</span><span class="s2">[</span><span class="s5">&quot;null&quot;</span><span class="s2">] = </span><span class="s0">True</span>
+        <span class="s1">kwargs</span><span class="s2">[</span><span class="s5">&quot;blank&quot;</span><span class="s2">] = </span><span class="s0">True</span>
+        <span class="s1">kwargs</span><span class="s2">[</span><span class="s5">&quot;on_delete&quot;</span><span class="s2">] = </span><span class="s1">models</span><span class="s2">.</span><span class="s1">CASCADE</span>
+        <span class="s1">kwargs</span><span class="s2">[</span><span class="s5">&quot;editable&quot;</span><span class="s2">] = </span><span class="s0">False</span>
+        <span class="s1">kwargs</span><span class="s2">[</span><span class="s5">&quot;serialize&quot;</span><span class="s2">] = </span><span class="s0">False</span>
+
+        <span class="s4"># This construct is somewhat of an abuse of ForeignObject. This field</span>
+        <span class="s4"># represents a relation from pk to object_id field. But, this relation</span>
+        <span class="s4"># isn't direct, the join is generated reverse along foreign key. So,</span>
+        <span class="s4"># the from_field is object_id field, to_field is pk because of the</span>
+        <span class="s4"># reverse join.</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">to</span><span class="s2">, </span><span class="s1">from_fields</span><span class="s2">=[</span><span class="s1">object_id_field</span><span class="s2">], </span><span class="s1">to_fields</span><span class="s2">=[], **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name </span><span class="s2">= </span><span class="s1">object_id_field</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_field_name </span><span class="s2">= </span><span class="s1">content_type_field</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">for_concrete_model </span><span class="s2">= </span><span class="s1">for_concrete_model</span>
+
+    <span class="s0">def </span><span class="s1">check</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">[</span>
+            <span class="s2">*</span><span class="s1">super</span><span class="s2">().</span><span class="s1">check</span><span class="s2">(**</span><span class="s1">kwargs</span><span class="s2">),</span>
+            <span class="s2">*</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_check_generic_foreign_key_existence</span><span class="s2">(),</span>
+        <span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">_is_matching_generic_foreign_key</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">field</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return True if field is a GenericForeignKey whose content type and 
+        object id fields correspond to the equivalent attributes on this 
+        GenericRelation. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s2">(</span>
+            <span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">GenericForeignKey</span><span class="s2">)</span>
+            <span class="s0">and </span><span class="s1">field</span><span class="s2">.</span><span class="s1">ct_field </span><span class="s2">== </span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_field_name</span>
+            <span class="s0">and </span><span class="s1">field</span><span class="s2">.</span><span class="s1">fk_field </span><span class="s2">== </span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_check_generic_foreign_key_existence</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">target </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">target</span><span class="s2">, </span><span class="s1">ModelBase</span><span class="s2">):</span>
+            <span class="s1">fields </span><span class="s2">= </span><span class="s1">target</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">private_fields</span>
+            <span class="s0">if </span><span class="s1">any</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_is_matching_generic_foreign_key</span><span class="s2">(</span><span class="s1">field</span><span class="s2">) </span><span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">fields</span><span class="s2">):</span>
+                <span class="s0">return </span><span class="s2">[]</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s2">[</span>
+                    <span class="s1">checks</span><span class="s2">.</span><span class="s1">Error</span><span class="s2">(</span>
+                        <span class="s5">&quot;The GenericRelation defines a relation with the model &quot;</span>
+                        <span class="s5">&quot;'%s', but that model does not have a GenericForeignKey.&quot;</span>
+                        <span class="s2">% </span><span class="s1">target</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">label</span><span class="s2">,</span>
+                        <span class="s1">obj</span><span class="s2">=</span><span class="s1">self</span><span class="s2">,</span>
+                        <span class="s1">id</span><span class="s2">=</span><span class="s5">&quot;contenttypes.E004&quot;</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                <span class="s2">]</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s2">[]</span>
+
+    <span class="s0">def </span><span class="s1">resolve_related_fields</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">to_fields </span><span class="s2">= [</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">name</span><span class="s2">]</span>
+        <span class="s0">return </span><span class="s2">[</span>
+            <span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name</span><span class="s2">),</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">_get_path_info_with_parent</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">filtered_relation</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the path that joins the current model through any parent models. 
+        The idea is that if you have a GFK defined on a parent model then we 
+        need to join the parent model first, then the child model. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># With an inheritance chain ChildTag -&gt; Tag and Tag defines the</span>
+        <span class="s4"># GenericForeignKey, and a TaggedItem model has a GenericRelation to</span>
+        <span class="s4"># ChildTag, then we need to generate a join from TaggedItem to Tag</span>
+        <span class="s4"># (as Tag.object_id == TaggedItem.pk), and another join from Tag to</span>
+        <span class="s4"># ChildTag (as that is where the relation is to). Do this by first</span>
+        <span class="s4"># generating a join to the parent model, then generating joins to the</span>
+        <span class="s4"># child models.</span>
+        <span class="s1">path </span><span class="s2">= []</span>
+        <span class="s1">opts </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">concrete_model</span><span class="s2">.</span><span class="s1">_meta</span>
+        <span class="s1">parent_opts </span><span class="s2">= </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name</span><span class="s2">).</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span>
+        <span class="s1">target </span><span class="s2">= </span><span class="s1">parent_opts</span><span class="s2">.</span><span class="s1">pk</span>
+        <span class="s1">path</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+            <span class="s1">PathInfo</span><span class="s2">(</span>
+                <span class="s1">from_opts</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">,</span>
+                <span class="s1">to_opts</span><span class="s2">=</span><span class="s1">parent_opts</span><span class="s2">,</span>
+                <span class="s1">target_fields</span><span class="s2">=(</span><span class="s1">target</span><span class="s2">,),</span>
+                <span class="s1">join_field</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">,</span>
+                <span class="s1">m2m</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+                <span class="s1">direct</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+                <span class="s1">filtered_relation</span><span class="s2">=</span><span class="s1">filtered_relation</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s2">)</span>
+        <span class="s4"># Collect joins needed for the parent -&gt; child chain. This is easiest</span>
+        <span class="s4"># to do if we collect joins for the child -&gt; parent chain and then</span>
+        <span class="s4"># reverse the direction (call to reverse() and use of</span>
+        <span class="s4"># field.remote_field.get_path_info()).</span>
+        <span class="s1">parent_field_chain </span><span class="s2">= []</span>
+        <span class="s0">while </span><span class="s1">parent_opts </span><span class="s2">!= </span><span class="s1">opts</span><span class="s2">:</span>
+            <span class="s1">field </span><span class="s2">= </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">get_ancestor_link</span><span class="s2">(</span><span class="s1">parent_opts</span><span class="s2">.</span><span class="s1">model</span><span class="s2">)</span>
+            <span class="s1">parent_field_chain</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">field</span><span class="s2">)</span>
+            <span class="s1">opts </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span>
+        <span class="s1">parent_field_chain</span><span class="s2">.</span><span class="s1">reverse</span><span class="s2">()</span>
+        <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">parent_field_chain</span><span class="s2">:</span>
+            <span class="s1">path</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">path_infos</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">path</span>
+
+    <span class="s0">def </span><span class="s1">get_path_info</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">filtered_relation</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">opts </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span>
+        <span class="s1">object_id_field </span><span class="s2">= </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">object_id_field</span><span class="s2">.</span><span class="s1">model </span><span class="s2">!= </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">model</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_path_info_with_parent</span><span class="s2">(</span><span class="s1">filtered_relation</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">target </span><span class="s2">= </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">pk</span>
+            <span class="s0">return </span><span class="s2">[</span>
+                <span class="s1">PathInfo</span><span class="s2">(</span>
+                    <span class="s1">from_opts</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">,</span>
+                    <span class="s1">to_opts</span><span class="s2">=</span><span class="s1">opts</span><span class="s2">,</span>
+                    <span class="s1">target_fields</span><span class="s2">=(</span><span class="s1">target</span><span class="s2">,),</span>
+                    <span class="s1">join_field</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">,</span>
+                    <span class="s1">m2m</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+                    <span class="s1">direct</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+                    <span class="s1">filtered_relation</span><span class="s2">=</span><span class="s1">filtered_relation</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">get_reverse_path_info</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">filtered_relation</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">opts </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span>
+        <span class="s1">from_opts </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span>
+        <span class="s0">return </span><span class="s2">[</span>
+            <span class="s1">PathInfo</span><span class="s2">(</span>
+                <span class="s1">from_opts</span><span class="s2">=</span><span class="s1">from_opts</span><span class="s2">,</span>
+                <span class="s1">to_opts</span><span class="s2">=</span><span class="s1">opts</span><span class="s2">,</span>
+                <span class="s1">target_fields</span><span class="s2">=(</span><span class="s1">opts</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">,),</span>
+                <span class="s1">join_field</span><span class="s2">=</span><span class="s1">self</span><span class="s2">,</span>
+                <span class="s1">m2m</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+                <span class="s1">direct</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+                <span class="s1">filtered_relation</span><span class="s2">=</span><span class="s1">filtered_relation</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">value_to_string</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">):</span>
+        <span class="s1">qs </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">).</span><span class="s1">all</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">str</span><span class="s2">([</span><span class="s1">instance</span><span class="s2">.</span><span class="s1">pk </span><span class="s0">for </span><span class="s1">instance </span><span class="s0">in </span><span class="s1">qs</span><span class="s2">])</span>
+
+    <span class="s0">def </span><span class="s1">contribute_to_class</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">cls</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">kwargs</span><span class="s2">[</span><span class="s5">&quot;private_only&quot;</span><span class="s2">] = </span><span class="s0">True</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">contribute_to_class</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">model </span><span class="s2">= </span><span class="s1">cls</span>
+        <span class="s4"># Disable the reverse relation for fields inherited by subclasses of a</span>
+        <span class="s4"># model in multi-table inheritance. The reverse relation points to the</span>
+        <span class="s4"># field of the base model.</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">mti_inherited</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">related_name </span><span class="s2">= </span><span class="s5">&quot;+&quot;</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">related_query_name </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">setattr</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">, </span><span class="s1">ReverseGenericManyToOneDescriptor</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">))</span>
+
+        <span class="s4"># Add get_RELATED_order() and set_RELATED_order() to the model this</span>
+        <span class="s4"># field belongs to, if the model on the other end of this relation</span>
+        <span class="s4"># is ordered with respect to its corresponding GenericForeignKey.</span>
+        <span class="s0">if not </span><span class="s1">cls</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">abstract</span><span class="s2">:</span>
+
+            <span class="s0">def </span><span class="s1">make_generic_foreign_order_accessors</span><span class="s2">(</span><span class="s1">related_model</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+                <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_is_matching_generic_foreign_key</span><span class="s2">(</span>
+                    <span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">order_with_respect_to</span>
+                <span class="s2">):</span>
+                    <span class="s1">make_foreign_order_accessors</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">related_model</span><span class="s2">)</span>
+
+            <span class="s1">lazy_related_operation</span><span class="s2">(</span>
+                <span class="s1">make_generic_foreign_order_accessors</span><span class="s2">,</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">,</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model</span><span class="s2">,</span>
+            <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">set_attributes_from_rel</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">pass</span>
+
+    <span class="s0">def </span><span class="s1">get_internal_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s5">&quot;ManyToManyField&quot;</span>
+
+    <span class="s0">def </span><span class="s1">get_content_type</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the content type associated with this field's model. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">ContentType</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">get_for_model</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">for_concrete_model</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">for_concrete_model</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_extra_restriction</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">alias</span><span class="s2">, </span><span class="s1">remote_alias</span><span class="s2">):</span>
+        <span class="s1">field </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_field_name</span><span class="s2">)</span>
+        <span class="s1">contenttype_pk </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_content_type</span><span class="s2">().</span><span class="s1">pk</span>
+        <span class="s1">lookup </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">get_lookup</span><span class="s2">(</span><span class="s5">&quot;exact&quot;</span><span class="s2">)(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">get_col</span><span class="s2">(</span><span class="s1">remote_alias</span><span class="s2">), </span><span class="s1">contenttype_pk</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">WhereNode</span><span class="s2">([</span><span class="s1">lookup</span><span class="s2">], </span><span class="s1">connector</span><span class="s2">=</span><span class="s1">AND</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">bulk_related_objects</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">objs</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return all objects related to ``objs`` via this ``GenericRelation``. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_base_manager</span><span class="s2">.</span><span class="s1">db_manager</span><span class="s2">(</span><span class="s1">using</span><span class="s2">).</span><span class="s1">filter</span><span class="s2">(</span>
+            <span class="s2">**{</span>
+                <span class="s5">&quot;%s__pk&quot;</span>
+                <span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_field_name</span><span class="s2">: </span><span class="s1">ContentType</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">db_manager</span><span class="s2">(</span><span class="s1">using</span><span class="s2">)</span>
+                <span class="s2">.</span><span class="s1">get_for_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">for_concrete_model</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">for_concrete_model</span><span class="s2">)</span>
+                <span class="s2">.</span><span class="s1">pk</span><span class="s2">,</span>
+                <span class="s5">&quot;%s__in&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name</span><span class="s2">: [</span><span class="s1">obj</span><span class="s2">.</span><span class="s1">pk </span><span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">objs</span><span class="s2">],</span>
+            <span class="s2">}</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">ReverseGenericManyToOneDescriptor</span><span class="s2">(</span><span class="s1">ReverseManyToOneDescriptor</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Accessor to the related objects manager on the one-to-many relation created 
+    by GenericRelation. 
+ 
+    In the example:: 
+ 
+        class Post(Model): 
+            comments = GenericRelation(Comment) 
+ 
+    ``post.comments`` is a ReverseGenericManyToOneDescriptor instance. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">related_manager_cls</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">create_generic_related_manager</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">rel</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">rel</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">create_generic_related_manager</span><span class="s2">(</span><span class="s1">superclass</span><span class="s2">, </span><span class="s1">rel</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Factory function to create a manager that subclasses another manager 
+    (generally the default manager of a given model) and adds behaviors 
+    specific to generic relations. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">class </span><span class="s1">GenericRelatedObjectManager</span><span class="s2">(</span><span class="s1">superclass</span><span class="s2">, </span><span class="s1">AltersData</span><span class="s2">):</span>
+        <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">instance</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+            <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">()</span>
+
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">instance </span><span class="s2">= </span><span class="s1">instance</span>
+
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">model </span><span class="s2">= </span><span class="s1">rel</span><span class="s2">.</span><span class="s1">model</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">get_content_type </span><span class="s2">= </span><span class="s1">functools</span><span class="s2">.</span><span class="s1">partial</span><span class="s2">(</span>
+                <span class="s1">ContentType</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">db_manager</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">.</span><span class="s1">_state</span><span class="s2">.</span><span class="s1">db</span><span class="s2">).</span><span class="s1">get_for_model</span><span class="s2">,</span>
+                <span class="s1">for_concrete_model</span><span class="s2">=</span><span class="s1">rel</span><span class="s2">.</span><span class="s1">field</span><span class="s2">.</span><span class="s1">for_concrete_model</span><span class="s2">,</span>
+            <span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">content_type </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_content_type</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_field_name </span><span class="s2">= </span><span class="s1">rel</span><span class="s2">.</span><span class="s1">field</span><span class="s2">.</span><span class="s1">content_type_field_name</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name </span><span class="s2">= </span><span class="s1">rel</span><span class="s2">.</span><span class="s1">field</span><span class="s2">.</span><span class="s1">object_id_field_name</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">prefetch_cache_name </span><span class="s2">= </span><span class="s1">rel</span><span class="s2">.</span><span class="s1">field</span><span class="s2">.</span><span class="s1">attname</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">pk_val </span><span class="s2">= </span><span class="s1">instance</span><span class="s2">.</span><span class="s1">pk</span>
+
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">core_filters </span><span class="s2">= {</span>
+                <span class="s5">&quot;%s__pk&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_field_name</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type</span><span class="s2">.</span><span class="s1">id</span><span class="s2">,</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pk_val</span><span class="s2">,</span>
+            <span class="s2">}</span>
+
+        <span class="s0">def </span><span class="s1">__call__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *, </span><span class="s1">manager</span><span class="s2">):</span>
+            <span class="s1">manager </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">manager</span><span class="s2">)</span>
+            <span class="s1">manager_class </span><span class="s2">= </span><span class="s1">create_generic_related_manager</span><span class="s2">(</span><span class="s1">manager</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">, </span><span class="s1">rel</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">manager_class</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">)</span>
+
+        <span class="s1">do_not_call_in_templates </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">def </span><span class="s1">__str__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">repr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">)</span>
+
+        <span class="s0">def </span><span class="s1">_apply_rel_filters</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">queryset</span><span class="s2">):</span>
+            <span class="s3">&quot;&quot;&quot; 
+            Filter the queryset for the instance this manager is bound to. 
+            &quot;&quot;&quot;</span>
+            <span class="s1">db </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_db </span><span class="s0">or </span><span class="s1">router</span><span class="s2">.</span><span class="s1">db_for_read</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">instance</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">using</span><span class="s2">(</span><span class="s1">db</span><span class="s2">).</span><span class="s1">filter</span><span class="s2">(**</span><span class="s1">self</span><span class="s2">.</span><span class="s1">core_filters</span><span class="s2">)</span>
+
+        <span class="s0">def </span><span class="s1">_remove_prefetched_objects</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">.</span><span class="s1">_prefetched_objects_cache</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">prefetch_cache_name</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s2">(</span><span class="s1">AttributeError</span><span class="s2">, </span><span class="s1">KeyError</span><span class="s2">):</span>
+                <span class="s0">pass  </span><span class="s4"># nothing to clear from cache</span>
+
+        <span class="s0">def </span><span class="s1">get_queryset</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">.</span><span class="s1">_prefetched_objects_cache</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">prefetch_cache_name</span><span class="s2">]</span>
+            <span class="s0">except </span><span class="s2">(</span><span class="s1">AttributeError</span><span class="s2">, </span><span class="s1">KeyError</span><span class="s2">):</span>
+                <span class="s1">queryset </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_queryset</span><span class="s2">()</span>
+                <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_apply_rel_filters</span><span class="s2">(</span><span class="s1">queryset</span><span class="s2">)</span>
+
+        <span class="s0">def </span><span class="s1">get_prefetch_queryset</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">instances</span><span class="s2">, </span><span class="s1">queryset</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+            <span class="s1">warnings</span><span class="s2">.</span><span class="s1">warn</span><span class="s2">(</span>
+                <span class="s5">&quot;get_prefetch_queryset() is deprecated. Use get_prefetch_querysets() &quot;</span>
+                <span class="s5">&quot;instead.&quot;</span><span class="s2">,</span>
+                <span class="s1">RemovedInDjango60Warning</span><span class="s2">,</span>
+                <span class="s1">stacklevel</span><span class="s2">=</span><span class="s6">2</span><span class="s2">,</span>
+            <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">queryset </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_prefetch_querysets</span><span class="s2">(</span><span class="s1">instances</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_prefetch_querysets</span><span class="s2">(</span><span class="s1">instances</span><span class="s2">, [</span><span class="s1">queryset</span><span class="s2">])</span>
+
+        <span class="s0">def </span><span class="s1">get_prefetch_querysets</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">instances</span><span class="s2">, </span><span class="s1">querysets</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">querysets </span><span class="s0">and </span><span class="s1">len</span><span class="s2">(</span><span class="s1">querysets</span><span class="s2">) != </span><span class="s6">1</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s5">&quot;querysets argument of get_prefetch_querysets() should have a &quot;</span>
+                    <span class="s5">&quot;length of 1.&quot;</span>
+                <span class="s2">)</span>
+            <span class="s1">queryset </span><span class="s2">= </span><span class="s1">querysets</span><span class="s2">[</span><span class="s6">0</span><span class="s2">] </span><span class="s0">if </span><span class="s1">querysets </span><span class="s0">else </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_queryset</span><span class="s2">()</span>
+            <span class="s1">queryset</span><span class="s2">.</span><span class="s1">_add_hints</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">=</span><span class="s1">instances</span><span class="s2">[</span><span class="s6">0</span><span class="s2">])</span>
+            <span class="s1">queryset </span><span class="s2">= </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">using</span><span class="s2">(</span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">_db </span><span class="s0">or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_db</span><span class="s2">)</span>
+            <span class="s4"># Group instances by content types.</span>
+            <span class="s1">content_type_queries </span><span class="s2">= [</span>
+                <span class="s1">models</span><span class="s2">.</span><span class="s1">Q</span><span class="s2">.</span><span class="s1">create</span><span class="s2">(</span>
+                    <span class="s2">[</span>
+                        <span class="s2">(</span><span class="s5">f&quot;</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_field_name</span><span class="s0">}</span><span class="s5">__pk&quot;</span><span class="s2">, </span><span class="s1">content_type_id</span><span class="s2">),</span>
+                        <span class="s2">(</span><span class="s5">f&quot;</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name</span><span class="s0">}</span><span class="s5">__in&quot;</span><span class="s2">, {</span><span class="s1">obj</span><span class="s2">.</span><span class="s1">pk </span><span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">objs</span><span class="s2">}),</span>
+                    <span class="s2">]</span>
+                <span class="s2">)</span>
+                <span class="s0">for </span><span class="s1">content_type_id</span><span class="s2">, </span><span class="s1">objs </span><span class="s0">in </span><span class="s1">itertools</span><span class="s2">.</span><span class="s1">groupby</span><span class="s2">(</span>
+                    <span class="s1">sorted</span><span class="s2">(</span><span class="s1">instances</span><span class="s2">, </span><span class="s1">key</span><span class="s2">=</span><span class="s0">lambda </span><span class="s1">obj</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_content_type</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">).</span><span class="s1">pk</span><span class="s2">),</span>
+                    <span class="s0">lambda </span><span class="s1">obj</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_content_type</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">).</span><span class="s1">pk</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">]</span>
+            <span class="s1">query </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">Q</span><span class="s2">.</span><span class="s1">create</span><span class="s2">(</span><span class="s1">content_type_queries</span><span class="s2">, </span><span class="s1">connector</span><span class="s2">=</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Q</span><span class="s2">.</span><span class="s1">OR</span><span class="s2">)</span>
+            <span class="s4"># We (possibly) need to convert object IDs to the type of the</span>
+            <span class="s4"># instances' PK in order to match up instances:</span>
+            <span class="s1">object_id_converter </span><span class="s2">= </span><span class="s1">instances</span><span class="s2">[</span><span class="s6">0</span><span class="s2">].</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">to_python</span>
+            <span class="s1">content_type_id_field_name </span><span class="s2">= </span><span class="s5">&quot;%s_id&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_field_name</span>
+            <span class="s0">return </span><span class="s2">(</span>
+                <span class="s1">queryset</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">query</span><span class="s2">),</span>
+                <span class="s0">lambda </span><span class="s1">relobj</span><span class="s2">: (</span>
+                    <span class="s1">object_id_converter</span><span class="s2">(</span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">relobj</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name</span><span class="s2">)),</span>
+                    <span class="s1">getattr</span><span class="s2">(</span><span class="s1">relobj</span><span class="s2">, </span><span class="s1">content_type_id_field_name</span><span class="s2">),</span>
+                <span class="s2">),</span>
+                <span class="s0">lambda </span><span class="s1">obj</span><span class="s2">: (</span><span class="s1">obj</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_content_type</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">).</span><span class="s1">pk</span><span class="s2">),</span>
+                <span class="s0">False</span><span class="s2">,</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">prefetch_cache_name</span><span class="s2">,</span>
+                <span class="s0">False</span><span class="s2">,</span>
+            <span class="s2">)</span>
+
+        <span class="s0">def </span><span class="s1">add</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">objs</span><span class="s2">, </span><span class="s1">bulk</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_remove_prefetched_objects</span><span class="s2">()</span>
+            <span class="s1">db </span><span class="s2">= </span><span class="s1">router</span><span class="s2">.</span><span class="s1">db_for_write</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">instance</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">)</span>
+
+            <span class="s0">def </span><span class="s1">check_and_update_obj</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">):</span>
+                <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">):</span>
+                    <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                        <span class="s5">&quot;'%s' instance expected, got %r&quot;</span>
+                        <span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">object_name</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">)</span>
+                    <span class="s2">)</span>
+                <span class="s1">setattr</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_field_name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type</span><span class="s2">)</span>
+                <span class="s1">setattr</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pk_val</span><span class="s2">)</span>
+
+            <span class="s0">if </span><span class="s1">bulk</span><span class="s2">:</span>
+                <span class="s1">pks </span><span class="s2">= []</span>
+                <span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">objs</span><span class="s2">:</span>
+                    <span class="s0">if </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">_state</span><span class="s2">.</span><span class="s1">adding </span><span class="s0">or </span><span class="s1">obj</span><span class="s2">.</span><span class="s1">_state</span><span class="s2">.</span><span class="s1">db </span><span class="s2">!= </span><span class="s1">db</span><span class="s2">:</span>
+                        <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                            <span class="s5">&quot;%r instance isn't saved. Use bulk=False or save &quot;</span>
+                            <span class="s5">&quot;the object first.&quot; </span><span class="s2">% </span><span class="s1">obj</span>
+                        <span class="s2">)</span>
+                    <span class="s1">check_and_update_obj</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">)</span>
+                    <span class="s1">pks</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">)</span>
+
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_base_manager</span><span class="s2">.</span><span class="s1">using</span><span class="s2">(</span><span class="s1">db</span><span class="s2">).</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">pk__in</span><span class="s2">=</span><span class="s1">pks</span><span class="s2">).</span><span class="s1">update</span><span class="s2">(</span>
+                    <span class="s2">**{</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_field_name</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type</span><span class="s2">,</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pk_val</span><span class="s2">,</span>
+                    <span class="s2">}</span>
+                <span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">with </span><span class="s1">transaction</span><span class="s2">.</span><span class="s1">atomic</span><span class="s2">(</span><span class="s1">using</span><span class="s2">=</span><span class="s1">db</span><span class="s2">, </span><span class="s1">savepoint</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+                    <span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">objs</span><span class="s2">:</span>
+                        <span class="s1">check_and_update_obj</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">)</span>
+                        <span class="s1">obj</span><span class="s2">.</span><span class="s1">save</span><span class="s2">()</span>
+
+        <span class="s1">add</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">async def </span><span class="s1">aadd</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">objs</span><span class="s2">, </span><span class="s1">bulk</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+            <span class="s0">return await </span><span class="s1">sync_to_async</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">add</span><span class="s2">)(*</span><span class="s1">objs</span><span class="s2">, </span><span class="s1">bulk</span><span class="s2">=</span><span class="s1">bulk</span><span class="s2">)</span>
+
+        <span class="s1">aadd</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">def </span><span class="s1">remove</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">objs</span><span class="s2">, </span><span class="s1">bulk</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+            <span class="s0">if not </span><span class="s1">objs</span><span class="s2">:</span>
+                <span class="s0">return</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_clear</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">pk__in</span><span class="s2">=[</span><span class="s1">o</span><span class="s2">.</span><span class="s1">pk </span><span class="s0">for </span><span class="s1">o </span><span class="s0">in </span><span class="s1">objs</span><span class="s2">]), </span><span class="s1">bulk</span><span class="s2">)</span>
+
+        <span class="s1">remove</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">async def </span><span class="s1">aremove</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">objs</span><span class="s2">, </span><span class="s1">bulk</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+            <span class="s0">return await </span><span class="s1">sync_to_async</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">)(*</span><span class="s1">objs</span><span class="s2">, </span><span class="s1">bulk</span><span class="s2">=</span><span class="s1">bulk</span><span class="s2">)</span>
+
+        <span class="s1">aremove</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">def </span><span class="s1">clear</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *, </span><span class="s1">bulk</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_clear</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">bulk</span><span class="s2">)</span>
+
+        <span class="s1">clear</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">async def </span><span class="s1">aclear</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *, </span><span class="s1">bulk</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+            <span class="s0">return await </span><span class="s1">sync_to_async</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">clear</span><span class="s2">)(</span><span class="s1">bulk</span><span class="s2">=</span><span class="s1">bulk</span><span class="s2">)</span>
+
+        <span class="s1">aclear</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">def </span><span class="s1">_clear</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">queryset</span><span class="s2">, </span><span class="s1">bulk</span><span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_remove_prefetched_objects</span><span class="s2">()</span>
+            <span class="s1">db </span><span class="s2">= </span><span class="s1">router</span><span class="s2">.</span><span class="s1">db_for_write</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">instance</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">)</span>
+            <span class="s1">queryset </span><span class="s2">= </span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">using</span><span class="s2">(</span><span class="s1">db</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">bulk</span><span class="s2">:</span>
+                <span class="s4"># `QuerySet.delete()` creates its own atomic block which</span>
+                <span class="s4"># contains the `pre_delete` and `post_delete` signal handlers.</span>
+                <span class="s1">queryset</span><span class="s2">.</span><span class="s1">delete</span><span class="s2">()</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">with </span><span class="s1">transaction</span><span class="s2">.</span><span class="s1">atomic</span><span class="s2">(</span><span class="s1">using</span><span class="s2">=</span><span class="s1">db</span><span class="s2">, </span><span class="s1">savepoint</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+                    <span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">queryset</span><span class="s2">:</span>
+                        <span class="s1">obj</span><span class="s2">.</span><span class="s1">delete</span><span class="s2">()</span>
+
+        <span class="s1">_clear</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">def </span><span class="s1">set</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">objs</span><span class="s2">, *, </span><span class="s1">bulk</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">clear</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+            <span class="s4"># Force evaluation of `objs` in case it's a queryset whose value</span>
+            <span class="s4"># could be affected by `manager.clear()`. Refs #19816.</span>
+            <span class="s1">objs </span><span class="s2">= </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">objs</span><span class="s2">)</span>
+
+            <span class="s1">db </span><span class="s2">= </span><span class="s1">router</span><span class="s2">.</span><span class="s1">db_for_write</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">instance</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">)</span>
+            <span class="s0">with </span><span class="s1">transaction</span><span class="s2">.</span><span class="s1">atomic</span><span class="s2">(</span><span class="s1">using</span><span class="s2">=</span><span class="s1">db</span><span class="s2">, </span><span class="s1">savepoint</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+                <span class="s0">if </span><span class="s1">clear</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">clear</span><span class="s2">()</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(*</span><span class="s1">objs</span><span class="s2">, </span><span class="s1">bulk</span><span class="s2">=</span><span class="s1">bulk</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">old_objs </span><span class="s2">= </span><span class="s1">set</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">using</span><span class="s2">(</span><span class="s1">db</span><span class="s2">).</span><span class="s1">all</span><span class="s2">())</span>
+                    <span class="s1">new_objs </span><span class="s2">= []</span>
+                    <span class="s0">for </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">objs</span><span class="s2">:</span>
+                        <span class="s0">if </span><span class="s1">obj </span><span class="s0">in </span><span class="s1">old_objs</span><span class="s2">:</span>
+                            <span class="s1">old_objs</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">)</span>
+                        <span class="s0">else</span><span class="s2">:</span>
+                            <span class="s1">new_objs</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">obj</span><span class="s2">)</span>
+
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">(*</span><span class="s1">old_objs</span><span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(*</span><span class="s1">new_objs</span><span class="s2">, </span><span class="s1">bulk</span><span class="s2">=</span><span class="s1">bulk</span><span class="s2">)</span>
+
+        <span class="s1">set</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">async def </span><span class="s1">aset</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">objs</span><span class="s2">, *, </span><span class="s1">bulk</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">clear</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+            <span class="s0">return await </span><span class="s1">sync_to_async</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">set</span><span class="s2">)(</span><span class="s1">objs</span><span class="s2">, </span><span class="s1">bulk</span><span class="s2">=</span><span class="s1">bulk</span><span class="s2">, </span><span class="s1">clear</span><span class="s2">=</span><span class="s1">clear</span><span class="s2">)</span>
+
+        <span class="s1">aset</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">def </span><span class="s1">create</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_remove_prefetched_objects</span><span class="s2">()</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_field_name</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pk_val</span>
+            <span class="s1">db </span><span class="s2">= </span><span class="s1">router</span><span class="s2">.</span><span class="s1">db_for_write</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">instance</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">using</span><span class="s2">(</span><span class="s1">db</span><span class="s2">).</span><span class="s1">create</span><span class="s2">(**</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s1">create</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">async def </span><span class="s1">acreate</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+            <span class="s0">return await </span><span class="s1">sync_to_async</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">create</span><span class="s2">)(**</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s1">acreate</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">def </span><span class="s1">get_or_create</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_field_name</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pk_val</span>
+            <span class="s1">db </span><span class="s2">= </span><span class="s1">router</span><span class="s2">.</span><span class="s1">db_for_write</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">instance</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">using</span><span class="s2">(</span><span class="s1">db</span><span class="s2">).</span><span class="s1">get_or_create</span><span class="s2">(**</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s1">get_or_create</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">async def </span><span class="s1">aget_or_create</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+            <span class="s0">return await </span><span class="s1">sync_to_async</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_or_create</span><span class="s2">)(**</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s1">aget_or_create</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">def </span><span class="s1">update_or_create</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_field_name</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type</span>
+            <span class="s1">kwargs</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">object_id_field_name</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pk_val</span>
+            <span class="s1">db </span><span class="s2">= </span><span class="s1">router</span><span class="s2">.</span><span class="s1">db_for_write</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">instance</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">instance</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">using</span><span class="s2">(</span><span class="s1">db</span><span class="s2">).</span><span class="s1">update_or_create</span><span class="s2">(**</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s1">update_or_create</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">async def </span><span class="s1">aupdate_or_create</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+            <span class="s0">return await </span><span class="s1">sync_to_async</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">update_or_create</span><span class="s2">)(**</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s1">aupdate_or_create</span><span class="s2">.</span><span class="s1">alters_data </span><span class="s2">= </span><span class="s0">True</span>
+
+    <span class="s0">return </span><span class="s1">GenericRelatedObjectManager</span>
+</pre>
+</body>
+</html>

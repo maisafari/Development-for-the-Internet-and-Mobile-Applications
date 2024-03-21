@@ -1,0 +1,203 @@
+<html>
+<head>
+<title>base_user.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+base_user.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+This module allows importing AbstractBaseUser even when django.contrib.auth is 
+not in INSTALLED_APPS. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">unicodedata</span>
+<span class="s2">import </span><span class="s1">warnings</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf </span><span class="s2">import </span><span class="s1">settings</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">auth </span><span class="s2">import </span><span class="s1">password_validation</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">auth</span><span class="s3">.</span><span class="s1">hashers </span><span class="s2">import </span><span class="s3">(</span>
+    <span class="s1">acheck_password</span><span class="s3">,</span>
+    <span class="s1">check_password</span><span class="s3">,</span>
+    <span class="s1">is_password_usable</span><span class="s3">,</span>
+    <span class="s1">make_password</span><span class="s3">,</span>
+<span class="s3">)</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db </span><span class="s2">import </span><span class="s1">models</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">crypto </span><span class="s2">import </span><span class="s1">get_random_string</span><span class="s3">, </span><span class="s1">salted_hmac</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">deprecation </span><span class="s2">import </span><span class="s1">RemovedInDjango51Warning</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">translation </span><span class="s2">import </span><span class="s1">gettext_lazy </span><span class="s2">as </span><span class="s1">_</span>
+
+
+<span class="s2">class </span><span class="s1">BaseUserManager</span><span class="s3">(</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Manager</span><span class="s3">):</span>
+    <span class="s3">@</span><span class="s1">classmethod</span>
+    <span class="s2">def </span><span class="s1">normalize_email</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">, </span><span class="s1">email</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Normalize the email address by lowercasing the domain part of it. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">email </span><span class="s3">= </span><span class="s1">email </span><span class="s2">or </span><span class="s4">&quot;&quot;</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">email_name</span><span class="s3">, </span><span class="s1">domain_part </span><span class="s3">= </span><span class="s1">email</span><span class="s3">.</span><span class="s1">strip</span><span class="s3">().</span><span class="s1">rsplit</span><span class="s3">(</span><span class="s4">&quot;@&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">ValueError</span><span class="s3">:</span>
+            <span class="s2">pass</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">email </span><span class="s3">= </span><span class="s1">email_name </span><span class="s3">+ </span><span class="s4">&quot;@&quot; </span><span class="s3">+ </span><span class="s1">domain_part</span><span class="s3">.</span><span class="s1">lower</span><span class="s3">()</span>
+        <span class="s2">return </span><span class="s1">email</span>
+
+    <span class="s2">def </span><span class="s1">make_random_password</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">length</span><span class="s3">=</span><span class="s5">10</span><span class="s3">,</span>
+        <span class="s1">allowed_chars</span><span class="s3">=</span><span class="s4">&quot;abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789&quot;</span><span class="s3">,</span>
+    <span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Generate a random password with the given length and given 
+        allowed_chars. The default value of allowed_chars does not have &quot;I&quot; or 
+        &quot;O&quot; or letters and digits that look similar -- just to avoid confusion. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">warnings</span><span class="s3">.</span><span class="s1">warn</span><span class="s3">(</span>
+            <span class="s4">&quot;BaseUserManager.make_random_password() is deprecated.&quot;</span><span class="s3">,</span>
+            <span class="s1">category</span><span class="s3">=</span><span class="s1">RemovedInDjango51Warning</span><span class="s3">,</span>
+            <span class="s1">stacklevel</span><span class="s3">=</span><span class="s5">2</span><span class="s3">,</span>
+        <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">get_random_string</span><span class="s3">(</span><span class="s1">length</span><span class="s3">, </span><span class="s1">allowed_chars</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_by_natural_key</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">username</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(**{</span><span class="s1">self</span><span class="s3">.</span><span class="s1">model</span><span class="s3">.</span><span class="s1">USERNAME_FIELD</span><span class="s3">: </span><span class="s1">username</span><span class="s3">})</span>
+
+
+<span class="s2">class </span><span class="s1">AbstractBaseUser</span><span class="s3">(</span><span class="s1">models</span><span class="s3">.</span><span class="s1">Model</span><span class="s3">):</span>
+    <span class="s1">password </span><span class="s3">= </span><span class="s1">models</span><span class="s3">.</span><span class="s1">CharField</span><span class="s3">(</span><span class="s1">_</span><span class="s3">(</span><span class="s4">&quot;password&quot;</span><span class="s3">), </span><span class="s1">max_length</span><span class="s3">=</span><span class="s5">128</span><span class="s3">)</span>
+    <span class="s1">last_login </span><span class="s3">= </span><span class="s1">models</span><span class="s3">.</span><span class="s1">DateTimeField</span><span class="s3">(</span><span class="s1">_</span><span class="s3">(</span><span class="s4">&quot;last login&quot;</span><span class="s3">), </span><span class="s1">blank</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">null</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+
+    <span class="s1">is_active </span><span class="s3">= </span><span class="s2">True</span>
+
+    <span class="s1">REQUIRED_FIELDS </span><span class="s3">= []</span>
+
+    <span class="s6"># Stores the raw password if set_password() is called so that it can</span>
+    <span class="s6"># be passed to password_changed() after the model is saved.</span>
+    <span class="s1">_password </span><span class="s3">= </span><span class="s2">None</span>
+
+    <span class="s2">class </span><span class="s1">Meta</span><span class="s3">:</span>
+        <span class="s1">abstract </span><span class="s3">= </span><span class="s2">True</span>
+
+    <span class="s2">def </span><span class="s1">__str__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_username</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">save</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">save</span><span class="s3">(*</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_password </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">password_validation</span><span class="s3">.</span><span class="s1">password_changed</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_password</span><span class="s3">, </span><span class="s1">self</span><span class="s3">)</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_password </span><span class="s3">= </span><span class="s2">None</span>
+
+    <span class="s2">def </span><span class="s1">get_username</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Return the username for this User.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">USERNAME_FIELD</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">clean</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">setattr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">USERNAME_FIELD</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">normalize_username</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_username</span><span class="s3">()))</span>
+
+    <span class="s2">def </span><span class="s1">natural_key</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_username</span><span class="s3">(),)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">is_anonymous</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Always return False. This is a way of comparing User objects to 
+        anonymous users. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return False</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">is_authenticated</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Always return True. This is a way to tell if the user has been 
+        authenticated in templates. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return True</span>
+
+    <span class="s2">def </span><span class="s1">set_password</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">raw_password</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">password </span><span class="s3">= </span><span class="s1">make_password</span><span class="s3">(</span><span class="s1">raw_password</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_password </span><span class="s3">= </span><span class="s1">raw_password</span>
+
+    <span class="s2">def </span><span class="s1">check_password</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">raw_password</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return a boolean of whether the raw_password was correct. Handles 
+        hashing formats behind the scenes. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s2">def </span><span class="s1">setter</span><span class="s3">(</span><span class="s1">raw_password</span><span class="s3">):</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">set_password</span><span class="s3">(</span><span class="s1">raw_password</span><span class="s3">)</span>
+            <span class="s6"># Password hash upgrades shouldn't be considered password changes.</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_password </span><span class="s3">= </span><span class="s2">None</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">save</span><span class="s3">(</span><span class="s1">update_fields</span><span class="s3">=[</span><span class="s4">&quot;password&quot;</span><span class="s3">])</span>
+
+        <span class="s2">return </span><span class="s1">check_password</span><span class="s3">(</span><span class="s1">raw_password</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">password</span><span class="s3">, </span><span class="s1">setter</span><span class="s3">)</span>
+
+    <span class="s2">async def </span><span class="s1">acheck_password</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">raw_password</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;See check_password().&quot;&quot;&quot;</span>
+
+        <span class="s2">async def </span><span class="s1">setter</span><span class="s3">(</span><span class="s1">raw_password</span><span class="s3">):</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">set_password</span><span class="s3">(</span><span class="s1">raw_password</span><span class="s3">)</span>
+            <span class="s6"># Password hash upgrades shouldn't be considered password changes.</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_password </span><span class="s3">= </span><span class="s2">None</span>
+            <span class="s2">await </span><span class="s1">self</span><span class="s3">.</span><span class="s1">asave</span><span class="s3">(</span><span class="s1">update_fields</span><span class="s3">=[</span><span class="s4">&quot;password&quot;</span><span class="s3">])</span>
+
+        <span class="s2">return await </span><span class="s1">acheck_password</span><span class="s3">(</span><span class="s1">raw_password</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">password</span><span class="s3">, </span><span class="s1">setter</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">set_unusable_password</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s6"># Set a value that will never be a valid hash</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">password </span><span class="s3">= </span><span class="s1">make_password</span><span class="s3">(</span><span class="s2">None</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">has_usable_password</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return False if set_unusable_password() has been called for this user. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">is_password_usable</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">password</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_session_auth_hash</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return an HMAC of the password field. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_get_session_auth_hash</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">get_session_auth_fallback_hash</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">fallback_secret </span><span class="s2">in </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">SECRET_KEY_FALLBACKS</span><span class="s3">:</span>
+            <span class="s2">yield </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_get_session_auth_hash</span><span class="s3">(</span><span class="s1">secret</span><span class="s3">=</span><span class="s1">fallback_secret</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_get_session_auth_hash</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">secret</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key_salt </span><span class="s3">= </span><span class="s4">&quot;django.contrib.auth.models.AbstractBaseUser.get_session_auth_hash&quot;</span>
+        <span class="s2">return </span><span class="s1">salted_hmac</span><span class="s3">(</span>
+            <span class="s1">key_salt</span><span class="s3">,</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">password</span><span class="s3">,</span>
+            <span class="s1">secret</span><span class="s3">=</span><span class="s1">secret</span><span class="s3">,</span>
+            <span class="s1">algorithm</span><span class="s3">=</span><span class="s4">&quot;sha256&quot;</span><span class="s3">,</span>
+        <span class="s3">).</span><span class="s1">hexdigest</span><span class="s3">()</span>
+
+    <span class="s3">@</span><span class="s1">classmethod</span>
+    <span class="s2">def </span><span class="s1">get_email_field_name</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">cls</span><span class="s3">.</span><span class="s1">EMAIL_FIELD</span>
+        <span class="s2">except </span><span class="s1">AttributeError</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s4">&quot;email&quot;</span>
+
+    <span class="s3">@</span><span class="s1">classmethod</span>
+    <span class="s2">def </span><span class="s1">normalize_username</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">, </span><span class="s1">username</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s3">(</span>
+            <span class="s1">unicodedata</span><span class="s3">.</span><span class="s1">normalize</span><span class="s3">(</span><span class="s4">&quot;NFKC&quot;</span><span class="s3">, </span><span class="s1">username</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">username</span><span class="s3">, </span><span class="s1">str</span><span class="s3">)</span>
+            <span class="s2">else </span><span class="s1">username</span>
+        <span class="s3">)</span>
+</pre>
+</body>
+</html>

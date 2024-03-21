@@ -1,0 +1,125 @@
+<html>
+<head>
+<title>driver.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+driver.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">ctypes </span><span class="s0">import </span><span class="s1">c_void_p</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">GDALBase</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">error </span><span class="s0">import </span><span class="s1">GDALException</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">prototypes </span><span class="s0">import </span><span class="s1">ds </span><span class="s0">as </span><span class="s1">vcapi</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">gdal</span><span class="s2">.</span><span class="s1">prototypes </span><span class="s0">import </span><span class="s1">raster </span><span class="s0">as </span><span class="s1">rcapi</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">encoding </span><span class="s0">import </span><span class="s1">force_bytes</span><span class="s2">, </span><span class="s1">force_str</span>
+
+
+<span class="s0">class </span><span class="s1">Driver</span><span class="s2">(</span><span class="s1">GDALBase</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Wrap a GDAL/OGR Data Source Driver. 
+    For more information, see the C API documentation: 
+    https://gdal.org/api/vector_c_api.html 
+    https://gdal.org/api/raster_c_api.html 
+    &quot;&quot;&quot;</span>
+
+    <span class="s4"># Case-insensitive aliases for some GDAL/OGR Drivers.</span>
+    <span class="s4"># For a complete list of original driver names see</span>
+    <span class="s4"># https://gdal.org/drivers/vector/</span>
+    <span class="s4"># https://gdal.org/drivers/raster/</span>
+    <span class="s1">_alias </span><span class="s2">= {</span>
+        <span class="s4"># vector</span>
+        <span class="s5">&quot;esri&quot;</span><span class="s2">: </span><span class="s5">&quot;ESRI Shapefile&quot;</span><span class="s2">,</span>
+        <span class="s5">&quot;shp&quot;</span><span class="s2">: </span><span class="s5">&quot;ESRI Shapefile&quot;</span><span class="s2">,</span>
+        <span class="s5">&quot;shape&quot;</span><span class="s2">: </span><span class="s5">&quot;ESRI Shapefile&quot;</span><span class="s2">,</span>
+        <span class="s5">&quot;tiger&quot;</span><span class="s2">: </span><span class="s5">&quot;TIGER&quot;</span><span class="s2">,</span>
+        <span class="s5">&quot;tiger/line&quot;</span><span class="s2">: </span><span class="s5">&quot;TIGER&quot;</span><span class="s2">,</span>
+        <span class="s4"># raster</span>
+        <span class="s5">&quot;tiff&quot;</span><span class="s2">: </span><span class="s5">&quot;GTiff&quot;</span><span class="s2">,</span>
+        <span class="s5">&quot;tif&quot;</span><span class="s2">: </span><span class="s5">&quot;GTiff&quot;</span><span class="s2">,</span>
+        <span class="s5">&quot;jpeg&quot;</span><span class="s2">: </span><span class="s5">&quot;JPEG&quot;</span><span class="s2">,</span>
+        <span class="s5">&quot;jpg&quot;</span><span class="s2">: </span><span class="s5">&quot;JPEG&quot;</span><span class="s2">,</span>
+    <span class="s2">}</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">dr_input</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Initialize an GDAL/OGR driver on either a string or integer input. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">dr_input</span><span class="s2">, </span><span class="s1">str</span><span class="s2">):</span>
+            <span class="s4"># If a string name of the driver was passed in</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">ensure_registered</span><span class="s2">()</span>
+
+            <span class="s4"># Checking the alias dictionary (case-insensitive) to see if an</span>
+            <span class="s4"># alias exists for the given driver.</span>
+            <span class="s0">if </span><span class="s1">dr_input</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">() </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_alias</span><span class="s2">:</span>
+                <span class="s1">name </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_alias</span><span class="s2">[</span><span class="s1">dr_input</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">()]</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">name </span><span class="s2">= </span><span class="s1">dr_input</span>
+
+            <span class="s4"># Attempting to get the GDAL/OGR driver by the string name.</span>
+            <span class="s0">for </span><span class="s1">iface </span><span class="s0">in </span><span class="s2">(</span><span class="s1">vcapi</span><span class="s2">, </span><span class="s1">rcapi</span><span class="s2">):</span>
+                <span class="s1">driver </span><span class="s2">= </span><span class="s1">c_void_p</span><span class="s2">(</span><span class="s1">iface</span><span class="s2">.</span><span class="s1">get_driver_by_name</span><span class="s2">(</span><span class="s1">force_bytes</span><span class="s2">(</span><span class="s1">name</span><span class="s2">)))</span>
+                <span class="s0">if </span><span class="s1">driver</span><span class="s2">:</span>
+                    <span class="s0">break</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">dr_input</span><span class="s2">, </span><span class="s1">int</span><span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">ensure_registered</span><span class="s2">()</span>
+            <span class="s0">for </span><span class="s1">iface </span><span class="s0">in </span><span class="s2">(</span><span class="s1">vcapi</span><span class="s2">, </span><span class="s1">rcapi</span><span class="s2">):</span>
+                <span class="s1">driver </span><span class="s2">= </span><span class="s1">iface</span><span class="s2">.</span><span class="s1">get_driver</span><span class="s2">(</span><span class="s1">dr_input</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">driver</span><span class="s2">:</span>
+                    <span class="s0">break</span>
+        <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">dr_input</span><span class="s2">, </span><span class="s1">c_void_p</span><span class="s2">):</span>
+            <span class="s1">driver </span><span class="s2">= </span><span class="s1">dr_input</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">GDALException</span><span class="s2">(</span>
+                <span class="s5">&quot;Unrecognized input type for GDAL/OGR Driver: %s&quot; </span><span class="s2">% </span><span class="s1">type</span><span class="s2">(</span><span class="s1">dr_input</span><span class="s2">)</span>
+            <span class="s2">)</span>
+
+        <span class="s4"># Making sure we get a valid pointer to the OGR Driver</span>
+        <span class="s0">if not </span><span class="s1">driver</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">GDALException</span><span class="s2">(</span>
+                <span class="s5">&quot;Could not initialize GDAL/OGR Driver on input: %s&quot; </span><span class="s2">% </span><span class="s1">dr_input</span>
+            <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">ptr </span><span class="s2">= </span><span class="s1">driver</span>
+
+    <span class="s0">def </span><span class="s1">__str__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">ensure_registered</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Attempt to register all the data source drivers. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># Only register all if the driver counts are 0 (or else all drivers</span>
+        <span class="s4"># will be registered over and over again)</span>
+        <span class="s0">if not </span><span class="s1">vcapi</span><span class="s2">.</span><span class="s1">get_driver_count</span><span class="s2">():</span>
+            <span class="s1">vcapi</span><span class="s2">.</span><span class="s1">register_all</span><span class="s2">()</span>
+        <span class="s0">if not </span><span class="s1">rcapi</span><span class="s2">.</span><span class="s1">get_driver_count</span><span class="s2">():</span>
+            <span class="s1">rcapi</span><span class="s2">.</span><span class="s1">register_all</span><span class="s2">()</span>
+
+    <span class="s2">@</span><span class="s1">classmethod</span>
+    <span class="s0">def </span><span class="s1">driver_count</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the number of GDAL/OGR data source drivers registered. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">vcapi</span><span class="s2">.</span><span class="s1">get_driver_count</span><span class="s2">() + </span><span class="s1">rcapi</span><span class="s2">.</span><span class="s1">get_driver_count</span><span class="s2">()</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return description/name string for this driver. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">force_str</span><span class="s2">(</span><span class="s1">rcapi</span><span class="s2">.</span><span class="s1">get_driver_description</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">ptr</span><span class="s2">))</span>
+</pre>
+</body>
+</html>

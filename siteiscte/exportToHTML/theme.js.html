@@ -1,0 +1,77 @@
+<html>
+<head>
+<title>theme.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #6aab73;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #cf8e6d;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+theme.js</font>
+</center></td></tr></table>
+<pre><span class="s0">'use strict'</span><span class="s1">;</span>
+<span class="s1">{</span>
+    <span class="s2">window</span><span class="s1">.</span><span class="s2">addEventListener</span><span class="s1">(</span><span class="s0">'load'</span><span class="s1">, </span><span class="s3">function</span><span class="s1">(</span><span class="s2">e</span><span class="s1">) {</span>
+
+        <span class="s3">function </span><span class="s2">setTheme</span><span class="s1">(</span><span class="s2">mode</span><span class="s1">) {</span>
+            <span class="s3">if </span><span class="s1">(</span><span class="s2">mode </span><span class="s1">!== </span><span class="s0">&quot;light&quot; </span><span class="s1">&amp;&amp; </span><span class="s2">mode </span><span class="s1">!== </span><span class="s0">&quot;dark&quot; </span><span class="s1">&amp;&amp; </span><span class="s2">mode </span><span class="s1">!== </span><span class="s0">&quot;auto&quot;</span><span class="s1">) {</span>
+                <span class="s2">console</span><span class="s1">.</span><span class="s2">error</span><span class="s1">(</span><span class="s0">`Got invalid theme mode: </span><span class="s2">$</span><span class="s1">{</span><span class="s2">mode</span><span class="s1">}</span><span class="s0">. Resetting to auto.`</span><span class="s1">);</span>
+                <span class="s2">mode </span><span class="s1">= </span><span class="s0">&quot;auto&quot;</span><span class="s1">;</span>
+            <span class="s1">}</span>
+            <span class="s2">document</span><span class="s1">.</span><span class="s2">documentElement</span><span class="s1">.</span><span class="s2">dataset</span><span class="s1">.</span><span class="s2">theme </span><span class="s1">= </span><span class="s2">mode</span><span class="s1">;</span>
+            <span class="s2">localStorage</span><span class="s1">.</span><span class="s2">setItem</span><span class="s1">(</span><span class="s0">&quot;theme&quot;</span><span class="s1">, </span><span class="s2">mode</span><span class="s1">);</span>
+        <span class="s1">}</span>
+
+        <span class="s3">function </span><span class="s2">cycleTheme</span><span class="s1">() {</span>
+            <span class="s3">const </span><span class="s2">currentTheme </span><span class="s1">= </span><span class="s2">localStorage</span><span class="s1">.</span><span class="s2">getItem</span><span class="s1">(</span><span class="s0">&quot;theme&quot;</span><span class="s1">) || </span><span class="s0">&quot;auto&quot;</span><span class="s1">;</span>
+            <span class="s3">const </span><span class="s2">prefersDark </span><span class="s1">= </span><span class="s2">window</span><span class="s1">.</span><span class="s2">matchMedia</span><span class="s1">(</span><span class="s0">&quot;(prefers-color-scheme: dark)&quot;</span><span class="s1">).</span><span class="s2">matches</span><span class="s1">;</span>
+
+            <span class="s3">if </span><span class="s1">(</span><span class="s2">prefersDark</span><span class="s1">) {</span>
+                <span class="s4">// Auto (dark) -&gt; Light -&gt; Dark</span>
+                <span class="s3">if </span><span class="s1">(</span><span class="s2">currentTheme </span><span class="s1">=== </span><span class="s0">&quot;auto&quot;</span><span class="s1">) {</span>
+                    <span class="s2">setTheme</span><span class="s1">(</span><span class="s0">&quot;light&quot;</span><span class="s1">);</span>
+                <span class="s1">} </span><span class="s3">else if </span><span class="s1">(</span><span class="s2">currentTheme </span><span class="s1">=== </span><span class="s0">&quot;light&quot;</span><span class="s1">) {</span>
+                    <span class="s2">setTheme</span><span class="s1">(</span><span class="s0">&quot;dark&quot;</span><span class="s1">);</span>
+                <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+                    <span class="s2">setTheme</span><span class="s1">(</span><span class="s0">&quot;auto&quot;</span><span class="s1">);</span>
+                <span class="s1">}</span>
+            <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+                <span class="s4">// Auto (light) -&gt; Dark -&gt; Light</span>
+                <span class="s3">if </span><span class="s1">(</span><span class="s2">currentTheme </span><span class="s1">=== </span><span class="s0">&quot;auto&quot;</span><span class="s1">) {</span>
+                    <span class="s2">setTheme</span><span class="s1">(</span><span class="s0">&quot;dark&quot;</span><span class="s1">);</span>
+                <span class="s1">} </span><span class="s3">else if </span><span class="s1">(</span><span class="s2">currentTheme </span><span class="s1">=== </span><span class="s0">&quot;dark&quot;</span><span class="s1">) {</span>
+                    <span class="s2">setTheme</span><span class="s1">(</span><span class="s0">&quot;light&quot;</span><span class="s1">);</span>
+                <span class="s1">} </span><span class="s3">else </span><span class="s1">{</span>
+                    <span class="s2">setTheme</span><span class="s1">(</span><span class="s0">&quot;auto&quot;</span><span class="s1">);</span>
+                <span class="s1">}</span>
+            <span class="s1">}</span>
+        <span class="s1">}</span>
+
+        <span class="s3">function </span><span class="s2">initTheme</span><span class="s1">() {</span>
+            <span class="s4">// set theme defined in localStorage if there is one, or fallback to auto mode</span>
+            <span class="s3">const </span><span class="s2">currentTheme </span><span class="s1">= </span><span class="s2">localStorage</span><span class="s1">.</span><span class="s2">getItem</span><span class="s1">(</span><span class="s0">&quot;theme&quot;</span><span class="s1">);</span>
+            <span class="s2">currentTheme </span><span class="s1">? </span><span class="s2">setTheme</span><span class="s1">(</span><span class="s2">currentTheme</span><span class="s1">) : </span><span class="s2">setTheme</span><span class="s1">(</span><span class="s0">&quot;auto&quot;</span><span class="s1">);</span>
+        <span class="s1">}</span>
+
+        <span class="s3">function </span><span class="s2">setupTheme</span><span class="s1">() {</span>
+            <span class="s4">// Attach event handlers for toggling themes</span>
+            <span class="s3">const </span><span class="s2">buttons </span><span class="s1">= </span><span class="s2">document</span><span class="s1">.</span><span class="s2">getElementsByClassName</span><span class="s1">(</span><span class="s0">&quot;theme-toggle&quot;</span><span class="s1">);</span>
+            <span class="s2">Array</span><span class="s1">.</span><span class="s2">from</span><span class="s1">(</span><span class="s2">buttons</span><span class="s1">).</span><span class="s2">forEach</span><span class="s1">((</span><span class="s2">btn</span><span class="s1">) =&gt; {</span>
+                <span class="s2">btn</span><span class="s1">.</span><span class="s2">addEventListener</span><span class="s1">(</span><span class="s0">&quot;click&quot;</span><span class="s1">, </span><span class="s2">cycleTheme</span><span class="s1">);</span>
+            <span class="s1">});</span>
+            <span class="s2">initTheme</span><span class="s1">();</span>
+        <span class="s1">}</span>
+
+        <span class="s2">setupTheme</span><span class="s1">();</span>
+    <span class="s1">});</span>
+<span class="s1">}</span>
+</pre>
+</body>
+</html>

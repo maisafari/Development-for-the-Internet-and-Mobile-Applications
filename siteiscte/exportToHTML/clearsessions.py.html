@@ -1,0 +1,41 @@
+<html>
+<head>
+<title>clearsessions.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+clearsessions.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">importlib </span><span class="s0">import </span><span class="s1">import_module</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span><span class="s2">, </span><span class="s1">CommandError</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= (</span>
+        <span class="s3">&quot;Can be run as a cronjob or directly to clean out expired sessions &quot;</span>
+        <span class="s3">&quot;when the backend supports it.&quot;</span>
+    <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">engine </span><span class="s2">= </span><span class="s1">import_module</span><span class="s2">(</span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SESSION_ENGINE</span><span class="s2">)</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">engine</span><span class="s2">.</span><span class="s1">SessionStore</span><span class="s2">.</span><span class="s1">clear_expired</span><span class="s2">()</span>
+        <span class="s0">except </span><span class="s1">NotImplementedError</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s3">&quot;Session engine '%s' doesn't support clearing expired &quot;</span>
+                <span class="s3">&quot;sessions.&quot; </span><span class="s2">% </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SESSION_ENGINE</span>
+            <span class="s2">)</span>
+</pre>
+</body>
+</html>

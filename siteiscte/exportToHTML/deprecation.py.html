@@ -1,0 +1,179 @@
+<html>
+<head>
+<title>deprecation.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #2aacb8;}
+.s5 { color: #5f826b; font-style: italic;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+deprecation.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">inspect</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+
+<span class="s0">from </span><span class="s1">asgiref</span><span class="s2">.</span><span class="s1">sync </span><span class="s0">import </span><span class="s1">iscoroutinefunction</span><span class="s2">, </span><span class="s1">markcoroutinefunction</span><span class="s2">, </span><span class="s1">sync_to_async</span>
+
+
+<span class="s0">class </span><span class="s1">RemovedInDjango51Warning</span><span class="s2">(</span><span class="s1">DeprecationWarning</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">RemovedInDjango60Warning</span><span class="s2">(</span><span class="s1">PendingDeprecationWarning</span><span class="s2">):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s1">RemovedInNextVersionWarning </span><span class="s2">= </span><span class="s1">RemovedInDjango51Warning</span>
+<span class="s1">RemovedAfterNextVersionWarning </span><span class="s2">= </span><span class="s1">RemovedInDjango60Warning</span>
+
+
+<span class="s0">class </span><span class="s1">warn_about_renamed_method</span><span class="s2">:</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">, </span><span class="s1">class_name</span><span class="s2">, </span><span class="s1">old_method_name</span><span class="s2">, </span><span class="s1">new_method_name</span><span class="s2">, </span><span class="s1">deprecation_warning</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">class_name </span><span class="s2">= </span><span class="s1">class_name</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">old_method_name </span><span class="s2">= </span><span class="s1">old_method_name</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">new_method_name </span><span class="s2">= </span><span class="s1">new_method_name</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">deprecation_warning </span><span class="s2">= </span><span class="s1">deprecation_warning</span>
+
+    <span class="s0">def </span><span class="s1">__call__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">f</span><span class="s2">):</span>
+        <span class="s0">def </span><span class="s1">wrapper</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+            <span class="s1">warnings</span><span class="s2">.</span><span class="s1">warn</span><span class="s2">(</span>
+                <span class="s3">&quot;`%s.%s` is deprecated, use `%s` instead.&quot;</span>
+                <span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">class_name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">old_method_name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">new_method_name</span><span class="s2">),</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">deprecation_warning</span><span class="s2">,</span>
+                <span class="s4">2</span><span class="s2">,</span>
+            <span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">f</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s1">wrapper</span>
+
+
+<span class="s0">class </span><span class="s1">RenameMethodsBase</span><span class="s2">(</span><span class="s1">type</span><span class="s2">):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Handles the deprecation paths when renaming a method. 
+ 
+    It does the following: 
+        1) Define the new method if missing and complain about it. 
+        2) Define the old method if missing. 
+        3) Complain whenever an old method is called. 
+ 
+    See #15363 for more details. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">renamed_methods </span><span class="s2">= ()</span>
+
+    <span class="s0">def </span><span class="s1">__new__</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">bases</span><span class="s2">, </span><span class="s1">attrs</span><span class="s2">):</span>
+        <span class="s1">new_class </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">__new__</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">bases</span><span class="s2">, </span><span class="s1">attrs</span><span class="s2">)</span>
+
+        <span class="s0">for </span><span class="s1">base </span><span class="s0">in </span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">getmro</span><span class="s2">(</span><span class="s1">new_class</span><span class="s2">):</span>
+            <span class="s1">class_name </span><span class="s2">= </span><span class="s1">base</span><span class="s2">.</span><span class="s1">__name__</span>
+            <span class="s0">for </span><span class="s1">renamed_method </span><span class="s0">in </span><span class="s1">cls</span><span class="s2">.</span><span class="s1">renamed_methods</span><span class="s2">:</span>
+                <span class="s1">old_method_name </span><span class="s2">= </span><span class="s1">renamed_method</span><span class="s2">[</span><span class="s4">0</span><span class="s2">]</span>
+                <span class="s1">old_method </span><span class="s2">= </span><span class="s1">base</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">old_method_name</span><span class="s2">)</span>
+                <span class="s1">new_method_name </span><span class="s2">= </span><span class="s1">renamed_method</span><span class="s2">[</span><span class="s4">1</span><span class="s2">]</span>
+                <span class="s1">new_method </span><span class="s2">= </span><span class="s1">base</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">new_method_name</span><span class="s2">)</span>
+                <span class="s1">deprecation_warning </span><span class="s2">= </span><span class="s1">renamed_method</span><span class="s2">[</span><span class="s4">2</span><span class="s2">]</span>
+                <span class="s1">wrapper </span><span class="s2">= </span><span class="s1">warn_about_renamed_method</span><span class="s2">(</span><span class="s1">class_name</span><span class="s2">, *</span><span class="s1">renamed_method</span><span class="s2">)</span>
+
+                <span class="s6"># Define the new method if missing and complain about it</span>
+                <span class="s0">if not </span><span class="s1">new_method </span><span class="s0">and </span><span class="s1">old_method</span><span class="s2">:</span>
+                    <span class="s1">warnings</span><span class="s2">.</span><span class="s1">warn</span><span class="s2">(</span>
+                        <span class="s3">&quot;`%s.%s` method should be renamed `%s`.&quot;</span>
+                        <span class="s2">% (</span><span class="s1">class_name</span><span class="s2">, </span><span class="s1">old_method_name</span><span class="s2">, </span><span class="s1">new_method_name</span><span class="s2">),</span>
+                        <span class="s1">deprecation_warning</span><span class="s2">,</span>
+                        <span class="s4">2</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+                    <span class="s1">setattr</span><span class="s2">(</span><span class="s1">base</span><span class="s2">, </span><span class="s1">new_method_name</span><span class="s2">, </span><span class="s1">old_method</span><span class="s2">)</span>
+                    <span class="s1">setattr</span><span class="s2">(</span><span class="s1">base</span><span class="s2">, </span><span class="s1">old_method_name</span><span class="s2">, </span><span class="s1">wrapper</span><span class="s2">(</span><span class="s1">old_method</span><span class="s2">))</span>
+
+                <span class="s6"># Define the old method as a wrapped call to the new method.</span>
+                <span class="s0">if not </span><span class="s1">old_method </span><span class="s0">and </span><span class="s1">new_method</span><span class="s2">:</span>
+                    <span class="s1">setattr</span><span class="s2">(</span><span class="s1">base</span><span class="s2">, </span><span class="s1">old_method_name</span><span class="s2">, </span><span class="s1">wrapper</span><span class="s2">(</span><span class="s1">new_method</span><span class="s2">))</span>
+
+        <span class="s0">return </span><span class="s1">new_class</span>
+
+
+<span class="s0">class </span><span class="s1">DeprecationInstanceCheck</span><span class="s2">(</span><span class="s1">type</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__instancecheck__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">instance</span><span class="s2">):</span>
+        <span class="s1">warnings</span><span class="s2">.</span><span class="s1">warn</span><span class="s2">(</span>
+            <span class="s3">&quot;`%s` is deprecated, use `%s` instead.&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">alternative</span><span class="s2">),</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">deprecation_warning</span><span class="s2">,</span>
+            <span class="s4">2</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">__instancecheck__</span><span class="s2">(</span><span class="s1">instance</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">MiddlewareMixin</span><span class="s2">:</span>
+    <span class="s1">sync_capable </span><span class="s2">= </span><span class="s0">True</span>
+    <span class="s1">async_capable </span><span class="s2">= </span><span class="s0">True</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">get_response</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">get_response </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;get_response must be provided.&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">get_response </span><span class="s2">= </span><span class="s1">get_response</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_async_check</span><span class="s2">()</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;&lt;%s get_response=%s&gt;&quot; </span><span class="s2">% (</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s2">,</span>
+            <span class="s1">getattr</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">get_response</span><span class="s2">,</span>
+                <span class="s3">&quot;__qualname__&quot;</span><span class="s2">,</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">get_response</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">,</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_async_check</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        If get_response is a coroutine function, turns us into async mode so 
+        a thread is not consumed during a whole request. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">iscoroutinefunction</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_response</span><span class="s2">):</span>
+            <span class="s6"># Mark the class as async-capable, but do the actual switch</span>
+            <span class="s6"># inside __call__ to avoid swapping out dunder methods</span>
+            <span class="s1">markcoroutinefunction</span><span class="s2">(</span><span class="s1">self</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__call__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s6"># Exit out to async mode, if needed</span>
+        <span class="s0">if </span><span class="s1">iscoroutinefunction</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__acall__</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s1">response </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s3">&quot;process_request&quot;</span><span class="s2">):</span>
+            <span class="s1">response </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">process_request</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s1">response </span><span class="s2">= </span><span class="s1">response </span><span class="s0">or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_response</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s3">&quot;process_response&quot;</span><span class="s2">):</span>
+            <span class="s1">response </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">process_response</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">response</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">response</span>
+
+    <span class="s0">async def </span><span class="s1">__acall__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s5">&quot;&quot;&quot; 
+        Async version of __call__ that is swapped in when an async request 
+        is running. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">response </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s3">&quot;process_request&quot;</span><span class="s2">):</span>
+            <span class="s1">response </span><span class="s2">= </span><span class="s0">await </span><span class="s1">sync_to_async</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">process_request</span><span class="s2">,</span>
+                <span class="s1">thread_sensitive</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+            <span class="s2">)(</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s1">response </span><span class="s2">= </span><span class="s1">response </span><span class="s0">or await </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_response</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s3">&quot;process_response&quot;</span><span class="s2">):</span>
+            <span class="s1">response </span><span class="s2">= </span><span class="s0">await </span><span class="s1">sync_to_async</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">process_response</span><span class="s2">,</span>
+                <span class="s1">thread_sensitive</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+            <span class="s2">)(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">response</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">response</span>
+</pre>
+</body>
+</html>

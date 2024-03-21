@@ -1,0 +1,134 @@
+<html>
+<head>
+<title>recorder.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #2aacb8;}
+.s5 { color: #6aab73;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+recorder.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">registry </span><span class="s0">import </span><span class="s1">Apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">DatabaseError</span><span class="s2">, </span><span class="s1">models</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">classproperty</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">timezone </span><span class="s0">import </span><span class="s1">now</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">MigrationSchemaMissing</span>
+
+
+<span class="s0">class </span><span class="s1">MigrationRecorder</span><span class="s2">:</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Deal with storing migration records in the database. 
+ 
+    Because this table is actually itself used for dealing with model 
+    creation, it's the one thing we can't do normally via migrations. 
+    We manually handle table creation/schema updating (using schema backend) 
+    and then have a floating model to do queries with. 
+ 
+    If a migration is unapplied its row is removed from the table. Having 
+    a row in the table always means a migration is applied. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">_migration_class </span><span class="s2">= </span><span class="s0">None</span>
+
+    <span class="s2">@</span><span class="s1">classproperty</span>
+    <span class="s0">def </span><span class="s1">Migration</span><span class="s2">(</span><span class="s1">cls</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Lazy load to avoid AppRegistryNotReady if installed apps import 
+        MigrationRecorder. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">cls</span><span class="s2">.</span><span class="s1">_migration_class </span><span class="s0">is None</span><span class="s2">:</span>
+
+            <span class="s0">class </span><span class="s1">Migration</span><span class="s2">(</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Model</span><span class="s2">):</span>
+                <span class="s1">app </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">CharField</span><span class="s2">(</span><span class="s1">max_length</span><span class="s2">=</span><span class="s4">255</span><span class="s2">)</span>
+                <span class="s1">name </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">CharField</span><span class="s2">(</span><span class="s1">max_length</span><span class="s2">=</span><span class="s4">255</span><span class="s2">)</span>
+                <span class="s1">applied </span><span class="s2">= </span><span class="s1">models</span><span class="s2">.</span><span class="s1">DateTimeField</span><span class="s2">(</span><span class="s1">default</span><span class="s2">=</span><span class="s1">now</span><span class="s2">)</span>
+
+                <span class="s0">class </span><span class="s1">Meta</span><span class="s2">:</span>
+                    <span class="s1">apps </span><span class="s2">= </span><span class="s1">Apps</span><span class="s2">()</span>
+                    <span class="s1">app_label </span><span class="s2">= </span><span class="s5">&quot;migrations&quot;</span>
+                    <span class="s1">db_table </span><span class="s2">= </span><span class="s5">&quot;django_migrations&quot;</span>
+
+                <span class="s0">def </span><span class="s1">__str__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+                    <span class="s0">return </span><span class="s5">&quot;Migration %s for %s&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">app</span><span class="s2">)</span>
+
+            <span class="s1">cls</span><span class="s2">.</span><span class="s1">_migration_class </span><span class="s2">= </span><span class="s1">Migration</span>
+        <span class="s0">return </span><span class="s1">cls</span><span class="s2">.</span><span class="s1">_migration_class</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">connection </span><span class="s2">= </span><span class="s1">connection</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_has_table </span><span class="s2">= </span><span class="s0">False</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">migration_qs</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">Migration</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">using</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">has_table</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Return True if the django_migrations table exists.&quot;&quot;&quot;</span>
+        <span class="s6"># If the migrations table has already been confirmed to exist, don't</span>
+        <span class="s6"># recheck it's existence.</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_has_table</span><span class="s2">:</span>
+            <span class="s0">return True</span>
+        <span class="s6"># It hasn't been confirmed to exist, recheck.</span>
+        <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">cursor</span><span class="s2">() </span><span class="s0">as </span><span class="s1">cursor</span><span class="s2">:</span>
+            <span class="s1">tables </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">introspection</span><span class="s2">.</span><span class="s1">table_names</span><span class="s2">(</span><span class="s1">cursor</span><span class="s2">)</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_has_table </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">Migration</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">db_table </span><span class="s0">in </span><span class="s1">tables</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_has_table</span>
+
+    <span class="s0">def </span><span class="s1">ensure_schema</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Ensure the table exists and has the correct schema.&quot;&quot;&quot;</span>
+        <span class="s6"># If the table's there, that's fine - we've never changed its schema</span>
+        <span class="s6"># in the codebase.</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">has_table</span><span class="s2">():</span>
+            <span class="s0">return</span>
+        <span class="s6"># Make the table</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">schema_editor</span><span class="s2">() </span><span class="s0">as </span><span class="s1">editor</span><span class="s2">:</span>
+                <span class="s1">editor</span><span class="s2">.</span><span class="s1">create_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">Migration</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">DatabaseError </span><span class="s0">as </span><span class="s1">exc</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">MigrationSchemaMissing</span><span class="s2">(</span>
+                <span class="s5">&quot;Unable to create the django_migrations table (%s)&quot; </span><span class="s2">% </span><span class="s1">exc</span>
+            <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">applied_migrations</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return a dict mapping (app_name, migration_name) to Migration instances 
+        for all applied migrations. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">has_table</span><span class="s2">():</span>
+            <span class="s0">return </span><span class="s2">{</span>
+                <span class="s2">(</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">name</span><span class="s2">): </span><span class="s1">migration</span>
+                <span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration_qs</span>
+            <span class="s2">}</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s6"># If the django_migrations table doesn't exist, then no migrations</span>
+            <span class="s6"># are applied.</span>
+            <span class="s0">return </span><span class="s2">{}</span>
+
+    <span class="s0">def </span><span class="s1">record_applied</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Record that a migration was applied.&quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">ensure_schema</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">migration_qs</span><span class="s2">.</span><span class="s1">create</span><span class="s2">(</span><span class="s1">app</span><span class="s2">=</span><span class="s1">app</span><span class="s2">, </span><span class="s1">name</span><span class="s2">=</span><span class="s1">name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">record_unapplied</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Record that a migration was unapplied.&quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">ensure_schema</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">migration_qs</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">app</span><span class="s2">=</span><span class="s1">app</span><span class="s2">, </span><span class="s1">name</span><span class="s2">=</span><span class="s1">name</span><span class="s2">).</span><span class="s1">delete</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">flush</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Delete all migration records. Useful for testing migrations.&quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">migration_qs</span><span class="s2">.</span><span class="s1">all</span><span class="s2">().</span><span class="s1">delete</span><span class="s2">()</span>
+</pre>
+</body>
+</html>

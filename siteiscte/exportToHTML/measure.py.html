@@ -1,0 +1,391 @@
+<html>
+<head>
+<title>measure.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #5f826b; font-style: italic;}
+.s3 { color: #cf8e6d;}
+.s4 { color: #bcbec4;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+measure.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># Copyright (c) 2007, Robert Coup &lt;robert.coup@onetrackmind.co.nz&gt;</span>
+<span class="s0"># All rights reserved.</span>
+<span class="s0">#</span>
+<span class="s0"># Redistribution and use in source and binary forms, with or without modification,</span>
+<span class="s0"># are permitted provided that the following conditions are met:</span>
+<span class="s0">#</span>
+<span class="s0">#   1. Redistributions of source code must retain the above copyright notice,</span>
+<span class="s0">#      this list of conditions and the following disclaimer.</span>
+<span class="s0">#</span>
+<span class="s0">#   2. Redistributions in binary form must reproduce the above copyright</span>
+<span class="s0">#      notice, this list of conditions and the following disclaimer in the</span>
+<span class="s0">#      documentation and/or other materials provided with the distribution.</span>
+<span class="s0">#</span>
+<span class="s0">#   3. Neither the name of Distance nor the names of its contributors may be used</span>
+<span class="s0">#      to endorse or promote products derived from this software without</span>
+<span class="s0">#      specific prior written permission.</span>
+<span class="s0">#</span>
+<span class="s0"># THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&quot; AND</span>
+<span class="s0"># ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED</span>
+<span class="s0"># WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE</span>
+<span class="s0"># DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR</span>
+<span class="s0"># ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES</span>
+<span class="s0"># (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;</span>
+<span class="s0"># LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON</span>
+<span class="s0"># ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT</span>
+<span class="s0"># (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS</span>
+<span class="s0"># SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</span>
+<span class="s0">#</span>
+<span class="s2">&quot;&quot;&quot; 
+Distance and Area objects to allow for sensible and convenient calculation 
+and conversions. 
+ 
+Authors: Robert Coup, Justin Bronn, Riccardo Di Virgilio 
+ 
+Inspired by GeoPy (https://github.com/geopy/geopy) 
+and Geoff Biggs' PhD work on dimensioned units for robotics. 
+&quot;&quot;&quot;</span>
+<span class="s3">from </span><span class="s1">decimal </span><span class="s3">import </span><span class="s1">Decimal</span>
+<span class="s3">from </span><span class="s1">functools </span><span class="s3">import </span><span class="s1">total_ordering</span>
+
+<span class="s1">__all__ </span><span class="s4">= [</span><span class="s5">&quot;A&quot;</span><span class="s4">, </span><span class="s5">&quot;Area&quot;</span><span class="s4">, </span><span class="s5">&quot;D&quot;</span><span class="s4">, </span><span class="s5">&quot;Distance&quot;</span><span class="s4">]</span>
+
+<span class="s1">NUMERIC_TYPES </span><span class="s4">= (</span><span class="s1">int</span><span class="s4">, </span><span class="s1">float</span><span class="s4">, </span><span class="s1">Decimal</span><span class="s4">)</span>
+<span class="s1">AREA_PREFIX </span><span class="s4">= </span><span class="s5">&quot;sq_&quot;</span>
+
+
+<span class="s3">def </span><span class="s1">pretty_name</span><span class="s4">(</span><span class="s1">obj</span><span class="s4">):</span>
+    <span class="s3">return </span><span class="s1">obj</span><span class="s4">.</span><span class="s1">__name__ </span><span class="s3">if </span><span class="s1">obj</span><span class="s4">.</span><span class="s1">__class__ </span><span class="s4">== </span><span class="s1">type </span><span class="s3">else </span><span class="s1">obj</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">.</span><span class="s1">__name__</span>
+
+
+<span class="s4">@</span><span class="s1">total_ordering</span>
+<span class="s3">class </span><span class="s1">MeasureBase</span><span class="s4">:</span>
+    <span class="s1">STANDARD_UNIT </span><span class="s4">= </span><span class="s3">None</span>
+    <span class="s1">ALIAS </span><span class="s4">= {}</span>
+    <span class="s1">UNITS </span><span class="s4">= {}</span>
+    <span class="s1">LALIAS </span><span class="s4">= {}</span>
+
+    <span class="s3">def </span><span class="s1">__init__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">default_unit</span><span class="s4">=</span><span class="s3">None</span><span class="s4">, **</span><span class="s1">kwargs</span><span class="s4">):</span>
+        <span class="s1">value</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_default_unit </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">default_units</span><span class="s4">(</span><span class="s1">kwargs</span><span class="s4">)</span>
+        <span class="s1">setattr</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">STANDARD_UNIT</span><span class="s4">, </span><span class="s1">value</span><span class="s4">)</span>
+        <span class="s3">if </span><span class="s1">default_unit </span><span class="s3">and </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">default_unit</span><span class="s4">, </span><span class="s1">str</span><span class="s4">):</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">_default_unit </span><span class="s4">= </span><span class="s1">default_unit</span>
+
+    <span class="s3">def </span><span class="s1">_get_standard</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">getattr</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">STANDARD_UNIT</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">_set_standard</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">value</span><span class="s4">):</span>
+        <span class="s1">setattr</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">STANDARD_UNIT</span><span class="s4">, </span><span class="s1">value</span><span class="s4">)</span>
+
+    <span class="s1">standard </span><span class="s4">= </span><span class="s1">property</span><span class="s4">(</span><span class="s1">_get_standard</span><span class="s4">, </span><span class="s1">_set_standard</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__getattr__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">name</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">name </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">UNITS</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">/ </span><span class="s1">self</span><span class="s4">.</span><span class="s1">UNITS</span><span class="s4">[</span><span class="s1">name</span><span class="s4">]</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">AttributeError</span><span class="s4">(</span><span class="s5">&quot;Unknown unit type: %s&quot; </span><span class="s4">% </span><span class="s1">name</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__repr__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s5">&quot;%s(%s=%s)&quot; </span><span class="s4">% (</span>
+            <span class="s1">pretty_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">),</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">_default_unit</span><span class="s4">,</span>
+            <span class="s1">getattr</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_default_unit</span><span class="s4">),</span>
+        <span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__str__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s5">&quot;%s %s&quot; </span><span class="s4">% (</span><span class="s1">getattr</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_default_unit</span><span class="s4">), </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_default_unit</span><span class="s4">)</span>
+
+    <span class="s0"># **** Comparison methods ****</span>
+
+    <span class="s3">def </span><span class="s1">__eq__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">):</span>
+            <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">== </span><span class="s1">other</span><span class="s4">.</span><span class="s1">standard</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">NotImplemented</span>
+
+    <span class="s3">def </span><span class="s1">__hash__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">hash</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">standard</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__lt__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">):</span>
+            <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">&lt; </span><span class="s1">other</span><span class="s4">.</span><span class="s1">standard</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">NotImplemented</span>
+
+    <span class="s0"># **** Operators methods ****</span>
+
+    <span class="s3">def </span><span class="s1">__add__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">):</span>
+            <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">(</span>
+                <span class="s1">default_unit</span><span class="s4">=</span><span class="s1">self</span><span class="s4">.</span><span class="s1">_default_unit</span><span class="s4">,</span>
+                <span class="s4">**{</span><span class="s1">self</span><span class="s4">.</span><span class="s1">STANDARD_UNIT</span><span class="s4">: (</span><span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">+ </span><span class="s1">other</span><span class="s4">.</span><span class="s1">standard</span><span class="s4">)},</span>
+            <span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span>
+                <span class="s5">&quot;%(class)s must be added with %(class)s&quot; </span><span class="s4">% {</span><span class="s5">&quot;class&quot;</span><span class="s4">: </span><span class="s1">pretty_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)}</span>
+            <span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__iadd__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">):</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">+= </span><span class="s1">other</span><span class="s4">.</span><span class="s1">standard</span>
+            <span class="s3">return </span><span class="s1">self</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span>
+                <span class="s5">&quot;%(class)s must be added with %(class)s&quot; </span><span class="s4">% {</span><span class="s5">&quot;class&quot;</span><span class="s4">: </span><span class="s1">pretty_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)}</span>
+            <span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__sub__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">):</span>
+            <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">(</span>
+                <span class="s1">default_unit</span><span class="s4">=</span><span class="s1">self</span><span class="s4">.</span><span class="s1">_default_unit</span><span class="s4">,</span>
+                <span class="s4">**{</span><span class="s1">self</span><span class="s4">.</span><span class="s1">STANDARD_UNIT</span><span class="s4">: (</span><span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">- </span><span class="s1">other</span><span class="s4">.</span><span class="s1">standard</span><span class="s4">)},</span>
+            <span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span>
+                <span class="s5">&quot;%(class)s must be subtracted from %(class)s&quot;</span>
+                <span class="s4">% {</span><span class="s5">&quot;class&quot;</span><span class="s4">: </span><span class="s1">pretty_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)}</span>
+            <span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__isub__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">):</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">-= </span><span class="s1">other</span><span class="s4">.</span><span class="s1">standard</span>
+            <span class="s3">return </span><span class="s1">self</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span>
+                <span class="s5">&quot;%(class)s must be subtracted from %(class)s&quot;</span>
+                <span class="s4">% {</span><span class="s5">&quot;class&quot;</span><span class="s4">: </span><span class="s1">pretty_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)}</span>
+            <span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__mul__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">NUMERIC_TYPES</span><span class="s4">):</span>
+            <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">(</span>
+                <span class="s1">default_unit</span><span class="s4">=</span><span class="s1">self</span><span class="s4">.</span><span class="s1">_default_unit</span><span class="s4">,</span>
+                <span class="s4">**{</span><span class="s1">self</span><span class="s4">.</span><span class="s1">STANDARD_UNIT</span><span class="s4">: (</span><span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">* </span><span class="s1">other</span><span class="s4">)},</span>
+            <span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span>
+                <span class="s5">&quot;%(class)s must be multiplied with number&quot;</span>
+                <span class="s4">% {</span><span class="s5">&quot;class&quot;</span><span class="s4">: </span><span class="s1">pretty_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)}</span>
+            <span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__imul__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">NUMERIC_TYPES</span><span class="s4">):</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">*= </span><span class="s1">float</span><span class="s4">(</span><span class="s1">other</span><span class="s4">)</span>
+            <span class="s3">return </span><span class="s1">self</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span>
+                <span class="s5">&quot;%(class)s must be multiplied with number&quot;</span>
+                <span class="s4">% {</span><span class="s5">&quot;class&quot;</span><span class="s4">: </span><span class="s1">pretty_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)}</span>
+            <span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__rmul__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">self </span><span class="s4">* </span><span class="s1">other</span>
+
+    <span class="s3">def </span><span class="s1">__truediv__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">):</span>
+            <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">/ </span><span class="s1">other</span><span class="s4">.</span><span class="s1">standard</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">NUMERIC_TYPES</span><span class="s4">):</span>
+            <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">(</span>
+                <span class="s1">default_unit</span><span class="s4">=</span><span class="s1">self</span><span class="s4">.</span><span class="s1">_default_unit</span><span class="s4">,</span>
+                <span class="s4">**{</span><span class="s1">self</span><span class="s4">.</span><span class="s1">STANDARD_UNIT</span><span class="s4">: (</span><span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">/ </span><span class="s1">other</span><span class="s4">)},</span>
+            <span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span>
+                <span class="s5">&quot;%(class)s must be divided with number or %(class)s&quot;</span>
+                <span class="s4">% {</span><span class="s5">&quot;class&quot;</span><span class="s4">: </span><span class="s1">pretty_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)}</span>
+            <span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__itruediv__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">NUMERIC_TYPES</span><span class="s4">):</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">/= </span><span class="s1">float</span><span class="s4">(</span><span class="s1">other</span><span class="s4">)</span>
+            <span class="s3">return </span><span class="s1">self</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span>
+                <span class="s5">&quot;%(class)s must be divided with number&quot; </span><span class="s4">% {</span><span class="s5">&quot;class&quot;</span><span class="s4">: </span><span class="s1">pretty_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)}</span>
+            <span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__bool__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">bool</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">standard</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">default_units</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">kwargs</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Return the unit value and the default units specified 
+        from the given keyword arguments dictionary. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">val </span><span class="s4">= </span><span class="s6">0.0</span>
+        <span class="s1">default_unit </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">STANDARD_UNIT</span>
+        <span class="s3">for </span><span class="s1">unit</span><span class="s4">, </span><span class="s1">value </span><span class="s3">in </span><span class="s1">kwargs</span><span class="s4">.</span><span class="s1">items</span><span class="s4">():</span>
+            <span class="s3">if not </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">value</span><span class="s4">, </span><span class="s1">float</span><span class="s4">):</span>
+                <span class="s1">value </span><span class="s4">= </span><span class="s1">float</span><span class="s4">(</span><span class="s1">value</span><span class="s4">)</span>
+            <span class="s3">if </span><span class="s1">unit </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">UNITS</span><span class="s4">:</span>
+                <span class="s1">val </span><span class="s4">+= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">UNITS</span><span class="s4">[</span><span class="s1">unit</span><span class="s4">] * </span><span class="s1">value</span>
+                <span class="s1">default_unit </span><span class="s4">= </span><span class="s1">unit</span>
+            <span class="s3">elif </span><span class="s1">unit </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">ALIAS</span><span class="s4">:</span>
+                <span class="s1">u </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">ALIAS</span><span class="s4">[</span><span class="s1">unit</span><span class="s4">]</span>
+                <span class="s1">val </span><span class="s4">+= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">UNITS</span><span class="s4">[</span><span class="s1">u</span><span class="s4">] * </span><span class="s1">value</span>
+                <span class="s1">default_unit </span><span class="s4">= </span><span class="s1">u</span>
+            <span class="s3">else</span><span class="s4">:</span>
+                <span class="s1">lower </span><span class="s4">= </span><span class="s1">unit</span><span class="s4">.</span><span class="s1">lower</span><span class="s4">()</span>
+                <span class="s3">if </span><span class="s1">lower </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">UNITS</span><span class="s4">:</span>
+                    <span class="s1">val </span><span class="s4">+= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">UNITS</span><span class="s4">[</span><span class="s1">lower</span><span class="s4">] * </span><span class="s1">value</span>
+                    <span class="s1">default_unit </span><span class="s4">= </span><span class="s1">lower</span>
+                <span class="s3">elif </span><span class="s1">lower </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">LALIAS</span><span class="s4">:</span>
+                    <span class="s1">u </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">LALIAS</span><span class="s4">[</span><span class="s1">lower</span><span class="s4">]</span>
+                    <span class="s1">val </span><span class="s4">+= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">UNITS</span><span class="s4">[</span><span class="s1">u</span><span class="s4">] * </span><span class="s1">value</span>
+                    <span class="s1">default_unit </span><span class="s4">= </span><span class="s1">u</span>
+                <span class="s3">else</span><span class="s4">:</span>
+                    <span class="s3">raise </span><span class="s1">AttributeError</span><span class="s4">(</span><span class="s5">&quot;Unknown unit type: %s&quot; </span><span class="s4">% </span><span class="s1">unit</span><span class="s4">)</span>
+        <span class="s3">return </span><span class="s1">val</span><span class="s4">, </span><span class="s1">default_unit</span>
+
+    <span class="s4">@</span><span class="s1">classmethod</span>
+    <span class="s3">def </span><span class="s1">unit_attname</span><span class="s4">(</span><span class="s1">cls</span><span class="s4">, </span><span class="s1">unit_str</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Retrieve the unit attribute name for the given unit string. 
+        For example, if the given unit string is 'metre', return 'm'. 
+        Raise an AttributeError if an attribute cannot be found. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">lower </span><span class="s4">= </span><span class="s1">unit_str</span><span class="s4">.</span><span class="s1">lower</span><span class="s4">()</span>
+        <span class="s3">if </span><span class="s1">unit_str </span><span class="s3">in </span><span class="s1">cls</span><span class="s4">.</span><span class="s1">UNITS</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">unit_str</span>
+        <span class="s3">elif </span><span class="s1">lower </span><span class="s3">in </span><span class="s1">cls</span><span class="s4">.</span><span class="s1">UNITS</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">lower</span>
+        <span class="s3">elif </span><span class="s1">lower </span><span class="s3">in </span><span class="s1">cls</span><span class="s4">.</span><span class="s1">LALIAS</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">cls</span><span class="s4">.</span><span class="s1">LALIAS</span><span class="s4">[</span><span class="s1">lower</span><span class="s4">]</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">AttributeError</span><span class="s4">(</span><span class="s5">f&quot;Unknown unit type: </span><span class="s3">{</span><span class="s1">unit_str</span><span class="s3">}</span><span class="s5">&quot;</span><span class="s4">)</span>
+
+
+<span class="s3">class </span><span class="s1">Distance</span><span class="s4">(</span><span class="s1">MeasureBase</span><span class="s4">):</span>
+    <span class="s1">STANDARD_UNIT </span><span class="s4">= </span><span class="s5">&quot;m&quot;</span>
+    <span class="s1">UNITS </span><span class="s4">= {</span>
+        <span class="s5">&quot;chain&quot;</span><span class="s4">: </span><span class="s6">20.1168</span><span class="s4">,</span>
+        <span class="s5">&quot;chain_benoit&quot;</span><span class="s4">: </span><span class="s6">20.116782</span><span class="s4">,</span>
+        <span class="s5">&quot;chain_sears&quot;</span><span class="s4">: </span><span class="s6">20.1167645</span><span class="s4">,</span>
+        <span class="s5">&quot;british_chain_benoit&quot;</span><span class="s4">: </span><span class="s6">20.1167824944</span><span class="s4">,</span>
+        <span class="s5">&quot;british_chain_sears&quot;</span><span class="s4">: </span><span class="s6">20.1167651216</span><span class="s4">,</span>
+        <span class="s5">&quot;british_chain_sears_truncated&quot;</span><span class="s4">: </span><span class="s6">20.116756</span><span class="s4">,</span>
+        <span class="s5">&quot;cm&quot;</span><span class="s4">: </span><span class="s6">0.01</span><span class="s4">,</span>
+        <span class="s5">&quot;british_ft&quot;</span><span class="s4">: </span><span class="s6">0.304799471539</span><span class="s4">,</span>
+        <span class="s5">&quot;british_yd&quot;</span><span class="s4">: </span><span class="s6">0.914398414616</span><span class="s4">,</span>
+        <span class="s5">&quot;clarke_ft&quot;</span><span class="s4">: </span><span class="s6">0.3047972654</span><span class="s4">,</span>
+        <span class="s5">&quot;clarke_link&quot;</span><span class="s4">: </span><span class="s6">0.201166195164</span><span class="s4">,</span>
+        <span class="s5">&quot;fathom&quot;</span><span class="s4">: </span><span class="s6">1.8288</span><span class="s4">,</span>
+        <span class="s5">&quot;ft&quot;</span><span class="s4">: </span><span class="s6">0.3048</span><span class="s4">,</span>
+        <span class="s5">&quot;furlong&quot;</span><span class="s4">: </span><span class="s6">201.168</span><span class="s4">,</span>
+        <span class="s5">&quot;german_m&quot;</span><span class="s4">: </span><span class="s6">1.0000135965</span><span class="s4">,</span>
+        <span class="s5">&quot;gold_coast_ft&quot;</span><span class="s4">: </span><span class="s6">0.304799710181508</span><span class="s4">,</span>
+        <span class="s5">&quot;indian_yd&quot;</span><span class="s4">: </span><span class="s6">0.914398530744</span><span class="s4">,</span>
+        <span class="s5">&quot;inch&quot;</span><span class="s4">: </span><span class="s6">0.0254</span><span class="s4">,</span>
+        <span class="s5">&quot;km&quot;</span><span class="s4">: </span><span class="s6">1000.0</span><span class="s4">,</span>
+        <span class="s5">&quot;link&quot;</span><span class="s4">: </span><span class="s6">0.201168</span><span class="s4">,</span>
+        <span class="s5">&quot;link_benoit&quot;</span><span class="s4">: </span><span class="s6">0.20116782</span><span class="s4">,</span>
+        <span class="s5">&quot;link_sears&quot;</span><span class="s4">: </span><span class="s6">0.20116765</span><span class="s4">,</span>
+        <span class="s5">&quot;m&quot;</span><span class="s4">: </span><span class="s6">1.0</span><span class="s4">,</span>
+        <span class="s5">&quot;mi&quot;</span><span class="s4">: </span><span class="s6">1609.344</span><span class="s4">,</span>
+        <span class="s5">&quot;mm&quot;</span><span class="s4">: </span><span class="s6">0.001</span><span class="s4">,</span>
+        <span class="s5">&quot;nm&quot;</span><span class="s4">: </span><span class="s6">1852.0</span><span class="s4">,</span>
+        <span class="s5">&quot;nm_uk&quot;</span><span class="s4">: </span><span class="s6">1853.184</span><span class="s4">,</span>
+        <span class="s5">&quot;rod&quot;</span><span class="s4">: </span><span class="s6">5.0292</span><span class="s4">,</span>
+        <span class="s5">&quot;sears_yd&quot;</span><span class="s4">: </span><span class="s6">0.91439841</span><span class="s4">,</span>
+        <span class="s5">&quot;survey_ft&quot;</span><span class="s4">: </span><span class="s6">0.304800609601</span><span class="s4">,</span>
+        <span class="s5">&quot;um&quot;</span><span class="s4">: </span><span class="s6">0.000001</span><span class="s4">,</span>
+        <span class="s5">&quot;yd&quot;</span><span class="s4">: </span><span class="s6">0.9144</span><span class="s4">,</span>
+    <span class="s4">}</span>
+
+    <span class="s0"># Unit aliases for `UNIT` terms encountered in Spatial Reference WKT.</span>
+    <span class="s1">ALIAS </span><span class="s4">= {</span>
+        <span class="s5">&quot;centimeter&quot;</span><span class="s4">: </span><span class="s5">&quot;cm&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;foot&quot;</span><span class="s4">: </span><span class="s5">&quot;ft&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;inches&quot;</span><span class="s4">: </span><span class="s5">&quot;inch&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;kilometer&quot;</span><span class="s4">: </span><span class="s5">&quot;km&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;kilometre&quot;</span><span class="s4">: </span><span class="s5">&quot;km&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;meter&quot;</span><span class="s4">: </span><span class="s5">&quot;m&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;metre&quot;</span><span class="s4">: </span><span class="s5">&quot;m&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;micrometer&quot;</span><span class="s4">: </span><span class="s5">&quot;um&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;micrometre&quot;</span><span class="s4">: </span><span class="s5">&quot;um&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;millimeter&quot;</span><span class="s4">: </span><span class="s5">&quot;mm&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;millimetre&quot;</span><span class="s4">: </span><span class="s5">&quot;mm&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;mile&quot;</span><span class="s4">: </span><span class="s5">&quot;mi&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;yard&quot;</span><span class="s4">: </span><span class="s5">&quot;yd&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;British chain (Benoit 1895 B)&quot;</span><span class="s4">: </span><span class="s5">&quot;british_chain_benoit&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;British chain (Sears 1922)&quot;</span><span class="s4">: </span><span class="s5">&quot;british_chain_sears&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;British chain (Sears 1922 truncated)&quot;</span><span class="s4">: </span><span class="s5">&quot;british_chain_sears_truncated&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;British foot (Sears 1922)&quot;</span><span class="s4">: </span><span class="s5">&quot;british_ft&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;British foot&quot;</span><span class="s4">: </span><span class="s5">&quot;british_ft&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;British yard (Sears 1922)&quot;</span><span class="s4">: </span><span class="s5">&quot;british_yd&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;British yard&quot;</span><span class="s4">: </span><span class="s5">&quot;british_yd&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Clarke's Foot&quot;</span><span class="s4">: </span><span class="s5">&quot;clarke_ft&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Clarke's link&quot;</span><span class="s4">: </span><span class="s5">&quot;clarke_link&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Chain (Benoit)&quot;</span><span class="s4">: </span><span class="s5">&quot;chain_benoit&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Chain (Sears)&quot;</span><span class="s4">: </span><span class="s5">&quot;chain_sears&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Foot (International)&quot;</span><span class="s4">: </span><span class="s5">&quot;ft&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Furrow Long&quot;</span><span class="s4">: </span><span class="s5">&quot;furlong&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;German legal metre&quot;</span><span class="s4">: </span><span class="s5">&quot;german_m&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Gold Coast foot&quot;</span><span class="s4">: </span><span class="s5">&quot;gold_coast_ft&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Indian yard&quot;</span><span class="s4">: </span><span class="s5">&quot;indian_yd&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Link (Benoit)&quot;</span><span class="s4">: </span><span class="s5">&quot;link_benoit&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Link (Sears)&quot;</span><span class="s4">: </span><span class="s5">&quot;link_sears&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Nautical Mile&quot;</span><span class="s4">: </span><span class="s5">&quot;nm&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Nautical Mile (UK)&quot;</span><span class="s4">: </span><span class="s5">&quot;nm_uk&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;US survey foot&quot;</span><span class="s4">: </span><span class="s5">&quot;survey_ft&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;U.S. Foot&quot;</span><span class="s4">: </span><span class="s5">&quot;survey_ft&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Yard (Indian)&quot;</span><span class="s4">: </span><span class="s5">&quot;indian_yd&quot;</span><span class="s4">,</span>
+        <span class="s5">&quot;Yard (Sears)&quot;</span><span class="s4">: </span><span class="s5">&quot;sears_yd&quot;</span><span class="s4">,</span>
+    <span class="s4">}</span>
+    <span class="s1">LALIAS </span><span class="s4">= {</span><span class="s1">k</span><span class="s4">.</span><span class="s1">lower</span><span class="s4">(): </span><span class="s1">v </span><span class="s3">for </span><span class="s1">k</span><span class="s4">, </span><span class="s1">v </span><span class="s3">in </span><span class="s1">ALIAS</span><span class="s4">.</span><span class="s1">items</span><span class="s4">()}</span>
+
+    <span class="s3">def </span><span class="s1">__mul__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">):</span>
+            <span class="s3">return </span><span class="s1">Area</span><span class="s4">(</span>
+                <span class="s1">default_unit</span><span class="s4">=</span><span class="s1">AREA_PREFIX </span><span class="s4">+ </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_default_unit</span><span class="s4">,</span>
+                <span class="s4">**{</span><span class="s1">AREA_PREFIX </span><span class="s4">+ </span><span class="s1">self</span><span class="s4">.</span><span class="s1">STANDARD_UNIT</span><span class="s4">: (</span><span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">* </span><span class="s1">other</span><span class="s4">.</span><span class="s1">standard</span><span class="s4">)},</span>
+            <span class="s4">)</span>
+        <span class="s3">elif </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">NUMERIC_TYPES</span><span class="s4">):</span>
+            <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">(</span>
+                <span class="s1">default_unit</span><span class="s4">=</span><span class="s1">self</span><span class="s4">.</span><span class="s1">_default_unit</span><span class="s4">,</span>
+                <span class="s4">**{</span><span class="s1">self</span><span class="s4">.</span><span class="s1">STANDARD_UNIT</span><span class="s4">: (</span><span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">* </span><span class="s1">other</span><span class="s4">)},</span>
+            <span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span>
+                <span class="s5">&quot;%(distance)s must be multiplied with number or %(distance)s&quot;</span>
+                <span class="s4">% {</span>
+                    <span class="s5">&quot;distance&quot;</span><span class="s4">: </span><span class="s1">pretty_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">),</span>
+                <span class="s4">}</span>
+            <span class="s4">)</span>
+
+
+<span class="s3">class </span><span class="s1">Area</span><span class="s4">(</span><span class="s1">MeasureBase</span><span class="s4">):</span>
+    <span class="s1">STANDARD_UNIT </span><span class="s4">= </span><span class="s1">AREA_PREFIX </span><span class="s4">+ </span><span class="s1">Distance</span><span class="s4">.</span><span class="s1">STANDARD_UNIT</span>
+    <span class="s0"># Getting the square units values and the alias dictionary.</span>
+    <span class="s1">UNITS </span><span class="s4">= {</span><span class="s5">&quot;%s%s&quot; </span><span class="s4">% (</span><span class="s1">AREA_PREFIX</span><span class="s4">, </span><span class="s1">k</span><span class="s4">): </span><span class="s1">v</span><span class="s4">**</span><span class="s6">2 </span><span class="s3">for </span><span class="s1">k</span><span class="s4">, </span><span class="s1">v </span><span class="s3">in </span><span class="s1">Distance</span><span class="s4">.</span><span class="s1">UNITS</span><span class="s4">.</span><span class="s1">items</span><span class="s4">()}</span>
+    <span class="s1">ALIAS </span><span class="s4">= {</span><span class="s1">k</span><span class="s4">: </span><span class="s5">&quot;%s%s&quot; </span><span class="s4">% (</span><span class="s1">AREA_PREFIX</span><span class="s4">, </span><span class="s1">v</span><span class="s4">) </span><span class="s3">for </span><span class="s1">k</span><span class="s4">, </span><span class="s1">v </span><span class="s3">in </span><span class="s1">Distance</span><span class="s4">.</span><span class="s1">ALIAS</span><span class="s4">.</span><span class="s1">items</span><span class="s4">()}</span>
+    <span class="s1">LALIAS </span><span class="s4">= {</span><span class="s1">k</span><span class="s4">.</span><span class="s1">lower</span><span class="s4">(): </span><span class="s1">v </span><span class="s3">for </span><span class="s1">k</span><span class="s4">, </span><span class="s1">v </span><span class="s3">in </span><span class="s1">ALIAS</span><span class="s4">.</span><span class="s1">items</span><span class="s4">()}</span>
+
+    <span class="s3">def </span><span class="s1">__truediv__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">other</span><span class="s4">, </span><span class="s1">NUMERIC_TYPES</span><span class="s4">):</span>
+            <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">__class__</span><span class="s4">(</span>
+                <span class="s1">default_unit</span><span class="s4">=</span><span class="s1">self</span><span class="s4">.</span><span class="s1">_default_unit</span><span class="s4">,</span>
+                <span class="s4">**{</span><span class="s1">self</span><span class="s4">.</span><span class="s1">STANDARD_UNIT</span><span class="s4">: (</span><span class="s1">self</span><span class="s4">.</span><span class="s1">standard </span><span class="s4">/ </span><span class="s1">other</span><span class="s4">)},</span>
+            <span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">raise </span><span class="s1">TypeError</span><span class="s4">(</span>
+                <span class="s5">&quot;%(class)s must be divided by a number&quot; </span><span class="s4">% {</span><span class="s5">&quot;class&quot;</span><span class="s4">: </span><span class="s1">pretty_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)}</span>
+            <span class="s4">)</span>
+
+
+<span class="s0"># Shortcuts</span>
+<span class="s1">D </span><span class="s4">= </span><span class="s1">Distance</span>
+<span class="s1">A </span><span class="s4">= </span><span class="s1">Area</span>
+</pre>
+</body>
+</html>

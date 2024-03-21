@@ -1,0 +1,47 @@
+<html>
+<head>
+<title>features.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+features.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">base</span><span class="s2">.</span><span class="s1">features </span><span class="s0">import </span><span class="s1">BaseSpatialFeatures</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">sqlite3</span><span class="s2">.</span><span class="s1">features </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">DatabaseFeatures </span><span class="s0">as </span><span class="s1">SQLiteDatabaseFeatures</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">cached_property</span>
+
+
+<span class="s0">class </span><span class="s1">DatabaseFeatures</span><span class="s2">(</span><span class="s1">BaseSpatialFeatures</span><span class="s2">, </span><span class="s1">SQLiteDatabaseFeatures</span><span class="s2">):</span>
+    <span class="s1">can_alter_geometry_field </span><span class="s2">= </span><span class="s0">False  </span><span class="s3"># Not implemented</span>
+    <span class="s1">supports_3d_storage </span><span class="s2">= </span><span class="s0">True</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">supports_area_geodetic</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">bool</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">geom_lib_version</span><span class="s2">())</span>
+
+    <span class="s2">@</span><span class="s1">cached_property</span>
+    <span class="s0">def </span><span class="s1">django_test_skips</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">skips </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">django_test_skips</span>
+        <span class="s1">skips</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span>
+            <span class="s2">{</span>
+                <span class="s4">&quot;SpatiaLite doesn't support distance lookups with Distance objects.&quot;</span><span class="s2">: {</span>
+                    <span class="s4">&quot;gis_tests.geogapp.tests.GeographyTest.test02_distance_lookup&quot;</span><span class="s2">,</span>
+                <span class="s2">},</span>
+            <span class="s2">}</span>
+        <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">skips</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<html>
+<head>
+<title>flush.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+flush.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">importlib </span><span class="s0">import </span><span class="s1">import_module</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span><span class="s2">, </span><span class="s1">CommandError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">color </span><span class="s0">import </span><span class="s1">no_style</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">sql </span><span class="s0">import </span><span class="s1">emit_post_migrate_signal</span><span class="s2">, </span><span class="s1">sql_flush</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">, </span><span class="s1">connections</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= (</span>
+        <span class="s3">&quot;Removes ALL DATA from the database, including data added during &quot;</span>
+        <span class="s3">'migrations. Does not achieve a &quot;fresh install&quot; state.'</span>
+    <span class="s2">)</span>
+    <span class="s1">stealth_options </span><span class="s2">= (</span><span class="s3">&quot;reset_sequences&quot;</span><span class="s2">, </span><span class="s3">&quot;allow_cascade&quot;</span><span class="s2">, </span><span class="s3">&quot;inhibit_post_migrate&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--noinput&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--no-input&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_false&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;interactive&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Tells Django to NOT prompt the user for input of any kind.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--database&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">'Nominates a database to flush. Defaults to the &quot;default&quot; database.'</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">database </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;database&quot;</span><span class="s2">]</span>
+        <span class="s1">connection </span><span class="s2">= </span><span class="s1">connections</span><span class="s2">[</span><span class="s1">database</span><span class="s2">]</span>
+        <span class="s1">verbosity </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;verbosity&quot;</span><span class="s2">]</span>
+        <span class="s1">interactive </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;interactive&quot;</span><span class="s2">]</span>
+        <span class="s4"># The following are stealth options used by Django's internals.</span>
+        <span class="s1">reset_sequences </span><span class="s2">= </span><span class="s1">options</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;reset_sequences&quot;</span><span class="s2">, </span><span class="s0">True</span><span class="s2">)</span>
+        <span class="s1">allow_cascade </span><span class="s2">= </span><span class="s1">options</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;allow_cascade&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">)</span>
+        <span class="s1">inhibit_post_migrate </span><span class="s2">= </span><span class="s1">options</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;inhibit_post_migrate&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">)</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">style </span><span class="s2">= </span><span class="s1">no_style</span><span class="s2">()</span>
+
+        <span class="s4"># Import the 'management' module within each installed app, to register</span>
+        <span class="s4"># dispatcher events.</span>
+        <span class="s0">for </span><span class="s1">app_config </span><span class="s0">in </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_configs</span><span class="s2">():</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">import_module</span><span class="s2">(</span><span class="s3">&quot;.management&quot;</span><span class="s2">, </span><span class="s1">app_config</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">ImportError</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+
+        <span class="s1">sql_list </span><span class="s2">= </span><span class="s1">sql_flush</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">,</span>
+            <span class="s1">connection</span><span class="s2">,</span>
+            <span class="s1">reset_sequences</span><span class="s2">=</span><span class="s1">reset_sequences</span><span class="s2">,</span>
+            <span class="s1">allow_cascade</span><span class="s2">=</span><span class="s1">allow_cascade</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">interactive</span><span class="s2">:</span>
+            <span class="s1">confirm </span><span class="s2">= </span><span class="s1">input</span><span class="s2">(</span>
+                <span class="s3">&quot;&quot;&quot;You have requested a flush of the database. 
+This will IRREVERSIBLY DESTROY all data currently in the &quot;%s&quot; database, 
+and return each table to an empty state. 
+Are you sure you want to do this? 
+ 
+    Type 'yes' to continue, or 'no' to cancel: &quot;&quot;&quot;</span>
+                <span class="s2">% </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">settings_dict</span><span class="s2">[</span><span class="s3">&quot;NAME&quot;</span><span class="s2">]</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">confirm </span><span class="s2">= </span><span class="s3">&quot;yes&quot;</span>
+
+        <span class="s0">if </span><span class="s1">confirm </span><span class="s2">== </span><span class="s3">&quot;yes&quot;</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">execute_sql_flush</span><span class="s2">(</span><span class="s1">sql_list</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">exc</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                    <span class="s3">&quot;Database %s couldn't be flushed. Possible reasons:</span><span class="s0">\n</span><span class="s3">&quot;</span>
+                    <span class="s3">&quot;  * The database isn't running or isn't configured correctly.</span><span class="s0">\n</span><span class="s3">&quot;</span>
+                    <span class="s3">&quot;  * At least one of the expected database tables doesn't exist.</span><span class="s0">\n</span><span class="s3">&quot;</span>
+                    <span class="s3">&quot;  * The SQL was invalid.</span><span class="s0">\n</span><span class="s3">&quot;</span>
+                    <span class="s3">&quot;Hint: Look at the output of 'django-admin sqlflush'. &quot;</span>
+                    <span class="s3">&quot;That's the SQL this command wasn't able to run.&quot;</span>
+                    <span class="s2">% (</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">settings_dict</span><span class="s2">[</span><span class="s3">&quot;NAME&quot;</span><span class="s2">],)</span>
+                <span class="s2">) </span><span class="s0">from </span><span class="s1">exc</span>
+
+            <span class="s4"># Empty sql_list may signify an empty database and post_migrate</span>
+            <span class="s4"># would then crash.</span>
+            <span class="s0">if </span><span class="s1">sql_list </span><span class="s0">and not </span><span class="s1">inhibit_post_migrate</span><span class="s2">:</span>
+                <span class="s4"># Emit the post migrate signal. This allows individual applications to</span>
+                <span class="s4"># respond as if the database had been migrated from scratch.</span>
+                <span class="s1">emit_post_migrate_signal</span><span class="s2">(</span><span class="s1">verbosity</span><span class="s2">, </span><span class="s1">interactive</span><span class="s2">, </span><span class="s1">database</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot;Flush cancelled.&quot;</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

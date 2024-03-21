@@ -1,0 +1,111 @@
+<html>
+<head>
+<title>context_processors.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+context_processors.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+A set of request processors that return dictionaries to be merged into a 
+template context. Each function takes the request object as its only parameter 
+and returns a dictionary to add to the context. 
+ 
+These are referenced from the 'context_processors' option of the configuration 
+of a DjangoTemplates backend and used by RequestContext. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">itertools</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf </span><span class="s2">import </span><span class="s1">settings</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">middleware</span><span class="s3">.</span><span class="s1">csrf </span><span class="s2">import </span><span class="s1">get_token</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">functional </span><span class="s2">import </span><span class="s1">SimpleLazyObject</span><span class="s3">, </span><span class="s1">lazy</span>
+
+
+<span class="s2">def </span><span class="s1">csrf</span><span class="s3">(</span><span class="s1">request</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Context processor that provides a CSRF token, or the string 'NOTPROVIDED' if 
+    it has not been provided by either a view decorator or the middleware 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">_get_val</span><span class="s3">():</span>
+        <span class="s1">token </span><span class="s3">= </span><span class="s1">get_token</span><span class="s3">(</span><span class="s1">request</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">token </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s4"># In order to be able to provide debugging info in the</span>
+            <span class="s4"># case of misconfiguration, we use a sentinel value</span>
+            <span class="s4"># instead of returning an empty dict.</span>
+            <span class="s2">return </span><span class="s5">&quot;NOTPROVIDED&quot;</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">token</span>
+
+    <span class="s2">return </span><span class="s3">{</span><span class="s5">&quot;csrf_token&quot;</span><span class="s3">: </span><span class="s1">SimpleLazyObject</span><span class="s3">(</span><span class="s1">_get_val</span><span class="s3">)}</span>
+
+
+<span class="s2">def </span><span class="s1">debug</span><span class="s3">(</span><span class="s1">request</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Return context variables helpful for debugging. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">context_extras </span><span class="s3">= {}</span>
+    <span class="s2">if </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">DEBUG </span><span class="s2">and </span><span class="s1">request</span><span class="s3">.</span><span class="s1">META</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s5">&quot;REMOTE_ADDR&quot;</span><span class="s3">) </span><span class="s2">in </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">INTERNAL_IPS</span><span class="s3">:</span>
+        <span class="s1">context_extras</span><span class="s3">[</span><span class="s5">&quot;debug&quot;</span><span class="s3">] = </span><span class="s2">True</span>
+        <span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db </span><span class="s2">import </span><span class="s1">connections</span>
+
+        <span class="s4"># Return a lazy reference that computes connection.queries on access,</span>
+        <span class="s4"># to ensure it contains queries triggered after this function runs.</span>
+        <span class="s1">context_extras</span><span class="s3">[</span><span class="s5">&quot;sql_queries&quot;</span><span class="s3">] = </span><span class="s1">lazy</span><span class="s3">(</span>
+            <span class="s2">lambda</span><span class="s3">: </span><span class="s1">list</span><span class="s3">(</span>
+                <span class="s1">itertools</span><span class="s3">.</span><span class="s1">chain</span><span class="s3">.</span><span class="s1">from_iterable</span><span class="s3">(</span>
+                    <span class="s1">connections</span><span class="s3">[</span><span class="s1">x</span><span class="s3">].</span><span class="s1">queries </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">connections</span>
+                <span class="s3">)</span>
+            <span class="s3">),</span>
+            <span class="s1">list</span><span class="s3">,</span>
+        <span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">context_extras</span>
+
+
+<span class="s2">def </span><span class="s1">i18n</span><span class="s3">(</span><span class="s1">request</span><span class="s3">):</span>
+    <span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils </span><span class="s2">import </span><span class="s1">translation</span>
+
+    <span class="s2">return </span><span class="s3">{</span>
+        <span class="s5">&quot;LANGUAGES&quot;</span><span class="s3">: </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGES</span><span class="s3">,</span>
+        <span class="s5">&quot;LANGUAGE_CODE&quot;</span><span class="s3">: </span><span class="s1">translation</span><span class="s3">.</span><span class="s1">get_language</span><span class="s3">(),</span>
+        <span class="s5">&quot;LANGUAGE_BIDI&quot;</span><span class="s3">: </span><span class="s1">translation</span><span class="s3">.</span><span class="s1">get_language_bidi</span><span class="s3">(),</span>
+    <span class="s3">}</span>
+
+
+<span class="s2">def </span><span class="s1">tz</span><span class="s3">(</span><span class="s1">request</span><span class="s3">):</span>
+    <span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils </span><span class="s2">import </span><span class="s1">timezone</span>
+
+    <span class="s2">return </span><span class="s3">{</span><span class="s5">&quot;TIME_ZONE&quot;</span><span class="s3">: </span><span class="s1">timezone</span><span class="s3">.</span><span class="s1">get_current_timezone_name</span><span class="s3">()}</span>
+
+
+<span class="s2">def </span><span class="s1">static</span><span class="s3">(</span><span class="s1">request</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Add static-related context variables to the context. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s3">{</span><span class="s5">&quot;STATIC_URL&quot;</span><span class="s3">: </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">STATIC_URL</span><span class="s3">}</span>
+
+
+<span class="s2">def </span><span class="s1">media</span><span class="s3">(</span><span class="s1">request</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Add media-related context variables to the context. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s3">{</span><span class="s5">&quot;MEDIA_URL&quot;</span><span class="s3">: </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">MEDIA_URL</span><span class="s3">}</span>
+
+
+<span class="s2">def </span><span class="s1">request</span><span class="s3">(</span><span class="s1">request</span><span class="s3">):</span>
+    <span class="s2">return </span><span class="s3">{</span><span class="s5">&quot;request&quot;</span><span class="s3">: </span><span class="s1">request</span><span class="s3">}</span>
+</pre>
+</body>
+</html>

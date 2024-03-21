@@ -1,0 +1,96 @@
+<html>
+<head>
+<title>conversion.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+conversion.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+This module holds simple classes to convert geospatial values from the 
+database. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">decimal </span><span class="s2">import </span><span class="s1">Decimal</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">measure </span><span class="s2">import </span><span class="s1">Area</span><span class="s3">, </span><span class="s1">Distance</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db </span><span class="s2">import </span><span class="s1">models</span>
+
+
+<span class="s2">class </span><span class="s1">AreaField</span><span class="s3">(</span><span class="s1">models</span><span class="s3">.</span><span class="s1">FloatField</span><span class="s3">):</span>
+    <span class="s0">&quot;Wrapper for Area values.&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">geo_field</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">()</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">geo_field </span><span class="s3">= </span><span class="s1">geo_field</span>
+
+    <span class="s2">def </span><span class="s1">get_prep_value</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">value</span><span class="s3">):</span>
+        <span class="s2">if not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">Area</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span><span class="s4">&quot;AreaField only accepts Area measurement objects.&quot;</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">value</span>
+
+    <span class="s2">def </span><span class="s1">get_db_prep_value</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">connection</span><span class="s3">, </span><span class="s1">prepared</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">value </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s2">return</span>
+        <span class="s1">area_att </span><span class="s3">= </span><span class="s1">connection</span><span class="s3">.</span><span class="s1">ops</span><span class="s3">.</span><span class="s1">get_area_att_for_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">geo_field</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">area_att</span><span class="s3">) </span><span class="s2">if </span><span class="s1">area_att </span><span class="s2">else </span><span class="s1">value</span>
+
+    <span class="s2">def </span><span class="s1">from_db_value</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">expression</span><span class="s3">, </span><span class="s1">connection</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">value </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s2">return</span>
+        <span class="s5"># If the database returns a Decimal, convert it to a float as expected</span>
+        <span class="s5"># by the Python geometric objects.</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">Decimal</span><span class="s3">):</span>
+            <span class="s1">value </span><span class="s3">= </span><span class="s1">float</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+        <span class="s5"># If the units are known, convert value into area measure.</span>
+        <span class="s1">area_att </span><span class="s3">= </span><span class="s1">connection</span><span class="s3">.</span><span class="s1">ops</span><span class="s3">.</span><span class="s1">get_area_att_for_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">geo_field</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">Area</span><span class="s3">(**{</span><span class="s1">area_att</span><span class="s3">: </span><span class="s1">value</span><span class="s3">}) </span><span class="s2">if </span><span class="s1">area_att </span><span class="s2">else </span><span class="s1">value</span>
+
+    <span class="s2">def </span><span class="s1">get_internal_type</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s4">&quot;AreaField&quot;</span>
+
+
+<span class="s2">class </span><span class="s1">DistanceField</span><span class="s3">(</span><span class="s1">models</span><span class="s3">.</span><span class="s1">FloatField</span><span class="s3">):</span>
+    <span class="s0">&quot;Wrapper for Distance values.&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">geo_field</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">()</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">geo_field </span><span class="s3">= </span><span class="s1">geo_field</span>
+
+    <span class="s2">def </span><span class="s1">get_prep_value</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">value</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">Distance</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">value</span>
+        <span class="s2">return </span><span class="s1">super</span><span class="s3">().</span><span class="s1">get_prep_value</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_db_prep_value</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">connection</span><span class="s3">, </span><span class="s1">prepared</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+        <span class="s2">if not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">Distance</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">value</span>
+        <span class="s1">distance_att </span><span class="s3">= </span><span class="s1">connection</span><span class="s3">.</span><span class="s1">ops</span><span class="s3">.</span><span class="s1">get_distance_att_for_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">geo_field</span><span class="s3">)</span>
+        <span class="s2">if not </span><span class="s1">distance_att</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span>
+                <span class="s4">&quot;Distance measure is supplied, but units are unknown for result.&quot;</span>
+            <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">distance_att</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">from_db_value</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">expression</span><span class="s3">, </span><span class="s1">connection</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">value </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s2">return</span>
+        <span class="s1">distance_att </span><span class="s3">= </span><span class="s1">connection</span><span class="s3">.</span><span class="s1">ops</span><span class="s3">.</span><span class="s1">get_distance_att_for_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">geo_field</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">Distance</span><span class="s3">(**{</span><span class="s1">distance_att</span><span class="s3">: </span><span class="s1">value</span><span class="s3">}) </span><span class="s2">if </span><span class="s1">distance_att </span><span class="s2">else </span><span class="s1">value</span>
+
+    <span class="s2">def </span><span class="s1">get_internal_type</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s4">&quot;DistanceField&quot;</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,982 @@
+<html>
+<head>
+<title>keywords.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+keywords.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#</span>
+<span class="s0"># Copyright (C) 2009-2020 the sqlparse authors and contributors</span>
+<span class="s0"># &lt;see AUTHORS file&gt;</span>
+<span class="s0">#</span>
+<span class="s0"># This module is part of python-sqlparse and is released under</span>
+<span class="s0"># the BSD License: https://opensource.org/licenses/BSD-3-Clause</span>
+
+<span class="s2">from </span><span class="s1">sqlparse </span><span class="s2">import </span><span class="s1">tokens</span>
+
+<span class="s0"># object() only supports &quot;is&quot; and is useful as a marker</span>
+<span class="s0"># use this marker to specify that the given regex in SQL_REGEX</span>
+<span class="s0"># shall be processed further through a lookup in the KEYWORDS dictionaries</span>
+<span class="s1">PROCESS_AS_KEYWORD </span><span class="s3">= </span><span class="s1">object</span><span class="s3">()</span>
+
+
+<span class="s1">SQL_REGEX </span><span class="s3">= [</span>
+    <span class="s3">(</span><span class="s4">r'(--|# )\+.*?(\r\n|\r|\n|$)'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Comment</span><span class="s3">.</span><span class="s1">Single</span><span class="s3">.</span><span class="s1">Hint</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'/\*\+[\s\S]*?\*/'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Comment</span><span class="s3">.</span><span class="s1">Multiline</span><span class="s3">.</span><span class="s1">Hint</span><span class="s3">),</span>
+
+    <span class="s3">(</span><span class="s4">r'(--|# ).*?(\r\n|\r|\n|$)'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Comment</span><span class="s3">.</span><span class="s1">Single</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'/\*[\s\S]*?\*/'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Comment</span><span class="s3">.</span><span class="s1">Multiline</span><span class="s3">),</span>
+
+    <span class="s3">(</span><span class="s4">r'(\r\n|\r|\n)'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Newline</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'\s+?'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Whitespace</span><span class="s3">),</span>
+
+    <span class="s3">(</span><span class="s4">r':='</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Assignment</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'::'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Punctuation</span><span class="s3">),</span>
+
+    <span class="s3">(</span><span class="s4">r'\*'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Wildcard</span><span class="s3">),</span>
+
+    <span class="s3">(</span><span class="s4">r&quot;`(``|[^`])*`&quot;</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r&quot;´(´´|[^´])*´&quot;</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'((?&lt;!\S)\$(?:[_A-ZÀ-Ü]\w*)?\$)[\s\S]*?\1'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Literal</span><span class="s3">),</span>
+
+    <span class="s3">(</span><span class="s4">r'\?'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Placeholder</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'%(\(\w+\))?s'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Placeholder</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'(?&lt;!\w)[$:?]\w+'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Placeholder</span><span class="s3">),</span>
+
+    <span class="s3">(</span><span class="s4">r'\\\w+'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Command</span><span class="s3">),</span>
+
+    <span class="s0"># FIXME(andi): VALUES shouldn't be listed here</span>
+    <span class="s0"># see https://github.com/andialbrecht/sqlparse/pull/64</span>
+    <span class="s0"># AS and IN are special, it may be followed by a parenthesis, but</span>
+    <span class="s0"># are never functions, see issue183 and issue507</span>
+    <span class="s3">(</span><span class="s4">r'(CASE|IN|VALUES|USING|FROM|AS)\b'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">),</span>
+
+    <span class="s3">(</span><span class="s4">r'(@|##|#)[A-ZÀ-Ü]\w+'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">),</span>
+
+    <span class="s0"># see issue #39</span>
+    <span class="s0"># Spaces around period `schema . name` are valid identifier</span>
+    <span class="s0"># TODO: Spaces before period not implemented</span>
+    <span class="s3">(</span><span class="s4">r'[A-ZÀ-Ü]\w*(?=\s*\.)'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">),  </span><span class="s0"># 'Name'.</span>
+    <span class="s0"># FIXME(atronah): never match,</span>
+    <span class="s0"># because `re.match` doesn't work with look-behind regexp feature</span>
+    <span class="s3">(</span><span class="s4">r'(?&lt;=\.)[A-ZÀ-Ü]\w*'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">),  </span><span class="s0"># .'Name'</span>
+    <span class="s3">(</span><span class="s4">r'[A-ZÀ-Ü]\w*(?=\()'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">),  </span><span class="s0"># side effect: change kw to func</span>
+    <span class="s3">(</span><span class="s4">r'-?0x[\dA-F]+'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Number</span><span class="s3">.</span><span class="s1">Hexadecimal</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'-?\d+(\.\d+)?E-?\d+'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Number</span><span class="s3">.</span><span class="s1">Float</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'(?![_A-ZÀ-Ü])-?(\d+(\.\d*)|\.\d+)(?![_A-ZÀ-Ü])'</span><span class="s3">,</span>
+     <span class="s1">tokens</span><span class="s3">.</span><span class="s1">Number</span><span class="s3">.</span><span class="s1">Float</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'(?![_A-ZÀ-Ü])-?\d+(?![_A-ZÀ-Ü])'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Number</span><span class="s3">.</span><span class="s1">Integer</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r&quot;'(''|\\'|[^'])*'&quot;</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">String</span><span class="s3">.</span><span class="s1">Single</span><span class="s3">),</span>
+    <span class="s0"># not a real string literal in ANSI SQL:</span>
+    <span class="s3">(</span><span class="s4">r'&quot;(&quot;&quot;|\\&quot;|[^&quot;])*&quot;'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">String</span><span class="s3">.</span><span class="s1">Symbol</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'(&quot;&quot;|&quot;.*?[^\\]&quot;)'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">String</span><span class="s3">.</span><span class="s1">Symbol</span><span class="s3">),</span>
+    <span class="s0"># sqlite names can be escaped with [square brackets]. left bracket</span>
+    <span class="s0"># cannot be preceded by word character or a right bracket --</span>
+    <span class="s0"># otherwise it's probably an array index</span>
+    <span class="s3">(</span><span class="s4">r'(?&lt;![\w\])])(\[[^\]\[]+\])'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'((LEFT\s+|RIGHT\s+|FULL\s+)?(INNER\s+|OUTER\s+|STRAIGHT\s+)?'</span>
+     <span class="s4">r'|(CROSS\s+|NATURAL\s+)?)?JOIN\b'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'END(\s+IF|\s+LOOP|\s+WHILE)?\b'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'NOT\s+NULL\b'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'NULLS\s+(FIRST|LAST)\b'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'UNION\s+ALL\b'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'CREATE(\s+OR\s+REPLACE)?\b'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DDL</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'DOUBLE\s+PRECISION\b'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'GROUP\s+BY\b'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'ORDER\s+BY\b'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'HANDLER\s+FOR\b'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'(LATERAL\s+VIEW\s+)'</span>
+     <span class="s4">r'(EXPLODE|INLINE|PARSE_URL_TUPLE|POSEXPLODE|STACK)\b'</span><span class="s3">,</span>
+     <span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r&quot;(AT|WITH')\s+TIME\s+ZONE\s+'[^']+'&quot;</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">TZCast</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'(NOT\s+)?(LIKE|ILIKE|RLIKE)\b'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Operator</span><span class="s3">.</span><span class="s1">Comparison</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'(NOT\s+)?(REGEXP)\b'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Operator</span><span class="s3">.</span><span class="s1">Comparison</span><span class="s3">),</span>
+    <span class="s0"># Check for keywords, also returns tokens.Name if regex matches</span>
+    <span class="s0"># but the match isn't a keyword.</span>
+    <span class="s3">(</span><span class="s4">r'\w[$#\w]*'</span><span class="s3">, </span><span class="s1">PROCESS_AS_KEYWORD</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'[;:()\[\],\.]'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Punctuation</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'[&lt;&gt;=~!]+'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Operator</span><span class="s3">.</span><span class="s1">Comparison</span><span class="s3">),</span>
+    <span class="s3">(</span><span class="s4">r'[+/@#%^&amp;|^-]+'</span><span class="s3">, </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Operator</span><span class="s3">),</span>
+<span class="s3">]</span>
+
+<span class="s1">KEYWORDS </span><span class="s3">= {</span>
+    <span class="s4">'ABORT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ABS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ABSOLUTE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ACCESS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ADA'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ADD'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ADMIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'AFTER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'AGGREGATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ALIAS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ALL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ALLOCATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ANALYSE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ANALYZE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ANY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ARRAYLEN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ARE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ASC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">Order</span><span class="s3">,</span>
+    <span class="s4">'ASENSITIVE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ASSERTION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ASSIGNMENT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ASYMMETRIC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'AT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ATOMIC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'AUDIT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'AUTHORIZATION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'AUTO_INCREMENT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'AVG'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'BACKWARD'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BEFORE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BEGIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BETWEEN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BITVAR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BIT_LENGTH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BOTH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BREADTH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s0"># 'C': tokens.Keyword,  # most likely this is an alias</span>
+    <span class="s4">'CACHE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CALL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CALLED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CARDINALITY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CASCADE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CASCADED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CAST'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CATALOG'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CATALOG_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHAIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHARACTERISTICS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHARACTER_LENGTH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHARACTER_SET_CATALOG'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHARACTER_SET_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHARACTER_SET_SCHEMA'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHAR_LENGTH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHARSET'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHECK'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHECKED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHECKPOINT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CLASS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CLASS_ORIGIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CLOB'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CLOSE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CLUSTER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COALESCE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COBOL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COLLATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COLLATION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COLLATION_CATALOG'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COLLATION_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COLLATION_SCHEMA'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COLLECT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COLUMN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COLUMN_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COMPRESS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COMMAND_FUNCTION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COMMAND_FUNCTION_CODE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COMMENT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COMMIT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DML</span><span class="s3">,</span>
+    <span class="s4">'COMMITTED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COMPLETION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONCURRENTLY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONDITION_NUMBER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONNECT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONNECTION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONNECTION_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONSTRAINT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONSTRAINTS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONSTRAINT_CATALOG'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONSTRAINT_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONSTRAINT_SCHEMA'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONSTRUCTOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONTAINS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONTINUE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONVERSION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONVERT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COPY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CORRESPONDING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COUNT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CREATEDB'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CREATEUSER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CROSS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CUBE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CURRENT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CURRENT_DATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CURRENT_PATH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CURRENT_ROLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CURRENT_TIME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CURRENT_TIMESTAMP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CURRENT_USER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CURSOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CURSOR_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CYCLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'DATA'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DATABASE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DATETIME_INTERVAL_CODE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DATETIME_INTERVAL_PRECISION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DAY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DEALLOCATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DECLARE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DEFAULT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DEFAULTS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DEFERRABLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DEFERRED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DEFINED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DEFINER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DELIMITER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DELIMITERS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DEREF'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DESC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">Order</span><span class="s3">,</span>
+    <span class="s4">'DESCRIBE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DESCRIPTOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DESTROY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DESTRUCTOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DETERMINISTIC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DIAGNOSTICS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DICTIONARY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DISABLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DISCONNECT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DISPATCH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DIV'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Operator</span><span class="s3">,</span>
+    <span class="s4">'DO'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DOMAIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DYNAMIC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DYNAMIC_FUNCTION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DYNAMIC_FUNCTION_CODE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'EACH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ENABLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ENCODING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ENCRYPTED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'END-EXEC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ENGINE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EQUALS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ESCAPE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EVERY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXCEPT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXCEPTION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXCLUDING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXCLUSIVE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXEC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXECUTE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXISTING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXISTS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXPLAIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXTERNAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXTRACT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'FALSE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FETCH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FILE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FINAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FIRST'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FORCE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FOREACH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FOREIGN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FORTRAN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FORWARD'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FOUND'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FREE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FREEZE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FULL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FUNCTION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s0"># 'G': tokens.Keyword,</span>
+    <span class="s4">'GENERAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'GENERATED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'GET'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'GLOBAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'GO'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'GOTO'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'GRANT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'GRANTED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'GROUPING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'HAVING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'HIERARCHY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'HOLD'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'HOUR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'HOST'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'IDENTIFIED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'IDENTITY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'IGNORE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ILIKE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'IMMEDIATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'IMMUTABLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'IMPLEMENTATION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'IMPLICIT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INCLUDING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INCREMENT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INDEX'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'INDICATOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INFIX'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INHERITS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INITIAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INITIALIZE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INITIALLY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INOUT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INPUT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INSENSITIVE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INSTANTIABLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INSTEAD'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INTERSECT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INTO'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INVOKER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'IS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ISNULL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ISOLATION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ITERATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s0"># 'K': tokens.Keyword,</span>
+    <span class="s4">'KEY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'KEY_MEMBER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'KEY_TYPE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'LANCOMPILER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LANGUAGE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LARGE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LAST'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LATERAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LEADING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LENGTH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LESS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LEVEL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LIMIT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LISTEN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LOAD'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LOCAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LOCALTIME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LOCALTIMESTAMP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LOCATION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LOCATOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LOCK'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LOWER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s0"># 'M': tokens.Keyword,</span>
+    <span class="s4">'MAP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MATCH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAXEXTENTS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAXVALUE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MESSAGE_LENGTH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MESSAGE_OCTET_LENGTH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MESSAGE_TEXT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'METHOD'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MINUTE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MINUS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MINVALUE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MOD'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MODE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MODIFIES'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MODIFY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MONTH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MORE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MOVE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MUMPS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'NAMES'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NATIONAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NATURAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NCHAR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NCLOB'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NEW'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NEXT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NO'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOAUDIT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOCOMPRESS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOCREATEDB'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOCREATEUSER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NONE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOTFOUND'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOTHING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOTIFY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOTNULL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOWAIT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NULL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NULLABLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NULLIF'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'OBJECT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OCTET_LENGTH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OF'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OFF'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OFFLINE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OFFSET'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OIDS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OLD'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ONLINE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ONLY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OPEN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OPERATION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OPERATOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OPTION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OPTIONS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ORDINALITY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OUT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OUTPUT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OVERLAPS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OVERLAY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OVERRIDING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OWNER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'QUARTER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'PAD'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PARAMETER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PARAMETERS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PARAMETER_MODE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PARAMETER_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PARAMETER_ORDINAL_POSITION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PARAMETER_SPECIFIC_CATALOG'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PARAMETER_SPECIFIC_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PARAMETER_SPECIFIC_SCHEMA'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PARTIAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PASCAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PCTFREE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PENDANT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PLACING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PLI'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'POSITION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'POSTFIX'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PRECISION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PREFIX'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PREORDER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PREPARE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PRESERVE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PRIMARY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PRIOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PRIVILEGES'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PROCEDURAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PROCEDURE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PUBLIC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'RAISE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RAW'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'READ'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'READS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RECHECK'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RECURSIVE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'REF'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'REFERENCES'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'REFERENCING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'REINDEX'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RELATIVE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RENAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'REPEATABLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RESET'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RESOURCE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RESTART'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RESTRICT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RESULT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RETURN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RETURNED_LENGTH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RETURNED_OCTET_LENGTH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RETURNED_SQLSTATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RETURNING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RETURNS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'REVOKE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RIGHT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ROLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ROLLBACK'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DML</span><span class="s3">,</span>
+    <span class="s4">'ROLLUP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ROUTINE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ROUTINE_CATALOG'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ROUTINE_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ROUTINE_SCHEMA'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ROW'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ROWS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ROW_COUNT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RULE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'SAVE_POINT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SCALE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SCHEMA'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SCHEMA_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SCOPE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SCROLL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SEARCH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SECOND'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SECURITY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SELF'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SENSITIVE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SEQUENCE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SERIALIZABLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SERVER_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SESSION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SESSION_USER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SETOF'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SETS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SHARE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SHOW'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SIMILAR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SIMPLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SIZE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SOME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SOURCE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SPACE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SPECIFIC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SPECIFICTYPE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SPECIFIC_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SQL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SQLBUF'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SQLCODE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SQLERROR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SQLEXCEPTION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SQLSTATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SQLWARNING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STABLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'START'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DML</span><span class="s3">,</span>
+    <span class="s0"># 'STATE': tokens.Keyword,</span>
+    <span class="s4">'STATEMENT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STATIC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STATISTICS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STDIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STDOUT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STORAGE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STRICT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STRUCTURE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STYPE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SUBCLASS_ORIGIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SUBLIST'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SUBSTRING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SUCCESSFUL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SUM'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SYMMETRIC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SYNONYM'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SYSID'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SYSTEM'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SYSTEM_USER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'TABLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TABLE_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TEMP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TEMPLATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TEMPORARY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TERMINATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'THAN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TIMESTAMP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TIMEZONE_HOUR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TIMEZONE_MINUTE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TO'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TOAST'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRAILING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRANSATION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRANSACTIONS_COMMITTED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRANSACTIONS_ROLLED_BACK'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRANSATION_ACTIVE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRANSFORM'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRANSFORMS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRANSLATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRANSLATION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TREAT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRIGGER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRIGGER_CATALOG'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRIGGER_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRIGGER_SCHEMA'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRIM'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRUE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRUNCATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRUSTED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TYPE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'UID'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNCOMMITTED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNDER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNENCRYPTED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNIQUE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNKNOWN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNLISTEN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNNAMED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNNEST'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNTIL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UPPER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'USAGE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'USE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'USER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'USER_DEFINED_TYPE_CATALOG'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'USER_DEFINED_TYPE_NAME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'USER_DEFINED_TYPE_SCHEMA'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'USING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'VACUUM'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'VALID'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'VALIDATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'VALIDATOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'VALUES'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'VARIABLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'VERBOSE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'VERSION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'VIEW'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'VOLATILE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'WEEK'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'WHENEVER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'WITH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">CTE</span><span class="s3">,</span>
+    <span class="s4">'WITHOUT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'WORK'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'WRITE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'YEAR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'ZONE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s0"># Name.Builtin</span>
+    <span class="s4">'ARRAY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'BIGINT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'BINARY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'BIT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'BLOB'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'BOOLEAN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'CHAR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'CHARACTER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'DATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'DEC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'DECIMAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'FILE_TYPE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'FLOAT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'INT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'INT8'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'INTEGER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'INTERVAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'LONG'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'NATURALN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'NVARCHAR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'NUMBER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'NUMERIC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'PLS_INTEGER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'POSITIVE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'POSITIVEN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'REAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'ROWID'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'ROWLABEL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'ROWNUM'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'SERIAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'SERIAL8'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'SIGNED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'SIGNTYPE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'SIMPLE_DOUBLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'SIMPLE_FLOAT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'SIMPLE_INTEGER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'SMALLINT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'SYS_REFCURSOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'SYSDATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">,</span>
+    <span class="s4">'TEXT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'TINYINT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'UNSIGNED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'UROWID'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'UTL_FILE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'VARCHAR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'VARCHAR2'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'VARYING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+<span class="s3">}</span>
+
+<span class="s1">KEYWORDS_COMMON </span><span class="s3">= {</span>
+    <span class="s4">'SELECT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DML</span><span class="s3">,</span>
+    <span class="s4">'INSERT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DML</span><span class="s3">,</span>
+    <span class="s4">'DELETE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DML</span><span class="s3">,</span>
+    <span class="s4">'UPDATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DML</span><span class="s3">,</span>
+    <span class="s4">'UPSERT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DML</span><span class="s3">,</span>
+    <span class="s4">'REPLACE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DML</span><span class="s3">,</span>
+    <span class="s4">'MERGE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DML</span><span class="s3">,</span>
+    <span class="s4">'DROP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DDL</span><span class="s3">,</span>
+    <span class="s4">'CREATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DDL</span><span class="s3">,</span>
+    <span class="s4">'ALTER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">.</span><span class="s1">DDL</span><span class="s3">,</span>
+
+    <span class="s4">'WHERE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FROM'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INNER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'JOIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STRAIGHT_JOIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'AND'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LIKE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ON'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'IN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SET'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'BY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'GROUP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ORDER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LEFT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OUTER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FULL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'IF'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'END'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'THEN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LOOP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'AS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ELSE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'WHILE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'CASE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'WHEN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAX'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DISTINCT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+<span class="s3">}</span>
+
+<span class="s1">KEYWORDS_ORACLE </span><span class="s3">= {</span>
+    <span class="s4">'ARCHIVE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ARCHIVELOG'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'BACKUP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BECOME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BLOCK'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BODY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'CANCEL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHANGE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COMPILE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONTENTS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONTROLFILE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'DATAFILE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DBA'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DISMOUNT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DOUBLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DUMP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'ELSIF'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EVENTS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXCEPTIONS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXPLAIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXTENT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXTERNALLY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'FLUSH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FREELIST'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FREELISTS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s0"># groups seems too common as table name</span>
+    <span class="s0"># 'GROUPS': tokens.Keyword,</span>
+
+    <span class="s4">'INDICATOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INITRANS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INSTANCE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'LAYER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LINK'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LISTS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LOGFILE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'MANAGE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MANUAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAXDATAFILES'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAXINSTANCES'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAXLOGFILES'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAXLOGHISTORY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAXLOGMEMBERS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAXTRANS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MINEXTENTS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MODULE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MOUNT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'NOARCHIVELOG'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOCACHE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOCYCLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOMAXVALUE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOMINVALUE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOORDER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NORESETLOGS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NORMAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOSORT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'OPTIMAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OWN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'PACKAGE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PARALLEL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PCTINCREASE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PCTUSED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PLAN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PRIVATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PROFILE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'QUOTA'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'RECOVER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RESETLOGS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RESTRICTED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'REUSE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ROLES'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'SAVEPOINT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SCN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SECTION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SEGMENT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SHARED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SNAPSHOT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SORT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STATEMENT_ID'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STOP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SWITCH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'TABLES'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TABLESPACE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'THREAD'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TIME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRACING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRANSACTION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRIGGERS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'UNLIMITED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNLOCK'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+<span class="s3">}</span>
+
+<span class="s0"># PostgreSQL Syntax</span>
+<span class="s1">KEYWORDS_PLPGSQL </span><span class="s3">= {</span>
+    <span class="s4">'CONFLICT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'WINDOW'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PARTITION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OVER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PERFORM'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOTICE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PLPGSQL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INHERIT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INDEXES'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ON_ERROR_STOP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'BYTEA'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BIGSERIAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BIT VARYING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BOX'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHARACTER'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CHARACTER VARYING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CIDR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CIRCLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DOUBLE PRECISION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INET'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'JSON'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'JSONB'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LINE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LSEG'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MACADDR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MONEY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PATH'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PG_LSN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'POINT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'POLYGON'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SMALLSERIAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TSQUERY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TSVECTOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TXID_SNAPSHOT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UUID'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'XML'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'FOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'IN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LOOP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+<span class="s3">}</span>
+
+<span class="s0"># Hive Syntax</span>
+<span class="s1">KEYWORDS_HQL </span><span class="s3">= {</span>
+    <span class="s4">'EXPLODE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DIRECTORY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DISTRIBUTE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INCLUDE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LOCATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'OVERWRITE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'POSEXPLODE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'ARRAY_CONTAINS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CMP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'COLLECT_LIST'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONCAT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'CONDITION'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DATE_ADD'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DATE_SUB'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DECODE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'DBMS_OUTPUT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'ELEMENTS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXCHANGE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'EXTENDED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FLOOR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FOLLOWING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FROM_UNIXTIME'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'FTP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'HOUR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INLINE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'INSTR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LEN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'MAXELEMENT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAXINDEX'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAX_PART_DATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAX_PART_INT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MAX_PART_STRING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MINELEMENT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MININDEX'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MIN_PART_DATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MIN_PART_INT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'MIN_PART_STRING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NOW'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NVL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'NVL2'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PARSE_URL_TUPLE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PART_LOC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PART_COUNT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PART_COUNT_BY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PRINT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'PUT_LINE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RANGE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'REDUCE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'REGEXP_REPLACE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RESIGNAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'RTRIM'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SIGN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SIGNAL'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SPLIT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SQRT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STACK'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'STRING'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'STRUCT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'SUBSTR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'SUMMARY'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TBLPROPERTIES'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TIMESTAMP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Name</span><span class="s3">.</span><span class="s1">Builtin</span><span class="s3">,</span>
+    <span class="s4">'TIMESTAMP_ISO'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TO_CHAR'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TO_DATE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TO_TIMESTAMP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'TRUNC'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNBOUNDED'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNIQUEJOIN'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UNIX_TIMESTAMP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'UTC_TIMESTAMP'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'VIEWS'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+
+    <span class="s4">'EXIT'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'BREAK'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+    <span class="s4">'LEAVE'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+<span class="s3">}</span>
+
+
+<span class="s1">KEYWORDS_MSACCESS </span><span class="s3">= {</span>
+    <span class="s4">'DISTINCTROW'</span><span class="s3">: </span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">,</span>
+<span class="s3">}</span>
+</pre>
+</body>
+</html>

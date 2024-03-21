@@ -1,0 +1,256 @@
+<html>
+<head>
+<title>redis.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+redis.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Redis cache backend.&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">pickle</span>
+<span class="s2">import </span><span class="s1">random</span>
+<span class="s2">import </span><span class="s1">re</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">cache</span><span class="s3">.</span><span class="s1">backends</span><span class="s3">.</span><span class="s1">base </span><span class="s2">import </span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">BaseCache</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">functional </span><span class="s2">import </span><span class="s1">cached_property</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">module_loading </span><span class="s2">import </span><span class="s1">import_string</span>
+
+
+<span class="s2">class </span><span class="s1">RedisSerializer</span><span class="s3">:</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">protocol</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">protocol </span><span class="s3">= </span><span class="s1">pickle</span><span class="s3">.</span><span class="s1">HIGHEST_PROTOCOL </span><span class="s2">if </span><span class="s1">protocol </span><span class="s2">is None else </span><span class="s1">protocol</span>
+
+    <span class="s2">def </span><span class="s1">dumps</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">):</span>
+        <span class="s4"># Only skip pickling for integers, a int subclasses as bool should be</span>
+        <span class="s4"># pickled.</span>
+        <span class="s2">if </span><span class="s1">type</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">) </span><span class="s2">is </span><span class="s1">int</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">obj</span>
+        <span class="s2">return </span><span class="s1">pickle</span><span class="s3">.</span><span class="s1">dumps</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">protocol</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">loads</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">data</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">int</span><span class="s3">(</span><span class="s1">data</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">ValueError</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">pickle</span><span class="s3">.</span><span class="s1">loads</span><span class="s3">(</span><span class="s1">data</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">RedisCacheClient</span><span class="s3">:</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">servers</span><span class="s3">,</span>
+        <span class="s1">serializer</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">pool_class</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">parser_class</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s3">**</span><span class="s1">options</span><span class="s3">,</span>
+    <span class="s3">):</span>
+        <span class="s2">import </span><span class="s1">redis</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_lib </span><span class="s3">= </span><span class="s1">redis</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_servers </span><span class="s3">= </span><span class="s1">servers</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_pools </span><span class="s3">= {}</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_client </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_lib</span><span class="s3">.</span><span class="s1">Redis</span>
+
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">pool_class</span><span class="s3">, </span><span class="s1">str</span><span class="s3">):</span>
+            <span class="s1">pool_class </span><span class="s3">= </span><span class="s1">import_string</span><span class="s3">(</span><span class="s1">pool_class</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_pool_class </span><span class="s3">= </span><span class="s1">pool_class </span><span class="s2">or </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_lib</span><span class="s3">.</span><span class="s1">ConnectionPool</span>
+
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">serializer</span><span class="s3">, </span><span class="s1">str</span><span class="s3">):</span>
+            <span class="s1">serializer </span><span class="s3">= </span><span class="s1">import_string</span><span class="s3">(</span><span class="s1">serializer</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">callable</span><span class="s3">(</span><span class="s1">serializer</span><span class="s3">):</span>
+            <span class="s1">serializer </span><span class="s3">= </span><span class="s1">serializer</span><span class="s3">()</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_serializer </span><span class="s3">= </span><span class="s1">serializer </span><span class="s2">or </span><span class="s1">RedisSerializer</span><span class="s3">()</span>
+
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">parser_class</span><span class="s3">, </span><span class="s1">str</span><span class="s3">):</span>
+            <span class="s1">parser_class </span><span class="s3">= </span><span class="s1">import_string</span><span class="s3">(</span><span class="s1">parser_class</span><span class="s3">)</span>
+        <span class="s1">parser_class </span><span class="s3">= </span><span class="s1">parser_class </span><span class="s2">or </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_lib</span><span class="s3">.</span><span class="s1">connection</span><span class="s3">.</span><span class="s1">DefaultParser</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_pool_options </span><span class="s3">= {</span><span class="s5">&quot;parser_class&quot;</span><span class="s3">: </span><span class="s1">parser_class</span><span class="s3">, **</span><span class="s1">options</span><span class="s3">}</span>
+
+    <span class="s2">def </span><span class="s1">_get_connection_pool_index</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">write</span><span class="s3">):</span>
+        <span class="s4"># Write to the first server. Read from other servers if there are more,</span>
+        <span class="s4"># otherwise read from the first server.</span>
+        <span class="s2">if </span><span class="s1">write </span><span class="s2">or </span><span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_servers</span><span class="s3">) == </span><span class="s6">1</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s6">0</span>
+        <span class="s2">return </span><span class="s1">random</span><span class="s3">.</span><span class="s1">randint</span><span class="s3">(</span><span class="s6">1</span><span class="s3">, </span><span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_servers</span><span class="s3">) - </span><span class="s6">1</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_get_connection_pool</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">write</span><span class="s3">):</span>
+        <span class="s1">index </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_get_connection_pool_index</span><span class="s3">(</span><span class="s1">write</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">index </span><span class="s2">not in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_pools</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_pools</span><span class="s3">[</span><span class="s1">index</span><span class="s3">] = </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_pool_class</span><span class="s3">.</span><span class="s1">from_url</span><span class="s3">(</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">_servers</span><span class="s3">[</span><span class="s1">index</span><span class="s3">],</span>
+                <span class="s3">**</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_pool_options</span><span class="s3">,</span>
+            <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_pools</span><span class="s3">[</span><span class="s1">index</span><span class="s3">]</span>
+
+    <span class="s2">def </span><span class="s1">get_client</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, *, </span><span class="s1">write</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+        <span class="s4"># key is used so that the method signature remains the same and custom</span>
+        <span class="s4"># cache client can be implemented which might require the key to select</span>
+        <span class="s4"># the server, e.g. sharding.</span>
+        <span class="s1">pool </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_get_connection_pool</span><span class="s3">(</span><span class="s1">write</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_client</span><span class="s3">(</span><span class="s1">connection_pool</span><span class="s3">=</span><span class="s1">pool</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">add</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">):</span>
+        <span class="s1">client </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_client</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">write</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_serializer</span><span class="s3">.</span><span class="s1">dumps</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+        <span class="s2">if </span><span class="s1">timeout </span><span class="s3">== </span><span class="s6">0</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">ret </span><span class="s3">:= </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">client</span><span class="s3">.</span><span class="s1">set</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">nx</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)):</span>
+                <span class="s1">client</span><span class="s3">.</span><span class="s1">delete</span><span class="s3">(</span><span class="s1">key</span><span class="s3">)</span>
+            <span class="s2">return </span><span class="s1">ret</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">client</span><span class="s3">.</span><span class="s1">set</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">ex</span><span class="s3">=</span><span class="s1">timeout</span><span class="s3">, </span><span class="s1">nx</span><span class="s3">=</span><span class="s2">True</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">get</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">default</span><span class="s3">):</span>
+        <span class="s1">client </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_client</span><span class="s3">(</span><span class="s1">key</span><span class="s3">)</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">client</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">key</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">default </span><span class="s2">if </span><span class="s1">value </span><span class="s2">is None else </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_serializer</span><span class="s3">.</span><span class="s1">loads</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">set</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">):</span>
+        <span class="s1">client </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_client</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">write</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_serializer</span><span class="s3">.</span><span class="s1">dumps</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">timeout </span><span class="s3">== </span><span class="s6">0</span><span class="s3">:</span>
+            <span class="s1">client</span><span class="s3">.</span><span class="s1">delete</span><span class="s3">(</span><span class="s1">key</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">client</span><span class="s3">.</span><span class="s1">set</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">ex</span><span class="s3">=</span><span class="s1">timeout</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">touch</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">):</span>
+        <span class="s1">client </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_client</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">write</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">timeout </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">client</span><span class="s3">.</span><span class="s1">persist</span><span class="s3">(</span><span class="s1">key</span><span class="s3">))</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">client</span><span class="s3">.</span><span class="s1">expire</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">delete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">):</span>
+        <span class="s1">client </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_client</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">write</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">client</span><span class="s3">.</span><span class="s1">delete</span><span class="s3">(</span><span class="s1">key</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">get_many</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">keys</span><span class="s3">):</span>
+        <span class="s1">client </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_client</span><span class="s3">(</span><span class="s2">None</span><span class="s3">)</span>
+        <span class="s1">ret </span><span class="s3">= </span><span class="s1">client</span><span class="s3">.</span><span class="s1">mget</span><span class="s3">(</span><span class="s1">keys</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s3">{</span>
+            <span class="s1">k</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_serializer</span><span class="s3">.</span><span class="s1">loads</span><span class="s3">(</span><span class="s1">v</span><span class="s3">) </span><span class="s2">for </span><span class="s1">k</span><span class="s3">, </span><span class="s1">v </span><span class="s2">in </span><span class="s1">zip</span><span class="s3">(</span><span class="s1">keys</span><span class="s3">, </span><span class="s1">ret</span><span class="s3">) </span><span class="s2">if </span><span class="s1">v </span><span class="s2">is not None</span>
+        <span class="s3">}</span>
+
+    <span class="s2">def </span><span class="s1">has_key</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">):</span>
+        <span class="s1">client </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_client</span><span class="s3">(</span><span class="s1">key</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">client</span><span class="s3">.</span><span class="s1">exists</span><span class="s3">(</span><span class="s1">key</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">incr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">delta</span><span class="s3">):</span>
+        <span class="s1">client </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_client</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">write</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s2">if not </span><span class="s1">client</span><span class="s3">.</span><span class="s1">exists</span><span class="s3">(</span><span class="s1">key</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span><span class="s5">&quot;Key '%s' not found.&quot; </span><span class="s3">% </span><span class="s1">key</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">client</span><span class="s3">.</span><span class="s1">incr</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">delta</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">set_many</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">data</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">):</span>
+        <span class="s1">client </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_client</span><span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s1">write</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s1">pipeline </span><span class="s3">= </span><span class="s1">client</span><span class="s3">.</span><span class="s1">pipeline</span><span class="s3">()</span>
+        <span class="s1">pipeline</span><span class="s3">.</span><span class="s1">mset</span><span class="s3">({</span><span class="s1">k</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_serializer</span><span class="s3">.</span><span class="s1">dumps</span><span class="s3">(</span><span class="s1">v</span><span class="s3">) </span><span class="s2">for </span><span class="s1">k</span><span class="s3">, </span><span class="s1">v </span><span class="s2">in </span><span class="s1">data</span><span class="s3">.</span><span class="s1">items</span><span class="s3">()})</span>
+
+        <span class="s2">if </span><span class="s1">timeout </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s4"># Setting timeout for each key as redis does not support timeout</span>
+            <span class="s4"># with mset().</span>
+            <span class="s2">for </span><span class="s1">key </span><span class="s2">in </span><span class="s1">data</span><span class="s3">:</span>
+                <span class="s1">pipeline</span><span class="s3">.</span><span class="s1">expire</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">)</span>
+        <span class="s1">pipeline</span><span class="s3">.</span><span class="s1">execute</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">delete_many</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">keys</span><span class="s3">):</span>
+        <span class="s1">client </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_client</span><span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s1">write</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s1">client</span><span class="s3">.</span><span class="s1">delete</span><span class="s3">(*</span><span class="s1">keys</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">clear</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">client </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_client</span><span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s1">write</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">client</span><span class="s3">.</span><span class="s1">flushdb</span><span class="s3">())</span>
+
+
+<span class="s2">class </span><span class="s1">RedisCache</span><span class="s3">(</span><span class="s1">BaseCache</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">server</span><span class="s3">, </span><span class="s1">params</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">params</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">server</span><span class="s3">, </span><span class="s1">str</span><span class="s3">):</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_servers </span><span class="s3">= </span><span class="s1">re</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s5">&quot;[;,]&quot;</span><span class="s3">, </span><span class="s1">server</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_servers </span><span class="s3">= </span><span class="s1">server</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_class </span><span class="s3">= </span><span class="s1">RedisCacheClient</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_options </span><span class="s3">= </span><span class="s1">params</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s5">&quot;OPTIONS&quot;</span><span class="s3">, {})</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">_cache</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_class</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_servers</span><span class="s3">, **</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_options</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_backend_timeout</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">timeout </span><span class="s3">== </span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">:</span>
+            <span class="s1">timeout </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">default_timeout</span>
+        <span class="s4"># The key will be made persistent if None used as a timeout.</span>
+        <span class="s4"># Non-positive values will cause the key to be deleted.</span>
+        <span class="s2">return None if </span><span class="s1">timeout </span><span class="s2">is None else </span><span class="s1">max</span><span class="s3">(</span><span class="s6">0</span><span class="s3">, </span><span class="s1">int</span><span class="s3">(</span><span class="s1">timeout</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">add</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">add</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_backend_timeout</span><span class="s3">(</span><span class="s1">timeout</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">get</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">default</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">default</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">set</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">set</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_backend_timeout</span><span class="s3">(</span><span class="s1">timeout</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">touch</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">touch</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_backend_timeout</span><span class="s3">(</span><span class="s1">timeout</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">delete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">delete</span><span class="s3">(</span><span class="s1">key</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_many</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">keys</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key_map </span><span class="s3">= {</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">): </span><span class="s1">key </span><span class="s2">for </span><span class="s1">key </span><span class="s2">in </span><span class="s1">keys</span>
+        <span class="s3">}</span>
+        <span class="s1">ret </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">get_many</span><span class="s3">(</span><span class="s1">key_map</span><span class="s3">.</span><span class="s1">keys</span><span class="s3">())</span>
+        <span class="s2">return </span><span class="s3">{</span><span class="s1">key_map</span><span class="s3">[</span><span class="s1">k</span><span class="s3">]: </span><span class="s1">v </span><span class="s2">for </span><span class="s1">k</span><span class="s3">, </span><span class="s1">v </span><span class="s2">in </span><span class="s1">ret</span><span class="s3">.</span><span class="s1">items</span><span class="s3">()}</span>
+
+    <span class="s2">def </span><span class="s1">has_key</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">has_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">incr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">delta</span><span class="s3">=</span><span class="s6">1</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">incr</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">delta</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">set_many</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">data</span><span class="s3">, </span><span class="s1">timeout</span><span class="s3">=</span><span class="s1">DEFAULT_TIMEOUT</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s2">if not </span><span class="s1">data</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s3">[]</span>
+        <span class="s1">safe_data </span><span class="s3">= {}</span>
+        <span class="s2">for </span><span class="s1">key</span><span class="s3">, </span><span class="s1">value </span><span class="s2">in </span><span class="s1">data</span><span class="s3">.</span><span class="s1">items</span><span class="s3">():</span>
+            <span class="s1">key </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">)</span>
+            <span class="s1">safe_data</span><span class="s3">[</span><span class="s1">key</span><span class="s3">] = </span><span class="s1">value</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">set_many</span><span class="s3">(</span><span class="s1">safe_data</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_backend_timeout</span><span class="s3">(</span><span class="s1">timeout</span><span class="s3">))</span>
+        <span class="s2">return </span><span class="s3">[]</span>
+
+    <span class="s2">def </span><span class="s1">delete_many</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">keys</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s2">if not </span><span class="s1">keys</span><span class="s3">:</span>
+            <span class="s2">return</span>
+        <span class="s1">safe_keys </span><span class="s3">= [</span><span class="s1">self</span><span class="s3">.</span><span class="s1">make_and_validate_key</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">version</span><span class="s3">=</span><span class="s1">version</span><span class="s3">) </span><span class="s2">for </span><span class="s1">key </span><span class="s2">in </span><span class="s1">keys</span><span class="s3">]</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">delete_many</span><span class="s3">(</span><span class="s1">safe_keys</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">clear</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_cache</span><span class="s3">.</span><span class="s1">clear</span><span class="s3">()</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<html>
+<head>
+<title>creation.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+creation.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">sys</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">base</span><span class="s2">.</span><span class="s1">creation </span><span class="s0">import </span><span class="s1">BaseDatabaseCreation</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">postgresql</span><span class="s2">.</span><span class="s1">psycopg_any </span><span class="s0">import </span><span class="s1">errors</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">strip_quotes</span>
+
+
+<span class="s0">class </span><span class="s1">DatabaseCreation</span><span class="s2">(</span><span class="s1">BaseDatabaseCreation</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">_quote_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_get_database_create_suffix</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">encoding</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">template</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">suffix </span><span class="s2">= </span><span class="s3">&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">encoding</span><span class="s2">:</span>
+            <span class="s1">suffix </span><span class="s2">+= </span><span class="s3">&quot; ENCODING '{}'&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">encoding</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">template</span><span class="s2">:</span>
+            <span class="s1">suffix </span><span class="s2">+= </span><span class="s3">&quot; TEMPLATE {}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_quote_name</span><span class="s2">(</span><span class="s1">template</span><span class="s2">))</span>
+        <span class="s0">return </span><span class="s1">suffix </span><span class="s0">and </span><span class="s3">&quot;WITH&quot; </span><span class="s2">+ </span><span class="s1">suffix</span>
+
+    <span class="s0">def </span><span class="s1">sql_table_creation_suffix</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">test_settings </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">settings_dict</span><span class="s2">[</span><span class="s3">&quot;TEST&quot;</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">test_settings</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;COLLATION&quot;</span><span class="s2">) </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                <span class="s3">&quot;PostgreSQL does not support collation setting at database &quot;</span>
+                <span class="s3">&quot;creation time.&quot;</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_database_create_suffix</span><span class="s2">(</span>
+            <span class="s1">encoding</span><span class="s2">=</span><span class="s1">test_settings</span><span class="s2">[</span><span class="s3">&quot;CHARSET&quot;</span><span class="s2">],</span>
+            <span class="s1">template</span><span class="s2">=</span><span class="s1">test_settings</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;TEMPLATE&quot;</span><span class="s2">),</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_database_exists</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">cursor</span><span class="s2">, </span><span class="s1">database_name</span><span class="s2">):</span>
+        <span class="s1">cursor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+            <span class="s3">&quot;SELECT 1 FROM pg_catalog.pg_database WHERE datname = %s&quot;</span><span class="s2">,</span>
+            <span class="s2">[</span><span class="s1">strip_quotes</span><span class="s2">(</span><span class="s1">database_name</span><span class="s2">)],</span>
+        <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">cursor</span><span class="s2">.</span><span class="s1">fetchone</span><span class="s2">() </span><span class="s0">is not None</span>
+
+    <span class="s0">def </span><span class="s1">_execute_create_test_db</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">cursor</span><span class="s2">, </span><span class="s1">parameters</span><span class="s2">, </span><span class="s1">keepdb</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">keepdb </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_database_exists</span><span class="s2">(</span><span class="s1">cursor</span><span class="s2">, </span><span class="s1">parameters</span><span class="s2">[</span><span class="s3">&quot;dbname&quot;</span><span class="s2">]):</span>
+                <span class="s4"># If the database should be kept and it already exists, don't</span>
+                <span class="s4"># try to create a new one.</span>
+                <span class="s0">return</span>
+            <span class="s1">super</span><span class="s2">().</span><span class="s1">_execute_create_test_db</span><span class="s2">(</span><span class="s1">cursor</span><span class="s2">, </span><span class="s1">parameters</span><span class="s2">, </span><span class="s1">keepdb</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">e</span><span class="s2">.</span><span class="s1">__cause__</span><span class="s2">, </span><span class="s1">errors</span><span class="s2">.</span><span class="s1">DuplicateDatabase</span><span class="s2">):</span>
+                <span class="s4"># All errors except &quot;database already exists&quot; cancel tests.</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s3">&quot;Got an error creating the test database: %s&quot; </span><span class="s2">% </span><span class="s1">e</span><span class="s2">)</span>
+                <span class="s1">sys</span><span class="s2">.</span><span class="s1">exit</span><span class="s2">(</span><span class="s5">2</span><span class="s2">)</span>
+            <span class="s0">elif not </span><span class="s1">keepdb</span><span class="s2">:</span>
+                <span class="s4"># If the database should be kept, ignore &quot;database already</span>
+                <span class="s4"># exists&quot;.</span>
+                <span class="s0">raise</span>
+
+    <span class="s0">def </span><span class="s1">_clone_test_db</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">suffix</span><span class="s2">, </span><span class="s1">verbosity</span><span class="s2">, </span><span class="s1">keepdb</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s4"># CREATE DATABASE ... WITH TEMPLATE ... requires closing connections</span>
+        <span class="s4"># to the template database.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">close</span><span class="s2">()</span>
+
+        <span class="s1">source_database_name </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">settings_dict</span><span class="s2">[</span><span class="s3">&quot;NAME&quot;</span><span class="s2">]</span>
+        <span class="s1">target_database_name </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_test_db_clone_settings</span><span class="s2">(</span><span class="s1">suffix</span><span class="s2">)[</span><span class="s3">&quot;NAME&quot;</span><span class="s2">]</span>
+        <span class="s1">test_db_params </span><span class="s2">= {</span>
+            <span class="s3">&quot;dbname&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_quote_name</span><span class="s2">(</span><span class="s1">target_database_name</span><span class="s2">),</span>
+            <span class="s3">&quot;suffix&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_database_create_suffix</span><span class="s2">(</span><span class="s1">template</span><span class="s2">=</span><span class="s1">source_database_name</span><span class="s2">),</span>
+        <span class="s2">}</span>
+        <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_nodb_cursor</span><span class="s2">() </span><span class="s0">as </span><span class="s1">cursor</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">_execute_create_test_db</span><span class="s2">(</span><span class="s1">cursor</span><span class="s2">, </span><span class="s1">test_db_params</span><span class="s2">, </span><span class="s1">keepdb</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">Exception</span><span class="s2">:</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s0">if </span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s5">1</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span>
+                            <span class="s3">&quot;Destroying old test database for alias %s...&quot;</span>
+                            <span class="s2">% (</span>
+                                <span class="s1">self</span><span class="s2">.</span><span class="s1">_get_database_display_str</span><span class="s2">(</span>
+                                    <span class="s1">verbosity</span><span class="s2">, </span><span class="s1">target_database_name</span>
+                                <span class="s2">),</span>
+                            <span class="s2">)</span>
+                        <span class="s2">)</span>
+                    <span class="s1">cursor</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span><span class="s3">&quot;DROP DATABASE %(dbname)s&quot; </span><span class="s2">% </span><span class="s1">test_db_params</span><span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">_execute_create_test_db</span><span class="s2">(</span><span class="s1">cursor</span><span class="s2">, </span><span class="s1">test_db_params</span><span class="s2">, </span><span class="s1">keepdb</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s3">&quot;Got an error cloning the test database: %s&quot; </span><span class="s2">% </span><span class="s1">e</span><span class="s2">)</span>
+                    <span class="s1">sys</span><span class="s2">.</span><span class="s1">exit</span><span class="s2">(</span><span class="s5">2</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

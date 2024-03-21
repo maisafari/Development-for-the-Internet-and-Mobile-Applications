@@ -1,0 +1,103 @@
+<html>
+<head>
+<title>messages.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #2aacb8;}
+.s4 { color: #cf8e6d;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+messages.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># Levels</span>
+<span class="s1">DEBUG </span><span class="s2">= </span><span class="s3">10</span>
+<span class="s1">INFO </span><span class="s2">= </span><span class="s3">20</span>
+<span class="s1">WARNING </span><span class="s2">= </span><span class="s3">30</span>
+<span class="s1">ERROR </span><span class="s2">= </span><span class="s3">40</span>
+<span class="s1">CRITICAL </span><span class="s2">= </span><span class="s3">50</span>
+
+
+<span class="s4">class </span><span class="s1">CheckMessage</span><span class="s2">:</span>
+    <span class="s4">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">level</span><span class="s2">, </span><span class="s1">msg</span><span class="s2">, </span><span class="s1">hint</span><span class="s2">=</span><span class="s4">None</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s4">None</span><span class="s2">, </span><span class="s1">id</span><span class="s2">=</span><span class="s4">None</span><span class="s2">):</span>
+        <span class="s4">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">level</span><span class="s2">, </span><span class="s1">int</span><span class="s2">):</span>
+            <span class="s4">raise </span><span class="s1">TypeError</span><span class="s2">(</span><span class="s5">&quot;The first argument should be level.&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">level </span><span class="s2">= </span><span class="s1">level</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">msg </span><span class="s2">= </span><span class="s1">msg</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">hint </span><span class="s2">= </span><span class="s1">hint</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">obj </span><span class="s2">= </span><span class="s1">obj</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">id </span><span class="s2">= </span><span class="s1">id</span>
+
+    <span class="s4">def </span><span class="s1">__eq__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">other</span><span class="s2">):</span>
+        <span class="s4">return </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">other</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">) </span><span class="s4">and </span><span class="s1">all</span><span class="s2">(</span>
+            <span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">attr</span><span class="s2">) == </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">other</span><span class="s2">, </span><span class="s1">attr</span><span class="s2">)</span>
+            <span class="s4">for </span><span class="s1">attr </span><span class="s4">in </span><span class="s2">[</span><span class="s5">&quot;level&quot;</span><span class="s2">, </span><span class="s5">&quot;msg&quot;</span><span class="s2">, </span><span class="s5">&quot;hint&quot;</span><span class="s2">, </span><span class="s5">&quot;obj&quot;</span><span class="s2">, </span><span class="s5">&quot;id&quot;</span><span class="s2">]</span>
+        <span class="s2">)</span>
+
+    <span class="s4">def </span><span class="s1">__str__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s4">import </span><span class="s1">models</span>
+
+        <span class="s4">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">obj </span><span class="s4">is None</span><span class="s2">:</span>
+            <span class="s1">obj </span><span class="s2">= </span><span class="s5">&quot;?&quot;</span>
+        <span class="s4">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">base</span><span class="s2">.</span><span class="s1">ModelBase</span><span class="s2">):</span>
+            <span class="s0"># We need to hardcode ModelBase and Field cases because its __str__</span>
+            <span class="s0"># method doesn't return &quot;applabel.modellabel&quot; and cannot be changed.</span>
+            <span class="s1">obj </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">obj</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">label</span>
+        <span class="s4">else</span><span class="s2">:</span>
+            <span class="s1">obj </span><span class="s2">= </span><span class="s1">str</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">obj</span><span class="s2">)</span>
+        <span class="s1">id </span><span class="s2">= </span><span class="s5">&quot;(%s) &quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">id </span><span class="s4">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">id </span><span class="s4">else </span><span class="s5">&quot;&quot;</span>
+        <span class="s1">hint </span><span class="s2">= </span><span class="s5">&quot;</span><span class="s4">\n\t</span><span class="s5">HINT: %s&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">hint </span><span class="s4">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">hint </span><span class="s4">else </span><span class="s5">&quot;&quot;</span>
+        <span class="s4">return </span><span class="s5">&quot;%s: %s%s%s&quot; </span><span class="s2">% (</span><span class="s1">obj</span><span class="s2">, </span><span class="s1">id</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">msg</span><span class="s2">, </span><span class="s1">hint</span><span class="s2">)</span>
+
+    <span class="s4">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">return </span><span class="s5">&quot;&lt;%s: level=%r, msg=%r, hint=%r, obj=%r, id=%r&gt;&quot; </span><span class="s2">% (</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">level</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">msg</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">hint</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">obj</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">id</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s4">def </span><span class="s1">is_serious</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">level</span><span class="s2">=</span><span class="s1">ERROR</span><span class="s2">):</span>
+        <span class="s4">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">level </span><span class="s2">&gt;= </span><span class="s1">level</span>
+
+    <span class="s4">def </span><span class="s1">is_silenced</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s4">import </span><span class="s1">settings</span>
+
+        <span class="s4">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">id </span><span class="s4">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SILENCED_SYSTEM_CHECKS</span>
+
+
+<span class="s4">class </span><span class="s1">Debug</span><span class="s2">(</span><span class="s1">CheckMessage</span><span class="s2">):</span>
+    <span class="s4">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">DEBUG</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+
+<span class="s4">class </span><span class="s1">Info</span><span class="s2">(</span><span class="s1">CheckMessage</span><span class="s2">):</span>
+    <span class="s4">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">INFO</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+
+<span class="s4">class </span><span class="s1">Warning</span><span class="s2">(</span><span class="s1">CheckMessage</span><span class="s2">):</span>
+    <span class="s4">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">WARNING</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+
+<span class="s4">class </span><span class="s1">Error</span><span class="s2">(</span><span class="s1">CheckMessage</span><span class="s2">):</span>
+    <span class="s4">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">ERROR</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+
+<span class="s4">class </span><span class="s1">Critical</span><span class="s2">(</span><span class="s1">CheckMessage</span><span class="s2">):</span>
+    <span class="s4">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">CRITICAL</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

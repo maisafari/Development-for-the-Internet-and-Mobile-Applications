@@ -1,0 +1,201 @@
+<html>
+<head>
+<title>common.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+common.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">re</span>
+<span class="s0">from </span><span class="s1">urllib</span><span class="s2">.</span><span class="s1">parse </span><span class="s0">import </span><span class="s1">urlparse</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">PermissionDenied</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">mail </span><span class="s0">import </span><span class="s1">mail_managers</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">HttpResponsePermanentRedirect</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">urls </span><span class="s0">import </span><span class="s1">is_valid_path</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">deprecation </span><span class="s0">import </span><span class="s1">MiddlewareMixin</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">escape_leading_slashes</span>
+
+
+<span class="s0">class </span><span class="s1">CommonMiddleware</span><span class="s2">(</span><span class="s1">MiddlewareMixin</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    &quot;Common&quot; middleware for taking care of some basic operations: 
+ 
+        - Forbid access to User-Agents in settings.DISALLOWED_USER_AGENTS 
+ 
+        - URL rewriting: Based on the APPEND_SLASH and PREPEND_WWW settings, 
+          append missing slashes and/or prepends missing &quot;www.&quot;s. 
+ 
+            - If APPEND_SLASH is set and the initial URL doesn't end with a 
+              slash, and it is not found in urlpatterns, form a new URL by 
+              appending a slash at the end. If this new URL is found in 
+              urlpatterns, return an HTTP redirect to this new URL; otherwise 
+              process the initial URL as usual. 
+ 
+          This behavior can be customized by subclassing CommonMiddleware and 
+          overriding the response_redirect_class attribute. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">response_redirect_class </span><span class="s2">= </span><span class="s1">HttpResponsePermanentRedirect</span>
+
+    <span class="s0">def </span><span class="s1">process_request</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Check for denied User-Agents and rewrite the URL based on 
+        settings.APPEND_SLASH and settings.PREPEND_WWW 
+        &quot;&quot;&quot;</span>
+
+        <span class="s4"># Check for denied User-Agents</span>
+        <span class="s1">user_agent </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">META</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;HTTP_USER_AGENT&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">user_agent </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">for </span><span class="s1">user_agent_regex </span><span class="s0">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DISALLOWED_USER_AGENTS</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">user_agent_regex</span><span class="s2">.</span><span class="s1">search</span><span class="s2">(</span><span class="s1">user_agent</span><span class="s2">):</span>
+                    <span class="s0">raise </span><span class="s1">PermissionDenied</span><span class="s2">(</span><span class="s5">&quot;Forbidden user agent&quot;</span><span class="s2">)</span>
+
+        <span class="s4"># Check for a redirect based on settings.PREPEND_WWW</span>
+        <span class="s1">host </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">get_host</span><span class="s2">()</span>
+
+        <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">PREPEND_WWW </span><span class="s0">and </span><span class="s1">host </span><span class="s0">and not </span><span class="s1">host</span><span class="s2">.</span><span class="s1">startswith</span><span class="s2">(</span><span class="s5">&quot;www.&quot;</span><span class="s2">):</span>
+            <span class="s4"># Check if we also need to append a slash so we can do it all</span>
+            <span class="s4"># with a single redirect. (This check may be somewhat expensive,</span>
+            <span class="s4"># so we only do it if we already know we're sending a redirect,</span>
+            <span class="s4"># or in process_response if we get a 404.)</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">should_redirect_with_slash</span><span class="s2">(</span><span class="s1">request</span><span class="s2">):</span>
+                <span class="s1">path </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_full_path_with_slash</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">path </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">get_full_path</span><span class="s2">()</span>
+
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">response_redirect_class</span><span class="s2">(</span><span class="s5">f&quot;</span><span class="s0">{</span><span class="s1">request</span><span class="s2">.</span><span class="s1">scheme</span><span class="s0">}</span><span class="s5">://www.</span><span class="s0">{</span><span class="s1">host</span><span class="s0">}{</span><span class="s1">path</span><span class="s0">}</span><span class="s5">&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">should_redirect_with_slash</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return True if settings.APPEND_SLASH is True and appending a slash to 
+        the request path turns an invalid path into a valid one. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">APPEND_SLASH </span><span class="s0">and not </span><span class="s1">request</span><span class="s2">.</span><span class="s1">path_info</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s5">&quot;/&quot;</span><span class="s2">):</span>
+            <span class="s1">urlconf </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s5">&quot;urlconf&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">is_valid_path</span><span class="s2">(</span><span class="s1">request</span><span class="s2">.</span><span class="s1">path_info</span><span class="s2">, </span><span class="s1">urlconf</span><span class="s2">):</span>
+                <span class="s1">match </span><span class="s2">= </span><span class="s1">is_valid_path</span><span class="s2">(</span><span class="s5">&quot;%s/&quot; </span><span class="s2">% </span><span class="s1">request</span><span class="s2">.</span><span class="s1">path_info</span><span class="s2">, </span><span class="s1">urlconf</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">match</span><span class="s2">:</span>
+                    <span class="s1">view </span><span class="s2">= </span><span class="s1">match</span><span class="s2">.</span><span class="s1">func</span>
+                    <span class="s0">return </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">view</span><span class="s2">, </span><span class="s5">&quot;should_append_slash&quot;</span><span class="s2">, </span><span class="s0">True</span><span class="s2">)</span>
+        <span class="s0">return False</span>
+
+    <span class="s0">def </span><span class="s1">get_full_path_with_slash</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the full path of the request with a trailing slash appended. 
+ 
+        Raise a RuntimeError if settings.DEBUG is True and request.method is 
+        POST, PUT, or PATCH. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">new_path </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">get_full_path</span><span class="s2">(</span><span class="s1">force_append_slash</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+        <span class="s4"># Prevent construction of scheme relative urls.</span>
+        <span class="s1">new_path </span><span class="s2">= </span><span class="s1">escape_leading_slashes</span><span class="s2">(</span><span class="s1">new_path</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DEBUG </span><span class="s0">and </span><span class="s1">request</span><span class="s2">.</span><span class="s1">method </span><span class="s0">in </span><span class="s2">(</span><span class="s5">&quot;POST&quot;</span><span class="s2">, </span><span class="s5">&quot;PUT&quot;</span><span class="s2">, </span><span class="s5">&quot;PATCH&quot;</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">RuntimeError</span><span class="s2">(</span>
+                <span class="s5">&quot;You called this URL via %(method)s, but the URL doesn't end &quot;</span>
+                <span class="s5">&quot;in a slash and you have APPEND_SLASH set. Django can't &quot;</span>
+                <span class="s5">&quot;redirect to the slash URL while maintaining %(method)s data. &quot;</span>
+                <span class="s5">&quot;Change your form to point to %(url)s (note the trailing &quot;</span>
+                <span class="s5">&quot;slash), or set APPEND_SLASH=False in your Django settings.&quot;</span>
+                <span class="s2">% {</span>
+                    <span class="s5">&quot;method&quot;</span><span class="s2">: </span><span class="s1">request</span><span class="s2">.</span><span class="s1">method</span><span class="s2">,</span>
+                    <span class="s5">&quot;url&quot;</span><span class="s2">: </span><span class="s1">request</span><span class="s2">.</span><span class="s1">get_host</span><span class="s2">() + </span><span class="s1">new_path</span><span class="s2">,</span>
+                <span class="s2">}</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">new_path</span>
+
+    <span class="s0">def </span><span class="s1">process_response</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">response</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        When the status code of the response is 404, it may redirect to a path 
+        with an appended slash if should_redirect_with_slash() returns True. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># If the given URL is &quot;Not Found&quot;, then check if we should redirect to</span>
+        <span class="s4"># a path with a slash appended.</span>
+        <span class="s0">if </span><span class="s1">response</span><span class="s2">.</span><span class="s1">status_code </span><span class="s2">== </span><span class="s6">404 </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">should_redirect_with_slash</span><span class="s2">(</span><span class="s1">request</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">response_redirect_class</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_full_path_with_slash</span><span class="s2">(</span><span class="s1">request</span><span class="s2">))</span>
+
+        <span class="s4"># Add the Content-Length header to non-streaming responses if not</span>
+        <span class="s4"># already set.</span>
+        <span class="s0">if not </span><span class="s1">response</span><span class="s2">.</span><span class="s1">streaming </span><span class="s0">and not </span><span class="s1">response</span><span class="s2">.</span><span class="s1">has_header</span><span class="s2">(</span><span class="s5">&quot;Content-Length&quot;</span><span class="s2">):</span>
+            <span class="s1">response</span><span class="s2">.</span><span class="s1">headers</span><span class="s2">[</span><span class="s5">&quot;Content-Length&quot;</span><span class="s2">] = </span><span class="s1">str</span><span class="s2">(</span><span class="s1">len</span><span class="s2">(</span><span class="s1">response</span><span class="s2">.</span><span class="s1">content</span><span class="s2">))</span>
+
+        <span class="s0">return </span><span class="s1">response</span>
+
+
+<span class="s0">class </span><span class="s1">BrokenLinkEmailsMiddleware</span><span class="s2">(</span><span class="s1">MiddlewareMixin</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">process_response</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">response</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Send broken link emails for relevant 404 NOT FOUND responses.&quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">response</span><span class="s2">.</span><span class="s1">status_code </span><span class="s2">== </span><span class="s6">404 </span><span class="s0">and not </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DEBUG</span><span class="s2">:</span>
+            <span class="s1">domain </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">get_host</span><span class="s2">()</span>
+            <span class="s1">path </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">get_full_path</span><span class="s2">()</span>
+            <span class="s1">referer </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">META</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;HTTP_REFERER&quot;</span><span class="s2">, </span><span class="s5">&quot;&quot;</span><span class="s2">)</span>
+
+            <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_ignorable_request</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">domain</span><span class="s2">, </span><span class="s1">referer</span><span class="s2">):</span>
+                <span class="s1">ua </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">META</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;HTTP_USER_AGENT&quot;</span><span class="s2">, </span><span class="s5">&quot;&lt;none&gt;&quot;</span><span class="s2">)</span>
+                <span class="s1">ip </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">META</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;REMOTE_ADDR&quot;</span><span class="s2">, </span><span class="s5">&quot;&lt;none&gt;&quot;</span><span class="s2">)</span>
+                <span class="s1">mail_managers</span><span class="s2">(</span>
+                    <span class="s5">&quot;Broken %slink on %s&quot;</span>
+                    <span class="s2">% (</span>
+                        <span class="s2">(</span>
+                            <span class="s5">&quot;INTERNAL &quot;</span>
+                            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_internal_request</span><span class="s2">(</span><span class="s1">domain</span><span class="s2">, </span><span class="s1">referer</span><span class="s2">)</span>
+                            <span class="s0">else </span><span class="s5">&quot;&quot;</span>
+                        <span class="s2">),</span>
+                        <span class="s1">domain</span><span class="s2">,</span>
+                    <span class="s2">),</span>
+                    <span class="s5">&quot;Referrer: %s</span><span class="s0">\n</span><span class="s5">Requested URL: %s</span><span class="s0">\n</span><span class="s5">User agent: %s</span><span class="s0">\n</span><span class="s5">&quot;</span>
+                    <span class="s5">&quot;IP address: %s</span><span class="s0">\n</span><span class="s5">&quot; </span><span class="s2">% (</span><span class="s1">referer</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">ua</span><span class="s2">, </span><span class="s1">ip</span><span class="s2">),</span>
+                    <span class="s1">fail_silently</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+                <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">response</span>
+
+    <span class="s0">def </span><span class="s1">is_internal_request</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">domain</span><span class="s2">, </span><span class="s1">referer</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return True if the referring URL is the same domain as the current 
+        request. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># Different subdomains are treated as different domains.</span>
+        <span class="s0">return </span><span class="s1">bool</span><span class="s2">(</span><span class="s1">re</span><span class="s2">.</span><span class="s1">match</span><span class="s2">(</span><span class="s5">&quot;^https?://%s/&quot; </span><span class="s2">% </span><span class="s1">re</span><span class="s2">.</span><span class="s1">escape</span><span class="s2">(</span><span class="s1">domain</span><span class="s2">), </span><span class="s1">referer</span><span class="s2">))</span>
+
+    <span class="s0">def </span><span class="s1">is_ignorable_request</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">uri</span><span class="s2">, </span><span class="s1">domain</span><span class="s2">, </span><span class="s1">referer</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return True if the given request *shouldn't* notify the site managers 
+        according to project settings or in situations outlined by the inline 
+        comments. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># The referer is empty.</span>
+        <span class="s0">if not </span><span class="s1">referer</span><span class="s2">:</span>
+            <span class="s0">return True</span>
+
+        <span class="s4"># APPEND_SLASH is enabled and the referer is equal to the current URL</span>
+        <span class="s4"># without a trailing slash indicating an internal redirect.</span>
+        <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">APPEND_SLASH </span><span class="s0">and </span><span class="s1">uri</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s5">&quot;/&quot;</span><span class="s2">) </span><span class="s0">and </span><span class="s1">referer </span><span class="s2">== </span><span class="s1">uri</span><span class="s2">[:-</span><span class="s6">1</span><span class="s2">]:</span>
+            <span class="s0">return True</span>
+
+        <span class="s4"># A '?' in referer is identified as a search engine source.</span>
+        <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_internal_request</span><span class="s2">(</span><span class="s1">domain</span><span class="s2">, </span><span class="s1">referer</span><span class="s2">) </span><span class="s0">and </span><span class="s5">&quot;?&quot; </span><span class="s0">in </span><span class="s1">referer</span><span class="s2">:</span>
+            <span class="s0">return True</span>
+
+        <span class="s4"># The referer is equal to the current URL, ignoring the scheme (assumed</span>
+        <span class="s4"># to be a poorly implemented bot).</span>
+        <span class="s1">parsed_referer </span><span class="s2">= </span><span class="s1">urlparse</span><span class="s2">(</span><span class="s1">referer</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">parsed_referer</span><span class="s2">.</span><span class="s1">netloc </span><span class="s0">in </span><span class="s2">[</span><span class="s5">&quot;&quot;</span><span class="s2">, </span><span class="s1">domain</span><span class="s2">] </span><span class="s0">and </span><span class="s1">parsed_referer</span><span class="s2">.</span><span class="s1">path </span><span class="s2">== </span><span class="s1">uri</span><span class="s2">:</span>
+            <span class="s0">return True</span>
+
+        <span class="s0">return </span><span class="s1">any</span><span class="s2">(</span><span class="s1">pattern</span><span class="s2">.</span><span class="s1">search</span><span class="s2">(</span><span class="s1">uri</span><span class="s2">) </span><span class="s0">for </span><span class="s1">pattern </span><span class="s0">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">IGNORABLE_404_URLS</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

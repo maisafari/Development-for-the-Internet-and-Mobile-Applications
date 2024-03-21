@@ -1,0 +1,34 @@
+<html>
+<head>
+<title>sitemaps.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+sitemaps.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps </span><span class="s0">as </span><span class="s1">django_apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">sitemaps </span><span class="s0">import </span><span class="s1">Sitemap</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span>
+
+
+<span class="s0">class </span><span class="s1">FlatPageSitemap</span><span class="s2">(</span><span class="s1">Sitemap</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">items</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">django_apps</span><span class="s2">.</span><span class="s1">is_installed</span><span class="s2">(</span><span class="s3">&quot;django.contrib.sites&quot;</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                <span class="s3">&quot;FlatPageSitemap requires django.contrib.sites, which isn't installed.&quot;</span>
+            <span class="s2">)</span>
+        <span class="s1">Site </span><span class="s2">= </span><span class="s1">django_apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s3">&quot;sites.Site&quot;</span><span class="s2">)</span>
+        <span class="s1">current_site </span><span class="s2">= </span><span class="s1">Site</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">get_current</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">current_site</span><span class="s2">.</span><span class="s1">flatpage_set</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">registration_required</span><span class="s2">=</span><span class="s0">False</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,663 @@
+<html>
+<head>
+<title>trans_real.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+trans_real.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Translation helper functions.&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">functools</span>
+<span class="s2">import </span><span class="s1">gettext </span><span class="s2">as </span><span class="s1">gettext_module</span>
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">import </span><span class="s1">re</span>
+<span class="s2">import </span><span class="s1">sys</span>
+<span class="s2">import </span><span class="s1">warnings</span>
+
+<span class="s2">from </span><span class="s1">asgiref</span><span class="s3">.</span><span class="s1">local </span><span class="s2">import </span><span class="s1">Local</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">apps </span><span class="s2">import </span><span class="s1">apps</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf </span><span class="s2">import </span><span class="s1">settings</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf</span><span class="s3">.</span><span class="s1">locale </span><span class="s2">import </span><span class="s1">LANG_INFO</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">exceptions </span><span class="s2">import </span><span class="s1">AppRegistryNotReady</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">signals </span><span class="s2">import </span><span class="s1">setting_changed</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">dispatch </span><span class="s2">import </span><span class="s1">receiver</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">regex_helper </span><span class="s2">import </span><span class="s1">_lazy_re_compile</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">safestring </span><span class="s2">import </span><span class="s1">SafeData</span><span class="s3">, </span><span class="s1">mark_safe</span>
+
+<span class="s2">from </span><span class="s3">. </span><span class="s2">import </span><span class="s1">to_language</span><span class="s3">, </span><span class="s1">to_locale</span>
+
+<span class="s4"># Translations are cached in a dictionary for every language.</span>
+<span class="s4"># The active translations are stored by threadid to make them thread local.</span>
+<span class="s1">_translations </span><span class="s3">= {}</span>
+<span class="s1">_active </span><span class="s3">= </span><span class="s1">Local</span><span class="s3">()</span>
+
+<span class="s4"># The default translation is based on the settings file.</span>
+<span class="s1">_default </span><span class="s3">= </span><span class="s2">None</span>
+
+<span class="s4"># magic gettext number to separate context from message</span>
+<span class="s1">CONTEXT_SEPARATOR </span><span class="s3">= </span><span class="s5">&quot;</span><span class="s2">\x04</span><span class="s5">&quot;</span>
+
+<span class="s4"># Maximum number of characters that will be parsed from the Accept-Language</span>
+<span class="s4"># header to prevent possible denial of service or memory exhaustion attacks.</span>
+<span class="s4"># About 10x longer than the longest value shown on MDN’s Accept-Language page.</span>
+<span class="s1">ACCEPT_LANGUAGE_HEADER_MAX_LENGTH </span><span class="s3">= </span><span class="s6">500</span>
+
+<span class="s4"># Format of Accept-Language header values. From RFC 9110 Sections 12.4.2 and</span>
+<span class="s4"># 12.5.4, and RFC 5646 Section 2.1.</span>
+<span class="s1">accept_language_re </span><span class="s3">= </span><span class="s1">_lazy_re_compile</span><span class="s3">(</span>
+    <span class="s5">r&quot;&quot;&quot; 
+        # &quot;en&quot;, &quot;en-au&quot;, &quot;x-y-z&quot;, &quot;es-419&quot;, &quot;*&quot; 
+        ([A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*|\*) 
+        # Optional &quot;q=1.00&quot;, &quot;q=0.8&quot; 
+        (?:\s*;\s*q=(0(?:\.[0-9]{,3})?|1(?:\.0{,3})?))? 
+        # Multiple accepts per header. 
+        (?:\s*,\s*|$) 
+    &quot;&quot;&quot;</span><span class="s3">,</span>
+    <span class="s1">re</span><span class="s3">.</span><span class="s1">VERBOSE</span><span class="s3">,</span>
+<span class="s3">)</span>
+
+<span class="s1">language_code_re </span><span class="s3">= </span><span class="s1">_lazy_re_compile</span><span class="s3">(</span>
+    <span class="s5">r&quot;^[a-z]{1,8}(?:-[a-z0-9]{1,8})*(?:@[a-z0-9]{1,20})?$&quot;</span><span class="s3">, </span><span class="s1">re</span><span class="s3">.</span><span class="s1">IGNORECASE</span>
+<span class="s3">)</span>
+
+<span class="s1">language_code_prefix_re </span><span class="s3">= </span><span class="s1">_lazy_re_compile</span><span class="s3">(</span><span class="s5">r&quot;^/(\w+([@-]\w+){0,2})(/|$)&quot;</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">receiver</span><span class="s3">(</span><span class="s1">setting_changed</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">reset_cache</span><span class="s3">(*, </span><span class="s1">setting</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Reset global state when LANGUAGES setting has been changed, as some 
+    languages should no longer be accepted. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">setting </span><span class="s2">in </span><span class="s3">(</span><span class="s5">&quot;LANGUAGES&quot;</span><span class="s3">, </span><span class="s5">&quot;LANGUAGE_CODE&quot;</span><span class="s3">):</span>
+        <span class="s1">check_for_language</span><span class="s3">.</span><span class="s1">cache_clear</span><span class="s3">()</span>
+        <span class="s1">get_languages</span><span class="s3">.</span><span class="s1">cache_clear</span><span class="s3">()</span>
+        <span class="s1">get_supported_language_variant</span><span class="s3">.</span><span class="s1">cache_clear</span><span class="s3">()</span>
+
+
+<span class="s2">class </span><span class="s1">TranslationCatalog</span><span class="s3">:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Simulate a dict for DjangoTranslation._catalog so as multiple catalogs 
+    with different plural equations are kept separate. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">trans</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_catalogs </span><span class="s3">= [</span><span class="s1">trans</span><span class="s3">.</span><span class="s1">_catalog</span><span class="s3">.</span><span class="s1">copy</span><span class="s3">()] </span><span class="s2">if </span><span class="s1">trans </span><span class="s2">else </span><span class="s3">[{}]</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_plurals </span><span class="s3">= [</span><span class="s1">trans</span><span class="s3">.</span><span class="s1">plural</span><span class="s3">] </span><span class="s2">if </span><span class="s1">trans </span><span class="s2">else </span><span class="s3">[</span><span class="s2">lambda </span><span class="s1">n</span><span class="s3">: </span><span class="s1">int</span><span class="s3">(</span><span class="s1">n </span><span class="s3">!= </span><span class="s6">1</span><span class="s3">)]</span>
+
+    <span class="s2">def </span><span class="s1">__getitem__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">cat </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_catalogs</span><span class="s3">:</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">cat</span><span class="s3">[</span><span class="s1">key</span><span class="s3">]</span>
+            <span class="s2">except </span><span class="s1">KeyError</span><span class="s3">:</span>
+                <span class="s2">pass</span>
+        <span class="s2">raise </span><span class="s1">KeyError</span><span class="s3">(</span><span class="s1">key</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">__setitem__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">value</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_catalogs</span><span class="s3">[</span><span class="s6">0</span><span class="s3">][</span><span class="s1">key</span><span class="s3">] = </span><span class="s1">value</span>
+
+    <span class="s2">def </span><span class="s1">__contains__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">any</span><span class="s3">(</span><span class="s1">key </span><span class="s2">in </span><span class="s1">cat </span><span class="s2">for </span><span class="s1">cat </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_catalogs</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">items</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">cat </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_catalogs</span><span class="s3">:</span>
+            <span class="s2">yield from </span><span class="s1">cat</span><span class="s3">.</span><span class="s1">items</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">keys</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">cat </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_catalogs</span><span class="s3">:</span>
+            <span class="s2">yield from </span><span class="s1">cat</span><span class="s3">.</span><span class="s1">keys</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">update</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">trans</span><span class="s3">):</span>
+        <span class="s4"># Merge if plural function is the same, else prepend.</span>
+        <span class="s2">for </span><span class="s1">cat</span><span class="s3">, </span><span class="s1">plural </span><span class="s2">in </span><span class="s1">zip</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_catalogs</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_plurals</span><span class="s3">):</span>
+            <span class="s2">if </span><span class="s1">trans</span><span class="s3">.</span><span class="s1">plural</span><span class="s3">.</span><span class="s1">__code__ </span><span class="s3">== </span><span class="s1">plural</span><span class="s3">.</span><span class="s1">__code__</span><span class="s3">:</span>
+                <span class="s1">cat</span><span class="s3">.</span><span class="s1">update</span><span class="s3">(</span><span class="s1">trans</span><span class="s3">.</span><span class="s1">_catalog</span><span class="s3">)</span>
+                <span class="s2">break</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_catalogs</span><span class="s3">.</span><span class="s1">insert</span><span class="s3">(</span><span class="s6">0</span><span class="s3">, </span><span class="s1">trans</span><span class="s3">.</span><span class="s1">_catalog</span><span class="s3">.</span><span class="s1">copy</span><span class="s3">())</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_plurals</span><span class="s3">.</span><span class="s1">insert</span><span class="s3">(</span><span class="s6">0</span><span class="s3">, </span><span class="s1">trans</span><span class="s3">.</span><span class="s1">plural</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">key</span><span class="s3">, </span><span class="s1">default</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">missing </span><span class="s3">= </span><span class="s1">object</span><span class="s3">()</span>
+        <span class="s2">for </span><span class="s1">cat </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_catalogs</span><span class="s3">:</span>
+            <span class="s1">result </span><span class="s3">= </span><span class="s1">cat</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">key</span><span class="s3">, </span><span class="s1">missing</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">result </span><span class="s2">is not </span><span class="s1">missing</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">result</span>
+        <span class="s2">return </span><span class="s1">default</span>
+
+    <span class="s2">def </span><span class="s1">plural</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">msgid</span><span class="s3">, </span><span class="s1">num</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">cat</span><span class="s3">, </span><span class="s1">plural </span><span class="s2">in </span><span class="s1">zip</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">_catalogs</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_plurals</span><span class="s3">):</span>
+            <span class="s1">tmsg </span><span class="s3">= </span><span class="s1">cat</span><span class="s3">.</span><span class="s1">get</span><span class="s3">((</span><span class="s1">msgid</span><span class="s3">, </span><span class="s1">plural</span><span class="s3">(</span><span class="s1">num</span><span class="s3">)))</span>
+            <span class="s2">if </span><span class="s1">tmsg </span><span class="s2">is not None</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">tmsg</span>
+        <span class="s2">raise </span><span class="s1">KeyError</span>
+
+
+<span class="s2">class </span><span class="s1">DjangoTranslation</span><span class="s3">(</span><span class="s1">gettext_module</span><span class="s3">.</span><span class="s1">GNUTranslations</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Set up the GNUTranslations context with regard to output charset. 
+ 
+    This translation object will be constructed out of multiple GNUTranslations 
+    objects by merging their catalogs. It will construct an object for the 
+    requested language and add a fallback to the default language, if it's 
+    different from the requested language. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">domain </span><span class="s3">= </span><span class="s5">&quot;django&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">language</span><span class="s3">, </span><span class="s1">domain</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">localedirs</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Create a GNUTranslations() using many locale directories&quot;&quot;&quot;</span>
+        <span class="s1">gettext_module</span><span class="s3">.</span><span class="s1">GNUTranslations</span><span class="s3">.</span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">domain </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">domain </span><span class="s3">= </span><span class="s1">domain</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">__language </span><span class="s3">= </span><span class="s1">language</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">__to_language </span><span class="s3">= </span><span class="s1">to_language</span><span class="s3">(</span><span class="s1">language</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">__locale </span><span class="s3">= </span><span class="s1">to_locale</span><span class="s3">(</span><span class="s1">language</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_catalog </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s4"># If a language doesn't have a catalog, use the Germanic default for</span>
+        <span class="s4"># pluralization: anything except one is pluralized.</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">plural </span><span class="s3">= </span><span class="s2">lambda </span><span class="s1">n</span><span class="s3">: </span><span class="s1">int</span><span class="s3">(</span><span class="s1">n </span><span class="s3">!= </span><span class="s6">1</span><span class="s3">)</span>
+
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">domain </span><span class="s3">== </span><span class="s5">&quot;django&quot;</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">localedirs </span><span class="s2">is not None</span><span class="s3">:</span>
+                <span class="s4"># A module-level cache is used for caching 'django' translations</span>
+                <span class="s1">warnings</span><span class="s3">.</span><span class="s1">warn</span><span class="s3">(</span>
+                    <span class="s5">&quot;localedirs is ignored when domain is 'django'.&quot;</span><span class="s3">, </span><span class="s1">RuntimeWarning</span>
+                <span class="s3">)</span>
+                <span class="s1">localedirs </span><span class="s3">= </span><span class="s2">None</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_init_translation_catalog</span><span class="s3">()</span>
+
+        <span class="s2">if </span><span class="s1">localedirs</span><span class="s3">:</span>
+            <span class="s2">for </span><span class="s1">localedir </span><span class="s2">in </span><span class="s1">localedirs</span><span class="s3">:</span>
+                <span class="s1">translation </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_new_gnu_trans</span><span class="s3">(</span><span class="s1">localedir</span><span class="s3">)</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">merge</span><span class="s3">(</span><span class="s1">translation</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_add_installed_apps_translations</span><span class="s3">()</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_add_local_translations</span><span class="s3">()</span>
+        <span class="s2">if </span><span class="s3">(</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">__language </span><span class="s3">== </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGE_CODE</span>
+            <span class="s2">and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">domain </span><span class="s3">== </span><span class="s5">&quot;django&quot;</span>
+            <span class="s2">and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_catalog </span><span class="s2">is None</span>
+        <span class="s3">):</span>
+            <span class="s4"># default lang should have at least one translation file available.</span>
+            <span class="s2">raise </span><span class="s1">OSError</span><span class="s3">(</span>
+                <span class="s5">&quot;No translation files found for default language %s.&quot;</span>
+                <span class="s3">% </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGE_CODE</span>
+            <span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_add_fallback</span><span class="s3">(</span><span class="s1">localedirs</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_catalog </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s4"># No catalogs found for this language, set an empty catalog.</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_catalog </span><span class="s3">= </span><span class="s1">TranslationCatalog</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">__repr__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s5">&quot;&lt;DjangoTranslation lang:%s&gt;&quot; </span><span class="s3">% </span><span class="s1">self</span><span class="s3">.</span><span class="s1">__language</span>
+
+    <span class="s2">def </span><span class="s1">_new_gnu_trans</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">localedir</span><span class="s3">, </span><span class="s1">use_null_fallback</span><span class="s3">=</span><span class="s2">True</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return a mergeable gettext.GNUTranslations instance. 
+ 
+        A convenience wrapper. By default gettext uses 'fallback=False'. 
+        Using param `use_null_fallback` to avoid confusion with any other 
+        references to 'fallback'. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">gettext_module</span><span class="s3">.</span><span class="s1">translation</span><span class="s3">(</span>
+            <span class="s1">domain</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">domain</span><span class="s3">,</span>
+            <span class="s1">localedir</span><span class="s3">=</span><span class="s1">localedir</span><span class="s3">,</span>
+            <span class="s1">languages</span><span class="s3">=[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">__locale</span><span class="s3">],</span>
+            <span class="s1">fallback</span><span class="s3">=</span><span class="s1">use_null_fallback</span><span class="s3">,</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_init_translation_catalog</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Create a base catalog using global django translations.&quot;&quot;&quot;</span>
+        <span class="s1">settingsfile </span><span class="s3">= </span><span class="s1">sys</span><span class="s3">.</span><span class="s1">modules</span><span class="s3">[</span><span class="s1">settings</span><span class="s3">.</span><span class="s1">__module__</span><span class="s3">].</span><span class="s1">__file__</span>
+        <span class="s1">localedir </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">dirname</span><span class="s3">(</span><span class="s1">settingsfile</span><span class="s3">), </span><span class="s5">&quot;locale&quot;</span><span class="s3">)</span>
+        <span class="s1">translation </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_new_gnu_trans</span><span class="s3">(</span><span class="s1">localedir</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">merge</span><span class="s3">(</span><span class="s1">translation</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_add_installed_apps_translations</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Merge translations from each installed app.&quot;&quot;&quot;</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">app_configs </span><span class="s3">= </span><span class="s1">reversed</span><span class="s3">(</span><span class="s1">apps</span><span class="s3">.</span><span class="s1">get_app_configs</span><span class="s3">())</span>
+        <span class="s2">except </span><span class="s1">AppRegistryNotReady</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">AppRegistryNotReady</span><span class="s3">(</span>
+                <span class="s5">&quot;The translation infrastructure cannot be initialized before the &quot;</span>
+                <span class="s5">&quot;apps registry is ready. Check that you don't make non-lazy &quot;</span>
+                <span class="s5">&quot;gettext calls at import time.&quot;</span>
+            <span class="s3">)</span>
+        <span class="s2">for </span><span class="s1">app_config </span><span class="s2">in </span><span class="s1">app_configs</span><span class="s3">:</span>
+            <span class="s1">localedir </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">app_config</span><span class="s3">.</span><span class="s1">path</span><span class="s3">, </span><span class="s5">&quot;locale&quot;</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">exists</span><span class="s3">(</span><span class="s1">localedir</span><span class="s3">):</span>
+                <span class="s1">translation </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_new_gnu_trans</span><span class="s3">(</span><span class="s1">localedir</span><span class="s3">)</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">merge</span><span class="s3">(</span><span class="s1">translation</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_add_local_translations</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Merge translations defined in LOCALE_PATHS.&quot;&quot;&quot;</span>
+        <span class="s2">for </span><span class="s1">localedir </span><span class="s2">in </span><span class="s1">reversed</span><span class="s3">(</span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LOCALE_PATHS</span><span class="s3">):</span>
+            <span class="s1">translation </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_new_gnu_trans</span><span class="s3">(</span><span class="s1">localedir</span><span class="s3">)</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">merge</span><span class="s3">(</span><span class="s1">translation</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_add_fallback</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">localedirs</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Set the GNUTranslations() fallback with the default language.&quot;&quot;&quot;</span>
+        <span class="s4"># Don't set a fallback for the default language or any English variant</span>
+        <span class="s4"># (as it's empty, so it'll ALWAYS fall back to the default language)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">__language </span><span class="s3">== </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGE_CODE </span><span class="s2">or </span><span class="s1">self</span><span class="s3">.</span><span class="s1">__language</span><span class="s3">.</span><span class="s1">startswith</span><span class="s3">(</span>
+            <span class="s5">&quot;en&quot;</span>
+        <span class="s3">):</span>
+            <span class="s2">return</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">domain </span><span class="s3">== </span><span class="s5">&quot;django&quot;</span><span class="s3">:</span>
+            <span class="s4"># Get from cache</span>
+            <span class="s1">default_translation </span><span class="s3">= </span><span class="s1">translation</span><span class="s3">(</span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGE_CODE</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">default_translation </span><span class="s3">= </span><span class="s1">DjangoTranslation</span><span class="s3">(</span>
+                <span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGE_CODE</span><span class="s3">, </span><span class="s1">domain</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">domain</span><span class="s3">, </span><span class="s1">localedirs</span><span class="s3">=</span><span class="s1">localedirs</span>
+            <span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">add_fallback</span><span class="s3">(</span><span class="s1">default_translation</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">merge</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">other</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Merge another translation into this catalog.&quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">other</span><span class="s3">, </span><span class="s5">&quot;_catalog&quot;</span><span class="s3">, </span><span class="s2">None</span><span class="s3">):</span>
+            <span class="s2">return  </span><span class="s4"># NullTranslations() has no _catalog</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_catalog </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s4"># Take plural and _info from first catalog found (generally Django's).</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">plural </span><span class="s3">= </span><span class="s1">other</span><span class="s3">.</span><span class="s1">plural</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_info </span><span class="s3">= </span><span class="s1">other</span><span class="s3">.</span><span class="s1">_info</span><span class="s3">.</span><span class="s1">copy</span><span class="s3">()</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_catalog </span><span class="s3">= </span><span class="s1">TranslationCatalog</span><span class="s3">(</span><span class="s1">other</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_catalog</span><span class="s3">.</span><span class="s1">update</span><span class="s3">(</span><span class="s1">other</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">other</span><span class="s3">.</span><span class="s1">_fallback</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">add_fallback</span><span class="s3">(</span><span class="s1">other</span><span class="s3">.</span><span class="s1">_fallback</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">language</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Return the translation language.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">__language</span>
+
+    <span class="s2">def </span><span class="s1">to_language</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Return the translation language name.&quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">__to_language</span>
+
+    <span class="s2">def </span><span class="s1">ngettext</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">msgid1</span><span class="s3">, </span><span class="s1">msgid2</span><span class="s3">, </span><span class="s1">n</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">tmsg </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_catalog</span><span class="s3">.</span><span class="s1">plural</span><span class="s3">(</span><span class="s1">msgid1</span><span class="s3">, </span><span class="s1">n</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">KeyError</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_fallback</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_fallback</span><span class="s3">.</span><span class="s1">ngettext</span><span class="s3">(</span><span class="s1">msgid1</span><span class="s3">, </span><span class="s1">msgid2</span><span class="s3">, </span><span class="s1">n</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">n </span><span class="s3">== </span><span class="s6">1</span><span class="s3">:</span>
+                <span class="s1">tmsg </span><span class="s3">= </span><span class="s1">msgid1</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s1">tmsg </span><span class="s3">= </span><span class="s1">msgid2</span>
+        <span class="s2">return </span><span class="s1">tmsg</span>
+
+
+<span class="s2">def </span><span class="s1">translation</span><span class="s3">(</span><span class="s1">language</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Return a translation object in the default 'django' domain. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">global </span><span class="s1">_translations</span>
+    <span class="s2">if </span><span class="s1">language </span><span class="s2">not in </span><span class="s1">_translations</span><span class="s3">:</span>
+        <span class="s1">_translations</span><span class="s3">[</span><span class="s1">language</span><span class="s3">] = </span><span class="s1">DjangoTranslation</span><span class="s3">(</span><span class="s1">language</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">_translations</span><span class="s3">[</span><span class="s1">language</span><span class="s3">]</span>
+
+
+<span class="s2">def </span><span class="s1">activate</span><span class="s3">(</span><span class="s1">language</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Fetch the translation object for a given language and install it as the 
+    current translation object for the current thread. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if not </span><span class="s1">language</span><span class="s3">:</span>
+        <span class="s2">return</span>
+    <span class="s1">_active</span><span class="s3">.</span><span class="s1">value </span><span class="s3">= </span><span class="s1">translation</span><span class="s3">(</span><span class="s1">language</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">deactivate</span><span class="s3">():</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Uninstall the active translation object so that further _() calls resolve 
+    to the default translation object. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">_active</span><span class="s3">, </span><span class="s5">&quot;value&quot;</span><span class="s3">):</span>
+        <span class="s2">del </span><span class="s1">_active</span><span class="s3">.</span><span class="s1">value</span>
+
+
+<span class="s2">def </span><span class="s1">deactivate_all</span><span class="s3">():</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Make the active translation object a NullTranslations() instance. This is 
+    useful when we want delayed translations to appear as the original string 
+    for some reason. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">_active</span><span class="s3">.</span><span class="s1">value </span><span class="s3">= </span><span class="s1">gettext_module</span><span class="s3">.</span><span class="s1">NullTranslations</span><span class="s3">()</span>
+    <span class="s1">_active</span><span class="s3">.</span><span class="s1">value</span><span class="s3">.</span><span class="s1">to_language </span><span class="s3">= </span><span class="s2">lambda </span><span class="s3">*</span><span class="s1">args</span><span class="s3">: </span><span class="s2">None</span>
+
+
+<span class="s2">def </span><span class="s1">get_language</span><span class="s3">():</span>
+    <span class="s0">&quot;&quot;&quot;Return the currently selected language.&quot;&quot;&quot;</span>
+    <span class="s1">t </span><span class="s3">= </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">_active</span><span class="s3">, </span><span class="s5">&quot;value&quot;</span><span class="s3">, </span><span class="s2">None</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">t </span><span class="s2">is not None</span><span class="s3">:</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">t</span><span class="s3">.</span><span class="s1">to_language</span><span class="s3">()</span>
+        <span class="s2">except </span><span class="s1">AttributeError</span><span class="s3">:</span>
+            <span class="s2">pass</span>
+    <span class="s4"># If we don't have a real translation object, assume it's the default language.</span>
+    <span class="s2">return </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGE_CODE</span>
+
+
+<span class="s2">def </span><span class="s1">get_language_bidi</span><span class="s3">():</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Return selected language's BiDi layout. 
+ 
+    * False = left-to-right layout 
+    * True = right-to-left layout 
+    &quot;&quot;&quot;</span>
+    <span class="s1">lang </span><span class="s3">= </span><span class="s1">get_language</span><span class="s3">()</span>
+    <span class="s2">if </span><span class="s1">lang </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return False</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">base_lang </span><span class="s3">= </span><span class="s1">get_language</span><span class="s3">().</span><span class="s1">split</span><span class="s3">(</span><span class="s5">&quot;-&quot;</span><span class="s3">)[</span><span class="s6">0</span><span class="s3">]</span>
+        <span class="s2">return </span><span class="s1">base_lang </span><span class="s2">in </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGES_BIDI</span>
+
+
+<span class="s2">def </span><span class="s1">catalog</span><span class="s3">():</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Return the current active catalog for further processing. 
+    This can be used if you need to modify the catalog or want to access the 
+    whole message catalog instead of just translating one string. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">global </span><span class="s1">_default</span>
+
+    <span class="s1">t </span><span class="s3">= </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">_active</span><span class="s3">, </span><span class="s5">&quot;value&quot;</span><span class="s3">, </span><span class="s2">None</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">t </span><span class="s2">is not None</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">t</span>
+    <span class="s2">if </span><span class="s1">_default </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s1">_default </span><span class="s3">= </span><span class="s1">translation</span><span class="s3">(</span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGE_CODE</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">_default</span>
+
+
+<span class="s2">def </span><span class="s1">gettext</span><span class="s3">(</span><span class="s1">message</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Translate the 'message' string. It uses the current thread to find the 
+    translation object to use. If no current translation is activated, the 
+    message will be run through the default translation object. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">global </span><span class="s1">_default</span>
+
+    <span class="s1">eol_message </span><span class="s3">= </span><span class="s1">message</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s5">&quot;</span><span class="s2">\r\n</span><span class="s5">&quot;</span><span class="s3">, </span><span class="s5">&quot;</span><span class="s2">\n</span><span class="s5">&quot;</span><span class="s3">).</span><span class="s1">replace</span><span class="s3">(</span><span class="s5">&quot;</span><span class="s2">\r</span><span class="s5">&quot;</span><span class="s3">, </span><span class="s5">&quot;</span><span class="s2">\n</span><span class="s5">&quot;</span><span class="s3">)</span>
+
+    <span class="s2">if </span><span class="s1">eol_message</span><span class="s3">:</span>
+        <span class="s1">_default </span><span class="s3">= </span><span class="s1">_default </span><span class="s2">or </span><span class="s1">translation</span><span class="s3">(</span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGE_CODE</span><span class="s3">)</span>
+        <span class="s1">translation_object </span><span class="s3">= </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">_active</span><span class="s3">, </span><span class="s5">&quot;value&quot;</span><span class="s3">, </span><span class="s1">_default</span><span class="s3">)</span>
+
+        <span class="s1">result </span><span class="s3">= </span><span class="s1">translation_object</span><span class="s3">.</span><span class="s1">gettext</span><span class="s3">(</span><span class="s1">eol_message</span><span class="s3">)</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s4"># Return an empty value of the corresponding type if an empty message</span>
+        <span class="s4"># is given, instead of metadata, which is the default gettext behavior.</span>
+        <span class="s1">result </span><span class="s3">= </span><span class="s1">type</span><span class="s3">(</span><span class="s1">message</span><span class="s3">)(</span><span class="s5">&quot;&quot;</span><span class="s3">)</span>
+
+    <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">message</span><span class="s3">, </span><span class="s1">SafeData</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s1">result</span><span class="s3">)</span>
+
+    <span class="s2">return </span><span class="s1">result</span>
+
+
+<span class="s2">def </span><span class="s1">pgettext</span><span class="s3">(</span><span class="s1">context</span><span class="s3">, </span><span class="s1">message</span><span class="s3">):</span>
+    <span class="s1">msg_with_ctxt </span><span class="s3">= </span><span class="s5">&quot;%s%s%s&quot; </span><span class="s3">% (</span><span class="s1">context</span><span class="s3">, </span><span class="s1">CONTEXT_SEPARATOR</span><span class="s3">, </span><span class="s1">message</span><span class="s3">)</span>
+    <span class="s1">result </span><span class="s3">= </span><span class="s1">gettext</span><span class="s3">(</span><span class="s1">msg_with_ctxt</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">CONTEXT_SEPARATOR </span><span class="s2">in </span><span class="s1">result</span><span class="s3">:</span>
+        <span class="s4"># Translation not found</span>
+        <span class="s1">result </span><span class="s3">= </span><span class="s1">message</span>
+    <span class="s2">elif </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">message</span><span class="s3">, </span><span class="s1">SafeData</span><span class="s3">):</span>
+        <span class="s1">result </span><span class="s3">= </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s1">result</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">result</span>
+
+
+<span class="s2">def </span><span class="s1">gettext_noop</span><span class="s3">(</span><span class="s1">message</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Mark strings for translation but don't translate them now. This can be 
+    used to store strings in global variables that should stay in the base 
+    language (because they might be used externally) and will be translated 
+    later. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">message</span>
+
+
+<span class="s2">def </span><span class="s1">do_ntranslate</span><span class="s3">(</span><span class="s1">singular</span><span class="s3">, </span><span class="s1">plural</span><span class="s3">, </span><span class="s1">number</span><span class="s3">, </span><span class="s1">translation_function</span><span class="s3">):</span>
+    <span class="s2">global </span><span class="s1">_default</span>
+
+    <span class="s1">t </span><span class="s3">= </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">_active</span><span class="s3">, </span><span class="s5">&quot;value&quot;</span><span class="s3">, </span><span class="s2">None</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">t </span><span class="s2">is not None</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">t</span><span class="s3">, </span><span class="s1">translation_function</span><span class="s3">)(</span><span class="s1">singular</span><span class="s3">, </span><span class="s1">plural</span><span class="s3">, </span><span class="s1">number</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">_default </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s1">_default </span><span class="s3">= </span><span class="s1">translation</span><span class="s3">(</span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGE_CODE</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">_default</span><span class="s3">, </span><span class="s1">translation_function</span><span class="s3">)(</span><span class="s1">singular</span><span class="s3">, </span><span class="s1">plural</span><span class="s3">, </span><span class="s1">number</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">ngettext</span><span class="s3">(</span><span class="s1">singular</span><span class="s3">, </span><span class="s1">plural</span><span class="s3">, </span><span class="s1">number</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Return a string of the translation of either the singular or plural, 
+    based on the number. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">do_ntranslate</span><span class="s3">(</span><span class="s1">singular</span><span class="s3">, </span><span class="s1">plural</span><span class="s3">, </span><span class="s1">number</span><span class="s3">, </span><span class="s5">&quot;ngettext&quot;</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">npgettext</span><span class="s3">(</span><span class="s1">context</span><span class="s3">, </span><span class="s1">singular</span><span class="s3">, </span><span class="s1">plural</span><span class="s3">, </span><span class="s1">number</span><span class="s3">):</span>
+    <span class="s1">msgs_with_ctxt </span><span class="s3">= (</span>
+        <span class="s5">&quot;%s%s%s&quot; </span><span class="s3">% (</span><span class="s1">context</span><span class="s3">, </span><span class="s1">CONTEXT_SEPARATOR</span><span class="s3">, </span><span class="s1">singular</span><span class="s3">),</span>
+        <span class="s5">&quot;%s%s%s&quot; </span><span class="s3">% (</span><span class="s1">context</span><span class="s3">, </span><span class="s1">CONTEXT_SEPARATOR</span><span class="s3">, </span><span class="s1">plural</span><span class="s3">),</span>
+        <span class="s1">number</span><span class="s3">,</span>
+    <span class="s3">)</span>
+    <span class="s1">result </span><span class="s3">= </span><span class="s1">ngettext</span><span class="s3">(*</span><span class="s1">msgs_with_ctxt</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">CONTEXT_SEPARATOR </span><span class="s2">in </span><span class="s1">result</span><span class="s3">:</span>
+        <span class="s4"># Translation not found</span>
+        <span class="s1">result </span><span class="s3">= </span><span class="s1">ngettext</span><span class="s3">(</span><span class="s1">singular</span><span class="s3">, </span><span class="s1">plural</span><span class="s3">, </span><span class="s1">number</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">result</span>
+
+
+<span class="s2">def </span><span class="s1">all_locale_paths</span><span class="s3">():</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Return a list of paths to user-provides languages files. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">globalpath </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span>
+        <span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">dirname</span><span class="s3">(</span><span class="s1">sys</span><span class="s3">.</span><span class="s1">modules</span><span class="s3">[</span><span class="s1">settings</span><span class="s3">.</span><span class="s1">__module__</span><span class="s3">].</span><span class="s1">__file__</span><span class="s3">), </span><span class="s5">&quot;locale&quot;</span>
+    <span class="s3">)</span>
+    <span class="s1">app_paths </span><span class="s3">= []</span>
+    <span class="s2">for </span><span class="s1">app_config </span><span class="s2">in </span><span class="s1">apps</span><span class="s3">.</span><span class="s1">get_app_configs</span><span class="s3">():</span>
+        <span class="s1">locale_path </span><span class="s3">= </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">app_config</span><span class="s3">.</span><span class="s1">path</span><span class="s3">, </span><span class="s5">&quot;locale&quot;</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">os</span><span class="s3">.</span><span class="s1">path</span><span class="s3">.</span><span class="s1">exists</span><span class="s3">(</span><span class="s1">locale_path</span><span class="s3">):</span>
+            <span class="s1">app_paths</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">locale_path</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s3">[</span><span class="s1">globalpath</span><span class="s3">, *</span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LOCALE_PATHS</span><span class="s3">, *</span><span class="s1">app_paths</span><span class="s3">]</span>
+
+
+<span class="s3">@</span><span class="s1">functools</span><span class="s3">.</span><span class="s1">lru_cache</span><span class="s3">(</span><span class="s1">maxsize</span><span class="s3">=</span><span class="s6">1000</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">check_for_language</span><span class="s3">(</span><span class="s1">lang_code</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Check whether there is a global language file for the given language 
+    code. This is used to decide whether a user-provided language is 
+    available. 
+ 
+    lru_cache should have a maxsize to prevent from memory exhaustion attacks, 
+    as the provided language codes are taken from the HTTP request. See also 
+    &lt;https://www.djangoproject.com/weblog/2007/oct/26/security-fix/&gt;. 
+    &quot;&quot;&quot;</span>
+    <span class="s4"># First, a quick check to make sure lang_code is well-formed (#21458)</span>
+    <span class="s2">if </span><span class="s1">lang_code </span><span class="s2">is None or not </span><span class="s1">language_code_re</span><span class="s3">.</span><span class="s1">search</span><span class="s3">(</span><span class="s1">lang_code</span><span class="s3">):</span>
+        <span class="s2">return False</span>
+    <span class="s2">return </span><span class="s1">any</span><span class="s3">(</span>
+        <span class="s1">gettext_module</span><span class="s3">.</span><span class="s1">find</span><span class="s3">(</span><span class="s5">&quot;django&quot;</span><span class="s3">, </span><span class="s1">path</span><span class="s3">, [</span><span class="s1">to_locale</span><span class="s3">(</span><span class="s1">lang_code</span><span class="s3">)]) </span><span class="s2">is not None</span>
+        <span class="s2">for </span><span class="s1">path </span><span class="s2">in </span><span class="s1">all_locale_paths</span><span class="s3">()</span>
+    <span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">functools</span><span class="s3">.</span><span class="s1">lru_cache</span>
+<span class="s2">def </span><span class="s1">get_languages</span><span class="s3">():</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Cache of settings.LANGUAGES in a dictionary for easy lookups by key. 
+    Convert keys to lowercase as they should be treated as case-insensitive. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s3">{</span><span class="s1">key</span><span class="s3">.</span><span class="s1">lower</span><span class="s3">(): </span><span class="s1">value </span><span class="s2">for </span><span class="s1">key</span><span class="s3">, </span><span class="s1">value </span><span class="s2">in </span><span class="s1">dict</span><span class="s3">(</span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGES</span><span class="s3">).</span><span class="s1">items</span><span class="s3">()}</span>
+
+
+<span class="s3">@</span><span class="s1">functools</span><span class="s3">.</span><span class="s1">lru_cache</span><span class="s3">(</span><span class="s1">maxsize</span><span class="s3">=</span><span class="s6">1000</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">get_supported_language_variant</span><span class="s3">(</span><span class="s1">lang_code</span><span class="s3">, </span><span class="s1">strict</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Return the language code that's listed in supported languages, possibly 
+    selecting a more generic variant. Raise LookupError if nothing is found. 
+ 
+    If `strict` is False (the default), look for a country-specific variant 
+    when neither the language code nor its generic variant is found. 
+ 
+    lru_cache should have a maxsize to prevent from memory exhaustion attacks, 
+    as the provided language codes are taken from the HTTP request. See also 
+    &lt;https://www.djangoproject.com/weblog/2007/oct/26/security-fix/&gt;. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">lang_code</span><span class="s3">:</span>
+        <span class="s4"># If 'zh-hant-tw' is not supported, try special fallback or subsequent</span>
+        <span class="s4"># language codes i.e. 'zh-hant' and 'zh'.</span>
+        <span class="s1">possible_lang_codes </span><span class="s3">= [</span><span class="s1">lang_code</span><span class="s3">]</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">possible_lang_codes</span><span class="s3">.</span><span class="s1">extend</span><span class="s3">(</span><span class="s1">LANG_INFO</span><span class="s3">[</span><span class="s1">lang_code</span><span class="s3">][</span><span class="s5">&quot;fallback&quot;</span><span class="s3">])</span>
+        <span class="s2">except </span><span class="s1">KeyError</span><span class="s3">:</span>
+            <span class="s2">pass</span>
+        <span class="s1">i </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s2">while </span><span class="s3">(</span><span class="s1">i </span><span class="s3">:= </span><span class="s1">lang_code</span><span class="s3">.</span><span class="s1">rfind</span><span class="s3">(</span><span class="s5">&quot;-&quot;</span><span class="s3">, </span><span class="s6">0</span><span class="s3">, </span><span class="s1">i</span><span class="s3">)) &gt; -</span><span class="s6">1</span><span class="s3">:</span>
+            <span class="s1">possible_lang_codes</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">lang_code</span><span class="s3">[:</span><span class="s1">i</span><span class="s3">])</span>
+        <span class="s1">generic_lang_code </span><span class="s3">= </span><span class="s1">possible_lang_codes</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">]</span>
+        <span class="s1">supported_lang_codes </span><span class="s3">= </span><span class="s1">get_languages</span><span class="s3">()</span>
+
+        <span class="s2">for </span><span class="s1">code </span><span class="s2">in </span><span class="s1">possible_lang_codes</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">code</span><span class="s3">.</span><span class="s1">lower</span><span class="s3">() </span><span class="s2">in </span><span class="s1">supported_lang_codes </span><span class="s2">and </span><span class="s1">check_for_language</span><span class="s3">(</span><span class="s1">code</span><span class="s3">):</span>
+                <span class="s2">return </span><span class="s1">code</span>
+        <span class="s2">if not </span><span class="s1">strict</span><span class="s3">:</span>
+            <span class="s4"># if fr-fr is not supported, try fr-ca.</span>
+            <span class="s2">for </span><span class="s1">supported_code </span><span class="s2">in </span><span class="s1">supported_lang_codes</span><span class="s3">:</span>
+                <span class="s2">if </span><span class="s1">supported_code</span><span class="s3">.</span><span class="s1">startswith</span><span class="s3">(</span><span class="s1">generic_lang_code </span><span class="s3">+ </span><span class="s5">&quot;-&quot;</span><span class="s3">):</span>
+                    <span class="s2">return </span><span class="s1">supported_code</span>
+    <span class="s2">raise </span><span class="s1">LookupError</span><span class="s3">(</span><span class="s1">lang_code</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">get_language_from_path</span><span class="s3">(</span><span class="s1">path</span><span class="s3">, </span><span class="s1">strict</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Return the language code if there's a valid language code found in `path`. 
+ 
+    If `strict` is False (the default), look for a country-specific variant 
+    when neither the language code nor its generic variant is found. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">regex_match </span><span class="s3">= </span><span class="s1">language_code_prefix_re</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(</span><span class="s1">path</span><span class="s3">)</span>
+    <span class="s2">if not </span><span class="s1">regex_match</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s1">lang_code </span><span class="s3">= </span><span class="s1">regex_match</span><span class="s3">[</span><span class="s6">1</span><span class="s3">]</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">get_supported_language_variant</span><span class="s3">(</span><span class="s1">lang_code</span><span class="s3">, </span><span class="s1">strict</span><span class="s3">=</span><span class="s1">strict</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">LookupError</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+
+
+<span class="s2">def </span><span class="s1">get_language_from_request</span><span class="s3">(</span><span class="s1">request</span><span class="s3">, </span><span class="s1">check_path</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Analyze the request to find what language the user wants the system to 
+    show. Only languages listed in settings.LANGUAGES are taken into account. 
+    If the user requests a sublanguage where we have a main language, we send 
+    out the main language. 
+ 
+    If check_path is True, the URL path prefix will be checked for a language 
+    code, otherwise this is skipped for backwards compatibility. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">check_path</span><span class="s3">:</span>
+        <span class="s1">lang_code </span><span class="s3">= </span><span class="s1">get_language_from_path</span><span class="s3">(</span><span class="s1">request</span><span class="s3">.</span><span class="s1">path_info</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">lang_code </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">lang_code</span>
+
+    <span class="s1">lang_code </span><span class="s3">= </span><span class="s1">request</span><span class="s3">.</span><span class="s1">COOKIES</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGE_COOKIE_NAME</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s3">(</span>
+        <span class="s1">lang_code </span><span class="s2">is not None</span>
+        <span class="s2">and </span><span class="s1">lang_code </span><span class="s2">in </span><span class="s1">get_languages</span><span class="s3">()</span>
+        <span class="s2">and </span><span class="s1">check_for_language</span><span class="s3">(</span><span class="s1">lang_code</span><span class="s3">)</span>
+    <span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">lang_code</span>
+
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">get_supported_language_variant</span><span class="s3">(</span><span class="s1">lang_code</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">LookupError</span><span class="s3">:</span>
+        <span class="s2">pass</span>
+
+    <span class="s1">accept </span><span class="s3">= </span><span class="s1">request</span><span class="s3">.</span><span class="s1">META</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s5">&quot;HTTP_ACCEPT_LANGUAGE&quot;</span><span class="s3">, </span><span class="s5">&quot;&quot;</span><span class="s3">)</span>
+    <span class="s2">for </span><span class="s1">accept_lang</span><span class="s3">, </span><span class="s1">unused </span><span class="s2">in </span><span class="s1">parse_accept_lang_header</span><span class="s3">(</span><span class="s1">accept</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">accept_lang </span><span class="s3">== </span><span class="s5">&quot;*&quot;</span><span class="s3">:</span>
+            <span class="s2">break</span>
+
+        <span class="s2">if not </span><span class="s1">language_code_re</span><span class="s3">.</span><span class="s1">search</span><span class="s3">(</span><span class="s1">accept_lang</span><span class="s3">):</span>
+            <span class="s2">continue</span>
+
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">get_supported_language_variant</span><span class="s3">(</span><span class="s1">accept_lang</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">LookupError</span><span class="s3">:</span>
+            <span class="s2">continue</span>
+
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">get_supported_language_variant</span><span class="s3">(</span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGE_CODE</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">LookupError</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">LANGUAGE_CODE</span>
+
+
+<span class="s3">@</span><span class="s1">functools</span><span class="s3">.</span><span class="s1">lru_cache</span><span class="s3">(</span><span class="s1">maxsize</span><span class="s3">=</span><span class="s6">1000</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">_parse_accept_lang_header</span><span class="s3">(</span><span class="s1">lang_string</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Parse the lang_string, which is the body of an HTTP Accept-Language 
+    header, and return a tuple of (lang, q-value), ordered by 'q' values. 
+ 
+    Return an empty tuple if there are any format errors in lang_string. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">result </span><span class="s3">= []</span>
+    <span class="s1">pieces </span><span class="s3">= </span><span class="s1">accept_language_re</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s1">lang_string</span><span class="s3">.</span><span class="s1">lower</span><span class="s3">())</span>
+    <span class="s2">if </span><span class="s1">pieces</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">]:</span>
+        <span class="s2">return </span><span class="s3">()</span>
+    <span class="s2">for </span><span class="s1">i </span><span class="s2">in </span><span class="s1">range</span><span class="s3">(</span><span class="s6">0</span><span class="s3">, </span><span class="s1">len</span><span class="s3">(</span><span class="s1">pieces</span><span class="s3">) - </span><span class="s6">1</span><span class="s3">, </span><span class="s6">3</span><span class="s3">):</span>
+        <span class="s1">first</span><span class="s3">, </span><span class="s1">lang</span><span class="s3">, </span><span class="s1">priority </span><span class="s3">= </span><span class="s1">pieces</span><span class="s3">[</span><span class="s1">i </span><span class="s3">: </span><span class="s1">i </span><span class="s3">+ </span><span class="s6">3</span><span class="s3">]</span>
+        <span class="s2">if </span><span class="s1">first</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s3">()</span>
+        <span class="s2">if </span><span class="s1">priority</span><span class="s3">:</span>
+            <span class="s1">priority </span><span class="s3">= </span><span class="s1">float</span><span class="s3">(</span><span class="s1">priority</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">priority </span><span class="s3">= </span><span class="s6">1.0</span>
+        <span class="s1">result</span><span class="s3">.</span><span class="s1">append</span><span class="s3">((</span><span class="s1">lang</span><span class="s3">, </span><span class="s1">priority</span><span class="s3">))</span>
+    <span class="s1">result</span><span class="s3">.</span><span class="s1">sort</span><span class="s3">(</span><span class="s1">key</span><span class="s3">=</span><span class="s2">lambda </span><span class="s1">k</span><span class="s3">: </span><span class="s1">k</span><span class="s3">[</span><span class="s6">1</span><span class="s3">], </span><span class="s1">reverse</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">tuple</span><span class="s3">(</span><span class="s1">result</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">parse_accept_lang_header</span><span class="s3">(</span><span class="s1">lang_string</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Parse the value of the Accept-Language header up to a maximum length. 
+ 
+    The value of the header is truncated to a maximum length to avoid potential 
+    denial of service and memory exhaustion attacks. Excessive memory could be 
+    used if the raw value is very large as it would be cached due to the use of 
+    functools.lru_cache() to avoid repetitive parsing of common header values. 
+    &quot;&quot;&quot;</span>
+    <span class="s4"># If the header value doesn't exceed the maximum allowed length, parse it.</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">lang_string</span><span class="s3">) &lt;= </span><span class="s1">ACCEPT_LANGUAGE_HEADER_MAX_LENGTH</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">_parse_accept_lang_header</span><span class="s3">(</span><span class="s1">lang_string</span><span class="s3">)</span>
+
+    <span class="s4"># If there is at least one comma in the value, parse up to the last comma</span>
+    <span class="s4"># before the max length, skipping any truncated parts at the end of the</span>
+    <span class="s4"># header value.</span>
+    <span class="s2">if </span><span class="s3">(</span><span class="s1">index </span><span class="s3">:= </span><span class="s1">lang_string</span><span class="s3">.</span><span class="s1">rfind</span><span class="s3">(</span><span class="s5">&quot;,&quot;</span><span class="s3">, </span><span class="s6">0</span><span class="s3">, </span><span class="s1">ACCEPT_LANGUAGE_HEADER_MAX_LENGTH</span><span class="s3">)) &gt; </span><span class="s6">0</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">_parse_accept_lang_header</span><span class="s3">(</span><span class="s1">lang_string</span><span class="s3">[:</span><span class="s1">index</span><span class="s3">])</span>
+
+    <span class="s4"># Don't attempt to parse if there is only one language-range value which is</span>
+    <span class="s4"># longer than the maximum allowed length and so truncated.</span>
+    <span class="s2">return </span><span class="s3">()</span>
+</pre>
+</body>
+</html>

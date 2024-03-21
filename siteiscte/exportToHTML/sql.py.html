@@ -1,0 +1,668 @@
+<html>
+<head>
+<title>sql.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #5f826b; font-style: italic;}
+.s3 { color: #cf8e6d;}
+.s4 { color: #bcbec4;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+sql.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#</span>
+<span class="s0"># Copyright (C) 2009-2020 the sqlparse authors and contributors</span>
+<span class="s0"># &lt;see AUTHORS file&gt;</span>
+<span class="s0">#</span>
+<span class="s0"># This module is part of python-sqlparse and is released under</span>
+<span class="s0"># the BSD License: https://opensource.org/licenses/BSD-3-Clause</span>
+
+<span class="s2">&quot;&quot;&quot;This module contains classes representing syntactical elements of SQL.&quot;&quot;&quot;</span>
+
+<span class="s3">import </span><span class="s1">re</span>
+
+<span class="s3">from </span><span class="s1">sqlparse </span><span class="s3">import </span><span class="s1">tokens </span><span class="s3">as </span><span class="s1">T</span>
+<span class="s3">from </span><span class="s1">sqlparse</span><span class="s4">.</span><span class="s1">utils </span><span class="s3">import </span><span class="s1">imt</span><span class="s4">, </span><span class="s1">remove_quotes</span>
+
+
+<span class="s3">class </span><span class="s1">NameAliasMixin</span><span class="s4">:</span>
+    <span class="s2">&quot;&quot;&quot;Implements get_real_name and get_alias.&quot;&quot;&quot;</span>
+
+    <span class="s3">def </span><span class="s1">get_real_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the real name (object name) of this identifier.&quot;&quot;&quot;</span>
+        <span class="s0"># a.b</span>
+        <span class="s1">dot_idx</span><span class="s4">, </span><span class="s1">_ </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_next_by</span><span class="s4">(</span><span class="s1">m</span><span class="s4">=(</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Punctuation</span><span class="s4">, </span><span class="s5">'.'</span><span class="s4">))</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_get_first_name</span><span class="s4">(</span><span class="s1">dot_idx</span><span class="s4">, </span><span class="s1">real_name</span><span class="s4">=</span><span class="s3">True</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">get_alias</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the alias for this identifier or ``None``.&quot;&quot;&quot;</span>
+
+        <span class="s0"># &quot;name AS alias&quot;</span>
+        <span class="s1">kw_idx</span><span class="s4">, </span><span class="s1">kw </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_next_by</span><span class="s4">(</span><span class="s1">m</span><span class="s4">=(</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'AS'</span><span class="s4">))</span>
+        <span class="s3">if </span><span class="s1">kw </span><span class="s3">is not None</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_get_first_name</span><span class="s4">(</span><span class="s1">kw_idx </span><span class="s4">+ </span><span class="s6">1</span><span class="s4">, </span><span class="s1">keywords</span><span class="s4">=</span><span class="s3">True</span><span class="s4">)</span>
+
+        <span class="s0"># &quot;name alias&quot; or &quot;complicated column expression alias&quot;</span>
+        <span class="s1">_</span><span class="s4">, </span><span class="s1">ws </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_next_by</span><span class="s4">(</span><span class="s1">t</span><span class="s4">=</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Whitespace</span><span class="s4">)</span>
+        <span class="s3">if </span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">) &gt; </span><span class="s6">2 </span><span class="s3">and </span><span class="s1">ws </span><span class="s3">is not None</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_get_first_name</span><span class="s4">(</span><span class="s1">reverse</span><span class="s4">=</span><span class="s3">True</span><span class="s4">)</span>
+
+
+<span class="s3">class </span><span class="s1">Token</span><span class="s4">:</span>
+    <span class="s2">&quot;&quot;&quot;Base class for all other classes in this module. 
+ 
+    It represents a single token and has two instance attributes: 
+    ``value`` is the unchanged value of the token and ``ttype`` is 
+    the type of the token. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">__slots__ </span><span class="s4">= (</span><span class="s5">'value'</span><span class="s4">, </span><span class="s5">'ttype'</span><span class="s4">, </span><span class="s5">'parent'</span><span class="s4">, </span><span class="s5">'normalized'</span><span class="s4">, </span><span class="s5">'is_keyword'</span><span class="s4">,</span>
+                 <span class="s5">'is_group'</span><span class="s4">, </span><span class="s5">'is_whitespace'</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__init__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">ttype</span><span class="s4">, </span><span class="s1">value</span><span class="s4">):</span>
+        <span class="s1">value </span><span class="s4">= </span><span class="s1">str</span><span class="s4">(</span><span class="s1">value</span><span class="s4">)</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">value </span><span class="s4">= </span><span class="s1">value</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">ttype </span><span class="s4">= </span><span class="s1">ttype</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">parent </span><span class="s4">= </span><span class="s3">None</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">is_group </span><span class="s4">= </span><span class="s3">False</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">is_keyword </span><span class="s4">= </span><span class="s1">ttype </span><span class="s3">in </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">is_whitespace </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">ttype </span><span class="s3">in </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Whitespace</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">normalized </span><span class="s4">= </span><span class="s1">value</span><span class="s4">.</span><span class="s1">upper</span><span class="s4">() </span><span class="s3">if </span><span class="s1">self</span><span class="s4">.</span><span class="s1">is_keyword </span><span class="s3">else </span><span class="s1">value</span>
+
+    <span class="s3">def </span><span class="s1">__str__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">value</span>
+
+    <span class="s0"># Pending tokenlist __len__ bug fix</span>
+    <span class="s0"># def __len__(self):</span>
+    <span class="s0">#     return len(self.value)</span>
+
+    <span class="s3">def </span><span class="s1">__repr__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s1">cls </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_get_repr_name</span><span class="s4">()</span>
+        <span class="s1">value </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_get_repr_value</span><span class="s4">()</span>
+
+        <span class="s1">q </span><span class="s4">= </span><span class="s5">'&quot;' </span><span class="s3">if </span><span class="s1">value</span><span class="s4">.</span><span class="s1">startswith</span><span class="s4">(</span><span class="s5">&quot;'&quot;</span><span class="s4">) </span><span class="s3">and </span><span class="s1">value</span><span class="s4">.</span><span class="s1">endswith</span><span class="s4">(</span><span class="s5">&quot;'&quot;</span><span class="s4">) </span><span class="s3">else </span><span class="s5">&quot;'&quot;</span>
+        <span class="s3">return </span><span class="s5">&quot;&lt;{cls} {q}{value}{q} at 0x{id:2X}&gt;&quot;</span><span class="s4">.</span><span class="s1">format</span><span class="s4">(</span>
+            <span class="s1">id</span><span class="s4">=</span><span class="s1">id</span><span class="s4">(</span><span class="s1">self</span><span class="s4">), **</span><span class="s1">locals</span><span class="s4">())</span>
+
+    <span class="s3">def </span><span class="s1">_get_repr_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">str</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">ttype</span><span class="s4">).</span><span class="s1">split</span><span class="s4">(</span><span class="s5">'.'</span><span class="s4">)[-</span><span class="s6">1</span><span class="s4">]</span>
+
+    <span class="s3">def </span><span class="s1">_get_repr_value</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s1">raw </span><span class="s4">= </span><span class="s1">str</span><span class="s4">(</span><span class="s1">self</span><span class="s4">)</span>
+        <span class="s3">if </span><span class="s1">len</span><span class="s4">(</span><span class="s1">raw</span><span class="s4">) &gt; </span><span class="s6">7</span><span class="s4">:</span>
+            <span class="s1">raw </span><span class="s4">= </span><span class="s1">raw</span><span class="s4">[:</span><span class="s6">6</span><span class="s4">] + </span><span class="s5">'...'</span>
+        <span class="s3">return </span><span class="s1">re</span><span class="s4">.</span><span class="s1">sub</span><span class="s4">(</span><span class="s5">r'\s+'</span><span class="s4">, </span><span class="s5">' '</span><span class="s4">, </span><span class="s1">raw</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">flatten</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Resolve subgroups.&quot;&quot;&quot;</span>
+        <span class="s3">yield </span><span class="s1">self</span>
+
+    <span class="s3">def </span><span class="s1">match</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">ttype</span><span class="s4">, </span><span class="s1">values</span><span class="s4">, </span><span class="s1">regex</span><span class="s4">=</span><span class="s3">False</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Checks whether the token matches the given arguments. 
+ 
+        *ttype* is a token type. If this token doesn't match the given token 
+        type. 
+        *values* is a list of possible values for this token. The values 
+        are OR'ed together so if only one of the values matches ``True`` 
+        is returned. Except for keyword tokens the comparison is 
+        case-sensitive. For convenience it's OK to pass in a single string. 
+        If *regex* is ``True`` (default is ``False``) the given values are 
+        treated as regular expressions. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">type_matched </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">ttype </span><span class="s3">is </span><span class="s1">ttype</span>
+        <span class="s3">if not </span><span class="s1">type_matched </span><span class="s3">or </span><span class="s1">values </span><span class="s3">is None</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">type_matched</span>
+
+        <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">values</span><span class="s4">, </span><span class="s1">str</span><span class="s4">):</span>
+            <span class="s1">values </span><span class="s4">= (</span><span class="s1">values</span><span class="s4">,)</span>
+
+        <span class="s3">if </span><span class="s1">regex</span><span class="s4">:</span>
+            <span class="s0"># TODO: Add test for regex with is_keyboard = false</span>
+            <span class="s1">flag </span><span class="s4">= </span><span class="s1">re</span><span class="s4">.</span><span class="s1">IGNORECASE </span><span class="s3">if </span><span class="s1">self</span><span class="s4">.</span><span class="s1">is_keyword </span><span class="s3">else </span><span class="s6">0</span>
+            <span class="s1">values </span><span class="s4">= (</span><span class="s1">re</span><span class="s4">.</span><span class="s1">compile</span><span class="s4">(</span><span class="s1">v</span><span class="s4">, </span><span class="s1">flag</span><span class="s4">) </span><span class="s3">for </span><span class="s1">v </span><span class="s3">in </span><span class="s1">values</span><span class="s4">)</span>
+
+            <span class="s3">for </span><span class="s1">pattern </span><span class="s3">in </span><span class="s1">values</span><span class="s4">:</span>
+                <span class="s3">if </span><span class="s1">pattern</span><span class="s4">.</span><span class="s1">search</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">normalized</span><span class="s4">):</span>
+                    <span class="s3">return True</span>
+            <span class="s3">return False</span>
+
+        <span class="s3">if </span><span class="s1">self</span><span class="s4">.</span><span class="s1">is_keyword</span><span class="s4">:</span>
+            <span class="s1">values </span><span class="s4">= (</span><span class="s1">v</span><span class="s4">.</span><span class="s1">upper</span><span class="s4">() </span><span class="s3">for </span><span class="s1">v </span><span class="s3">in </span><span class="s1">values</span><span class="s4">)</span>
+
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">normalized </span><span class="s3">in </span><span class="s1">values</span>
+
+    <span class="s3">def </span><span class="s1">within</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">group_cls</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns ``True`` if this token is within *group_cls*. 
+ 
+        Use this method for example to check if an identifier is within 
+        a function: ``t.within(sql.Function)``. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">parent </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">parent</span>
+        <span class="s3">while </span><span class="s1">parent</span><span class="s4">:</span>
+            <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">parent</span><span class="s4">, </span><span class="s1">group_cls</span><span class="s4">):</span>
+                <span class="s3">return True</span>
+            <span class="s1">parent </span><span class="s4">= </span><span class="s1">parent</span><span class="s4">.</span><span class="s1">parent</span>
+        <span class="s3">return False</span>
+
+    <span class="s3">def </span><span class="s1">is_child_of</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns ``True`` if this token is a direct child of *other*.&quot;&quot;&quot;</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">parent </span><span class="s4">== </span><span class="s1">other</span>
+
+    <span class="s3">def </span><span class="s1">has_ancestor</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">other</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns ``True`` if *other* is in this tokens ancestry.&quot;&quot;&quot;</span>
+        <span class="s1">parent </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">parent</span>
+        <span class="s3">while </span><span class="s1">parent</span><span class="s4">:</span>
+            <span class="s3">if </span><span class="s1">parent </span><span class="s4">== </span><span class="s1">other</span><span class="s4">:</span>
+                <span class="s3">return True</span>
+            <span class="s1">parent </span><span class="s4">= </span><span class="s1">parent</span><span class="s4">.</span><span class="s1">parent</span>
+        <span class="s3">return False</span>
+
+
+<span class="s3">class </span><span class="s1">TokenList</span><span class="s4">(</span><span class="s1">Token</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;A group of tokens. 
+ 
+    It has an additional instance attribute ``tokens`` which holds a 
+    list of child-tokens. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">__slots__ </span><span class="s4">= </span><span class="s5">'tokens'</span>
+
+    <span class="s3">def </span><span class="s1">__init__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">tokens</span><span class="s4">=</span><span class="s3">None</span><span class="s4">):</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">tokens </span><span class="s4">= </span><span class="s1">tokens </span><span class="s3">or </span><span class="s4">[]</span>
+        <span class="s4">[</span><span class="s1">setattr</span><span class="s4">(</span><span class="s1">token</span><span class="s4">, </span><span class="s5">'parent'</span><span class="s4">, </span><span class="s1">self</span><span class="s4">) </span><span class="s3">for </span><span class="s1">token </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">]</span>
+        <span class="s1">super</span><span class="s4">().</span><span class="s1">__init__</span><span class="s4">(</span><span class="s3">None</span><span class="s4">, </span><span class="s1">str</span><span class="s4">(</span><span class="s1">self</span><span class="s4">))</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">is_group </span><span class="s4">= </span><span class="s3">True</span>
+
+    <span class="s3">def </span><span class="s1">__str__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s5">''</span><span class="s4">.</span><span class="s1">join</span><span class="s4">(</span><span class="s1">token</span><span class="s4">.</span><span class="s1">value </span><span class="s3">for </span><span class="s1">token </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">flatten</span><span class="s4">())</span>
+
+    <span class="s0"># weird bug</span>
+    <span class="s0"># def __len__(self):</span>
+    <span class="s0">#     return len(self.tokens)</span>
+
+    <span class="s3">def </span><span class="s1">__iter__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">iter</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">__getitem__</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">item</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s1">item</span><span class="s4">]</span>
+
+    <span class="s3">def </span><span class="s1">_get_repr_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">type</span><span class="s4">(</span><span class="s1">self</span><span class="s4">).</span><span class="s1">__name__</span>
+
+    <span class="s3">def </span><span class="s1">_pprint_tree</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">max_depth</span><span class="s4">=</span><span class="s3">None</span><span class="s4">, </span><span class="s1">depth</span><span class="s4">=</span><span class="s6">0</span><span class="s4">, </span><span class="s1">f</span><span class="s4">=</span><span class="s3">None</span><span class="s4">, </span><span class="s1">_pre</span><span class="s4">=</span><span class="s5">''</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Pretty-print the object tree.&quot;&quot;&quot;</span>
+        <span class="s1">token_count </span><span class="s4">= </span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">)</span>
+        <span class="s3">for </span><span class="s1">idx</span><span class="s4">, </span><span class="s1">token </span><span class="s3">in </span><span class="s1">enumerate</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">):</span>
+            <span class="s1">cls </span><span class="s4">= </span><span class="s1">token</span><span class="s4">.</span><span class="s1">_get_repr_name</span><span class="s4">()</span>
+            <span class="s1">value </span><span class="s4">= </span><span class="s1">token</span><span class="s4">.</span><span class="s1">_get_repr_value</span><span class="s4">()</span>
+
+            <span class="s1">last </span><span class="s4">= </span><span class="s1">idx </span><span class="s4">== (</span><span class="s1">token_count </span><span class="s4">- </span><span class="s6">1</span><span class="s4">)</span>
+            <span class="s1">pre </span><span class="s4">= </span><span class="s5">'`- ' </span><span class="s3">if </span><span class="s1">last </span><span class="s3">else </span><span class="s5">'|- '</span>
+
+            <span class="s1">q </span><span class="s4">= </span><span class="s5">'&quot;' </span><span class="s3">if </span><span class="s1">value</span><span class="s4">.</span><span class="s1">startswith</span><span class="s4">(</span><span class="s5">&quot;'&quot;</span><span class="s4">) </span><span class="s3">and </span><span class="s1">value</span><span class="s4">.</span><span class="s1">endswith</span><span class="s4">(</span><span class="s5">&quot;'&quot;</span><span class="s4">) </span><span class="s3">else </span><span class="s5">&quot;'&quot;</span>
+            <span class="s1">print</span><span class="s4">(</span><span class="s5">&quot;{_pre}{pre}{idx} {cls} {q}{value}{q}&quot;</span>
+                  <span class="s4">.</span><span class="s1">format</span><span class="s4">(**</span><span class="s1">locals</span><span class="s4">()), </span><span class="s1">file</span><span class="s4">=</span><span class="s1">f</span><span class="s4">)</span>
+
+            <span class="s3">if </span><span class="s1">token</span><span class="s4">.</span><span class="s1">is_group </span><span class="s3">and </span><span class="s4">(</span><span class="s1">max_depth </span><span class="s3">is None or </span><span class="s1">depth </span><span class="s4">&lt; </span><span class="s1">max_depth</span><span class="s4">):</span>
+                <span class="s1">parent_pre </span><span class="s4">= </span><span class="s5">'   ' </span><span class="s3">if </span><span class="s1">last </span><span class="s3">else </span><span class="s5">'|  '</span>
+                <span class="s1">token</span><span class="s4">.</span><span class="s1">_pprint_tree</span><span class="s4">(</span><span class="s1">max_depth</span><span class="s4">, </span><span class="s1">depth </span><span class="s4">+ </span><span class="s6">1</span><span class="s4">, </span><span class="s1">f</span><span class="s4">, </span><span class="s1">_pre </span><span class="s4">+ </span><span class="s1">parent_pre</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">get_token_at_offset</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">offset</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the token that is on position offset.&quot;&quot;&quot;</span>
+        <span class="s1">idx </span><span class="s4">= </span><span class="s6">0</span>
+        <span class="s3">for </span><span class="s1">token </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">flatten</span><span class="s4">():</span>
+            <span class="s1">end </span><span class="s4">= </span><span class="s1">idx </span><span class="s4">+ </span><span class="s1">len</span><span class="s4">(</span><span class="s1">token</span><span class="s4">.</span><span class="s1">value</span><span class="s4">)</span>
+            <span class="s3">if </span><span class="s1">idx </span><span class="s4">&lt;= </span><span class="s1">offset </span><span class="s4">&lt; </span><span class="s1">end</span><span class="s4">:</span>
+                <span class="s3">return </span><span class="s1">token</span>
+            <span class="s1">idx </span><span class="s4">= </span><span class="s1">end</span>
+
+    <span class="s3">def </span><span class="s1">flatten</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Generator yielding ungrouped tokens. 
+ 
+        This method is recursively called for all child tokens. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">for </span><span class="s1">token </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">:</span>
+            <span class="s3">if </span><span class="s1">token</span><span class="s4">.</span><span class="s1">is_group</span><span class="s4">:</span>
+                <span class="s3">yield from </span><span class="s1">token</span><span class="s4">.</span><span class="s1">flatten</span><span class="s4">()</span>
+            <span class="s3">else</span><span class="s4">:</span>
+                <span class="s3">yield </span><span class="s1">token</span>
+
+    <span class="s3">def </span><span class="s1">get_sublists</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">for </span><span class="s1">token </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">:</span>
+            <span class="s3">if </span><span class="s1">token</span><span class="s4">.</span><span class="s1">is_group</span><span class="s4">:</span>
+                <span class="s3">yield </span><span class="s1">token</span>
+
+    <span class="s4">@</span><span class="s1">property</span>
+    <span class="s3">def </span><span class="s1">_groupable_tokens</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span>
+
+    <span class="s3">def </span><span class="s1">_token_matching</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">funcs</span><span class="s4">, </span><span class="s1">start</span><span class="s4">=</span><span class="s6">0</span><span class="s4">, </span><span class="s1">end</span><span class="s4">=</span><span class="s3">None</span><span class="s4">, </span><span class="s1">reverse</span><span class="s4">=</span><span class="s3">False</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;next token that match functions&quot;&quot;&quot;</span>
+        <span class="s3">if </span><span class="s1">start </span><span class="s3">is None</span><span class="s4">:</span>
+            <span class="s3">return None</span>
+
+        <span class="s3">if not </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">funcs</span><span class="s4">, (</span><span class="s1">list</span><span class="s4">, </span><span class="s1">tuple</span><span class="s4">)):</span>
+            <span class="s1">funcs </span><span class="s4">= (</span><span class="s1">funcs</span><span class="s4">,)</span>
+
+        <span class="s3">if </span><span class="s1">reverse</span><span class="s4">:</span>
+            <span class="s3">assert </span><span class="s1">end </span><span class="s3">is None</span>
+            <span class="s1">indexes </span><span class="s4">= </span><span class="s1">range</span><span class="s4">(</span><span class="s1">start </span><span class="s4">- </span><span class="s6">2</span><span class="s4">, -</span><span class="s6">1</span><span class="s4">, -</span><span class="s6">1</span><span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s3">if </span><span class="s1">end </span><span class="s3">is None</span><span class="s4">:</span>
+                <span class="s1">end </span><span class="s4">= </span><span class="s1">len</span><span class="s4">(</span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">)</span>
+            <span class="s1">indexes </span><span class="s4">= </span><span class="s1">range</span><span class="s4">(</span><span class="s1">start</span><span class="s4">, </span><span class="s1">end</span><span class="s4">)</span>
+        <span class="s3">for </span><span class="s1">idx </span><span class="s3">in </span><span class="s1">indexes</span><span class="s4">:</span>
+            <span class="s1">token </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s1">idx</span><span class="s4">]</span>
+            <span class="s3">for </span><span class="s1">func </span><span class="s3">in </span><span class="s1">funcs</span><span class="s4">:</span>
+                <span class="s3">if </span><span class="s1">func</span><span class="s4">(</span><span class="s1">token</span><span class="s4">):</span>
+                    <span class="s3">return </span><span class="s1">idx</span><span class="s4">, </span><span class="s1">token</span>
+        <span class="s3">return None</span><span class="s4">, </span><span class="s3">None</span>
+
+    <span class="s3">def </span><span class="s1">token_first</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">skip_ws</span><span class="s4">=</span><span class="s3">True</span><span class="s4">, </span><span class="s1">skip_cm</span><span class="s4">=</span><span class="s3">False</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the first child token. 
+ 
+        If *skip_ws* is ``True`` (the default), whitespace 
+        tokens are ignored. 
+ 
+        if *skip_cm* is ``True`` (default: ``False``), comments are 
+        ignored too. 
+        &quot;&quot;&quot;</span>
+        <span class="s0"># this on is inconsistent, using Comment instead of T.Comment...</span>
+        <span class="s3">def </span><span class="s1">matcher</span><span class="s4">(</span><span class="s1">tk</span><span class="s4">):</span>
+            <span class="s3">return not </span><span class="s4">((</span><span class="s1">skip_ws </span><span class="s3">and </span><span class="s1">tk</span><span class="s4">.</span><span class="s1">is_whitespace</span><span class="s4">)</span>
+                        <span class="s3">or </span><span class="s4">(</span><span class="s1">skip_cm </span><span class="s3">and </span><span class="s1">imt</span><span class="s4">(</span><span class="s1">tk</span><span class="s4">, </span><span class="s1">t</span><span class="s4">=</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Comment</span><span class="s4">, </span><span class="s1">i</span><span class="s4">=</span><span class="s1">Comment</span><span class="s4">)))</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_token_matching</span><span class="s4">(</span><span class="s1">matcher</span><span class="s4">)[</span><span class="s6">1</span><span class="s4">]</span>
+
+    <span class="s3">def </span><span class="s1">token_next_by</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">i</span><span class="s4">=</span><span class="s3">None</span><span class="s4">, </span><span class="s1">m</span><span class="s4">=</span><span class="s3">None</span><span class="s4">, </span><span class="s1">t</span><span class="s4">=</span><span class="s3">None</span><span class="s4">, </span><span class="s1">idx</span><span class="s4">=-</span><span class="s6">1</span><span class="s4">, </span><span class="s1">end</span><span class="s4">=</span><span class="s3">None</span><span class="s4">):</span>
+        <span class="s1">idx </span><span class="s4">+= </span><span class="s6">1</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_token_matching</span><span class="s4">(</span><span class="s3">lambda </span><span class="s1">tk</span><span class="s4">: </span><span class="s1">imt</span><span class="s4">(</span><span class="s1">tk</span><span class="s4">, </span><span class="s1">i</span><span class="s4">, </span><span class="s1">m</span><span class="s4">, </span><span class="s1">t</span><span class="s4">), </span><span class="s1">idx</span><span class="s4">, </span><span class="s1">end</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">token_not_matching</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">funcs</span><span class="s4">, </span><span class="s1">idx</span><span class="s4">):</span>
+        <span class="s1">funcs </span><span class="s4">= (</span><span class="s1">funcs</span><span class="s4">,) </span><span class="s3">if not </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">funcs</span><span class="s4">, (</span><span class="s1">list</span><span class="s4">, </span><span class="s1">tuple</span><span class="s4">)) </span><span class="s3">else </span><span class="s1">funcs</span>
+        <span class="s1">funcs </span><span class="s4">= [</span><span class="s3">lambda </span><span class="s1">tk</span><span class="s4">: </span><span class="s3">not </span><span class="s1">func</span><span class="s4">(</span><span class="s1">tk</span><span class="s4">) </span><span class="s3">for </span><span class="s1">func </span><span class="s3">in </span><span class="s1">funcs</span><span class="s4">]</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_token_matching</span><span class="s4">(</span><span class="s1">funcs</span><span class="s4">, </span><span class="s1">idx</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">token_matching</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">funcs</span><span class="s4">, </span><span class="s1">idx</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_token_matching</span><span class="s4">(</span><span class="s1">funcs</span><span class="s4">, </span><span class="s1">idx</span><span class="s4">)[</span><span class="s6">1</span><span class="s4">]</span>
+
+    <span class="s3">def </span><span class="s1">token_prev</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">idx</span><span class="s4">, </span><span class="s1">skip_ws</span><span class="s4">=</span><span class="s3">True</span><span class="s4">, </span><span class="s1">skip_cm</span><span class="s4">=</span><span class="s3">False</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the previous token relative to *idx*. 
+ 
+        If *skip_ws* is ``True`` (the default) whitespace tokens are ignored. 
+        If *skip_cm* is ``True`` comments are ignored. 
+        ``None`` is returned if there's no previous token. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_next</span><span class="s4">(</span><span class="s1">idx</span><span class="s4">, </span><span class="s1">skip_ws</span><span class="s4">, </span><span class="s1">skip_cm</span><span class="s4">, </span><span class="s1">_reverse</span><span class="s4">=</span><span class="s3">True</span><span class="s4">)</span>
+
+    <span class="s0"># TODO: May need to re-add default value to idx</span>
+    <span class="s3">def </span><span class="s1">token_next</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">idx</span><span class="s4">, </span><span class="s1">skip_ws</span><span class="s4">=</span><span class="s3">True</span><span class="s4">, </span><span class="s1">skip_cm</span><span class="s4">=</span><span class="s3">False</span><span class="s4">, </span><span class="s1">_reverse</span><span class="s4">=</span><span class="s3">False</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the next token relative to *idx*. 
+ 
+        If *skip_ws* is ``True`` (the default) whitespace tokens are ignored. 
+        If *skip_cm* is ``True`` comments are ignored. 
+        ``None`` is returned if there's no next token. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">if </span><span class="s1">idx </span><span class="s3">is None</span><span class="s4">:</span>
+            <span class="s3">return None</span><span class="s4">, </span><span class="s3">None</span>
+        <span class="s1">idx </span><span class="s4">+= </span><span class="s6">1  </span><span class="s0"># alot of code usage current pre-compensates for this</span>
+
+        <span class="s3">def </span><span class="s1">matcher</span><span class="s4">(</span><span class="s1">tk</span><span class="s4">):</span>
+            <span class="s3">return not </span><span class="s4">((</span><span class="s1">skip_ws </span><span class="s3">and </span><span class="s1">tk</span><span class="s4">.</span><span class="s1">is_whitespace</span><span class="s4">)</span>
+                        <span class="s3">or </span><span class="s4">(</span><span class="s1">skip_cm </span><span class="s3">and </span><span class="s1">imt</span><span class="s4">(</span><span class="s1">tk</span><span class="s4">, </span><span class="s1">t</span><span class="s4">=</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Comment</span><span class="s4">, </span><span class="s1">i</span><span class="s4">=</span><span class="s1">Comment</span><span class="s4">)))</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">_token_matching</span><span class="s4">(</span><span class="s1">matcher</span><span class="s4">, </span><span class="s1">idx</span><span class="s4">, </span><span class="s1">reverse</span><span class="s4">=</span><span class="s1">_reverse</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">token_index</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">token</span><span class="s4">, </span><span class="s1">start</span><span class="s4">=</span><span class="s6">0</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Return list index of token.&quot;&quot;&quot;</span>
+        <span class="s1">start </span><span class="s4">= </span><span class="s1">start </span><span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">start</span><span class="s4">, </span><span class="s1">int</span><span class="s4">) </span><span class="s3">else </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_index</span><span class="s4">(</span><span class="s1">start</span><span class="s4">)</span>
+        <span class="s3">return </span><span class="s1">start </span><span class="s4">+ </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s1">start</span><span class="s4">:].</span><span class="s1">index</span><span class="s4">(</span><span class="s1">token</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">group_tokens</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">grp_cls</span><span class="s4">, </span><span class="s1">start</span><span class="s4">, </span><span class="s1">end</span><span class="s4">, </span><span class="s1">include_end</span><span class="s4">=</span><span class="s3">True</span><span class="s4">,</span>
+                     <span class="s1">extend</span><span class="s4">=</span><span class="s3">False</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Replace tokens by an instance of *grp_cls*.&quot;&quot;&quot;</span>
+        <span class="s1">start_idx </span><span class="s4">= </span><span class="s1">start</span>
+        <span class="s1">start </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s1">start_idx</span><span class="s4">]</span>
+
+        <span class="s1">end_idx </span><span class="s4">= </span><span class="s1">end </span><span class="s4">+ </span><span class="s1">include_end</span>
+
+        <span class="s0"># will be needed later for new group_clauses</span>
+        <span class="s0"># while skip_ws and tokens and tokens[-1].is_whitespace:</span>
+        <span class="s0">#     tokens = tokens[:-1]</span>
+
+        <span class="s3">if </span><span class="s1">extend </span><span class="s3">and </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">start</span><span class="s4">, </span><span class="s1">grp_cls</span><span class="s4">):</span>
+            <span class="s1">subtokens </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s1">start_idx </span><span class="s4">+ </span><span class="s6">1</span><span class="s4">:</span><span class="s1">end_idx</span><span class="s4">]</span>
+
+            <span class="s1">grp </span><span class="s4">= </span><span class="s1">start</span>
+            <span class="s1">grp</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">.</span><span class="s1">extend</span><span class="s4">(</span><span class="s1">subtokens</span><span class="s4">)</span>
+            <span class="s3">del </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s1">start_idx </span><span class="s4">+ </span><span class="s6">1</span><span class="s4">:</span><span class="s1">end_idx</span><span class="s4">]</span>
+            <span class="s1">grp</span><span class="s4">.</span><span class="s1">value </span><span class="s4">= </span><span class="s1">str</span><span class="s4">(</span><span class="s1">start</span><span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">subtokens </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s1">start_idx</span><span class="s4">:</span><span class="s1">end_idx</span><span class="s4">]</span>
+            <span class="s1">grp </span><span class="s4">= </span><span class="s1">grp_cls</span><span class="s4">(</span><span class="s1">subtokens</span><span class="s4">)</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s1">start_idx</span><span class="s4">:</span><span class="s1">end_idx</span><span class="s4">] = [</span><span class="s1">grp</span><span class="s4">]</span>
+            <span class="s1">grp</span><span class="s4">.</span><span class="s1">parent </span><span class="s4">= </span><span class="s1">self</span>
+
+        <span class="s3">for </span><span class="s1">token </span><span class="s3">in </span><span class="s1">subtokens</span><span class="s4">:</span>
+            <span class="s1">token</span><span class="s4">.</span><span class="s1">parent </span><span class="s4">= </span><span class="s1">grp</span>
+
+        <span class="s3">return </span><span class="s1">grp</span>
+
+    <span class="s3">def </span><span class="s1">insert_before</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">where</span><span class="s4">, </span><span class="s1">token</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Inserts *token* before *where*.&quot;&quot;&quot;</span>
+        <span class="s3">if not </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">where</span><span class="s4">, </span><span class="s1">int</span><span class="s4">):</span>
+            <span class="s1">where </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_index</span><span class="s4">(</span><span class="s1">where</span><span class="s4">)</span>
+        <span class="s1">token</span><span class="s4">.</span><span class="s1">parent </span><span class="s4">= </span><span class="s1">self</span>
+        <span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">.</span><span class="s1">insert</span><span class="s4">(</span><span class="s1">where</span><span class="s4">, </span><span class="s1">token</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">insert_after</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">where</span><span class="s4">, </span><span class="s1">token</span><span class="s4">, </span><span class="s1">skip_ws</span><span class="s4">=</span><span class="s3">True</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Inserts *token* after *where*.&quot;&quot;&quot;</span>
+        <span class="s3">if not </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">where</span><span class="s4">, </span><span class="s1">int</span><span class="s4">):</span>
+            <span class="s1">where </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_index</span><span class="s4">(</span><span class="s1">where</span><span class="s4">)</span>
+        <span class="s1">nidx</span><span class="s4">, </span><span class="s1">next_ </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_next</span><span class="s4">(</span><span class="s1">where</span><span class="s4">, </span><span class="s1">skip_ws</span><span class="s4">=</span><span class="s1">skip_ws</span><span class="s4">)</span>
+        <span class="s1">token</span><span class="s4">.</span><span class="s1">parent </span><span class="s4">= </span><span class="s1">self</span>
+        <span class="s3">if </span><span class="s1">next_ </span><span class="s3">is None</span><span class="s4">:</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">.</span><span class="s1">append</span><span class="s4">(</span><span class="s1">token</span><span class="s4">)</span>
+        <span class="s3">else</span><span class="s4">:</span>
+            <span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">.</span><span class="s1">insert</span><span class="s4">(</span><span class="s1">nidx</span><span class="s4">, </span><span class="s1">token</span><span class="s4">)</span>
+
+    <span class="s3">def </span><span class="s1">has_alias</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns ``True`` if an alias is present.&quot;&quot;&quot;</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">get_alias</span><span class="s4">() </span><span class="s3">is not None</span>
+
+    <span class="s3">def </span><span class="s1">get_alias</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the alias for this identifier or ``None``.&quot;&quot;&quot;</span>
+        <span class="s3">return None</span>
+
+    <span class="s3">def </span><span class="s1">get_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the name of this identifier. 
+ 
+        This is either it's alias or it's real name. The returned valued can 
+        be considered as the name under which the object corresponding to 
+        this identifier is known within the current statement. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">get_alias</span><span class="s4">() </span><span class="s3">or </span><span class="s1">self</span><span class="s4">.</span><span class="s1">get_real_name</span><span class="s4">()</span>
+
+    <span class="s3">def </span><span class="s1">get_real_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the real name (object name) of this identifier.&quot;&quot;&quot;</span>
+        <span class="s3">return None</span>
+
+    <span class="s3">def </span><span class="s1">get_parent_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Return name of the parent object if any. 
+ 
+        A parent object is identified by the first occurring dot. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">dot_idx</span><span class="s4">, </span><span class="s1">_ </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_next_by</span><span class="s4">(</span><span class="s1">m</span><span class="s4">=(</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Punctuation</span><span class="s4">, </span><span class="s5">'.'</span><span class="s4">))</span>
+        <span class="s1">_</span><span class="s4">, </span><span class="s1">prev_ </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_prev</span><span class="s4">(</span><span class="s1">dot_idx</span><span class="s4">)</span>
+        <span class="s3">return </span><span class="s1">remove_quotes</span><span class="s4">(</span><span class="s1">prev_</span><span class="s4">.</span><span class="s1">value</span><span class="s4">) </span><span class="s3">if </span><span class="s1">prev_ </span><span class="s3">is not None else None</span>
+
+    <span class="s3">def </span><span class="s1">_get_first_name</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">idx</span><span class="s4">=</span><span class="s3">None</span><span class="s4">, </span><span class="s1">reverse</span><span class="s4">=</span><span class="s3">False</span><span class="s4">, </span><span class="s1">keywords</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+                        <span class="s1">real_name</span><span class="s4">=</span><span class="s3">False</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the name of the first token with a name&quot;&quot;&quot;</span>
+
+        <span class="s1">tokens </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s1">idx</span><span class="s4">:] </span><span class="s3">if </span><span class="s1">idx </span><span class="s3">else </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span>
+        <span class="s1">tokens </span><span class="s4">= </span><span class="s1">reversed</span><span class="s4">(</span><span class="s1">tokens</span><span class="s4">) </span><span class="s3">if </span><span class="s1">reverse </span><span class="s3">else </span><span class="s1">tokens</span>
+        <span class="s1">types </span><span class="s4">= [</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Name</span><span class="s4">, </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Wildcard</span><span class="s4">, </span><span class="s1">T</span><span class="s4">.</span><span class="s1">String</span><span class="s4">.</span><span class="s1">Symbol</span><span class="s4">]</span>
+
+        <span class="s3">if </span><span class="s1">keywords</span><span class="s4">:</span>
+            <span class="s1">types</span><span class="s4">.</span><span class="s1">append</span><span class="s4">(</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">)</span>
+
+        <span class="s3">for </span><span class="s1">token </span><span class="s3">in </span><span class="s1">tokens</span><span class="s4">:</span>
+            <span class="s3">if </span><span class="s1">token</span><span class="s4">.</span><span class="s1">ttype </span><span class="s3">in </span><span class="s1">types</span><span class="s4">:</span>
+                <span class="s3">return </span><span class="s1">remove_quotes</span><span class="s4">(</span><span class="s1">token</span><span class="s4">.</span><span class="s1">value</span><span class="s4">)</span>
+            <span class="s3">elif </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">token</span><span class="s4">, (</span><span class="s1">Identifier</span><span class="s4">, </span><span class="s1">Function</span><span class="s4">)):</span>
+                <span class="s3">return </span><span class="s1">token</span><span class="s4">.</span><span class="s1">get_real_name</span><span class="s4">() </span><span class="s3">if </span><span class="s1">real_name </span><span class="s3">else </span><span class="s1">token</span><span class="s4">.</span><span class="s1">get_name</span><span class="s4">()</span>
+
+
+<span class="s3">class </span><span class="s1">Statement</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;Represents a SQL statement.&quot;&quot;&quot;</span>
+
+    <span class="s3">def </span><span class="s1">get_type</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the type of a statement. 
+ 
+        The returned value is a string holding an upper-cased reprint of 
+        the first DML or DDL keyword. If the first token in this group 
+        isn't a DML or DDL keyword &quot;UNKNOWN&quot; is returned. 
+ 
+        Whitespaces and comments at the beginning of the statement 
+        are ignored. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">token </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_first</span><span class="s4">(</span><span class="s1">skip_cm</span><span class="s4">=</span><span class="s3">True</span><span class="s4">)</span>
+        <span class="s3">if </span><span class="s1">token </span><span class="s3">is None</span><span class="s4">:</span>
+            <span class="s0"># An &quot;empty&quot; statement that either has not tokens at all</span>
+            <span class="s0"># or only whitespace tokens.</span>
+            <span class="s3">return </span><span class="s5">'UNKNOWN'</span>
+
+        <span class="s3">elif </span><span class="s1">token</span><span class="s4">.</span><span class="s1">ttype </span><span class="s3">in </span><span class="s4">(</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">.</span><span class="s1">DML</span><span class="s4">, </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">.</span><span class="s1">DDL</span><span class="s4">):</span>
+            <span class="s3">return </span><span class="s1">token</span><span class="s4">.</span><span class="s1">normalized</span>
+
+        <span class="s3">elif </span><span class="s1">token</span><span class="s4">.</span><span class="s1">ttype </span><span class="s4">== </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">.</span><span class="s1">CTE</span><span class="s4">:</span>
+            <span class="s0"># The WITH keyword should be followed by either an Identifier or</span>
+            <span class="s0"># an IdentifierList containing the CTE definitions;  the actual</span>
+            <span class="s0"># DML keyword (e.g. SELECT, INSERT) will follow next.</span>
+            <span class="s1">tidx </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_index</span><span class="s4">(</span><span class="s1">token</span><span class="s4">)</span>
+            <span class="s3">while </span><span class="s1">tidx </span><span class="s3">is not None</span><span class="s4">:</span>
+                <span class="s1">tidx</span><span class="s4">, </span><span class="s1">token </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_next</span><span class="s4">(</span><span class="s1">tidx</span><span class="s4">, </span><span class="s1">skip_ws</span><span class="s4">=</span><span class="s3">True</span><span class="s4">)</span>
+                <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">token</span><span class="s4">, (</span><span class="s1">Identifier</span><span class="s4">, </span><span class="s1">IdentifierList</span><span class="s4">)):</span>
+                    <span class="s1">tidx</span><span class="s4">, </span><span class="s1">token </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_next</span><span class="s4">(</span><span class="s1">tidx</span><span class="s4">, </span><span class="s1">skip_ws</span><span class="s4">=</span><span class="s3">True</span><span class="s4">)</span>
+
+                    <span class="s3">if </span><span class="s1">token </span><span class="s3">is not None </span><span class="s1">\</span>
+                            <span class="s3">and </span><span class="s1">token</span><span class="s4">.</span><span class="s1">ttype </span><span class="s4">== </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">.</span><span class="s1">DML</span><span class="s4">:</span>
+                        <span class="s3">return </span><span class="s1">token</span><span class="s4">.</span><span class="s1">normalized</span>
+
+        <span class="s0"># Hmm, probably invalid syntax, so return unknown.</span>
+        <span class="s3">return </span><span class="s5">'UNKNOWN'</span>
+
+
+<span class="s3">class </span><span class="s1">Identifier</span><span class="s4">(</span><span class="s1">NameAliasMixin</span><span class="s4">, </span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;Represents an identifier. 
+ 
+    Identifiers may have aliases or typecasts. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s3">def </span><span class="s1">is_wildcard</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Return ``True`` if this identifier contains a wildcard.&quot;&quot;&quot;</span>
+        <span class="s1">_</span><span class="s4">, </span><span class="s1">token </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_next_by</span><span class="s4">(</span><span class="s1">t</span><span class="s4">=</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Wildcard</span><span class="s4">)</span>
+        <span class="s3">return </span><span class="s1">token </span><span class="s3">is not None</span>
+
+    <span class="s3">def </span><span class="s1">get_typecast</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the typecast or ``None`` of this object as a string.&quot;&quot;&quot;</span>
+        <span class="s1">midx</span><span class="s4">, </span><span class="s1">marker </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_next_by</span><span class="s4">(</span><span class="s1">m</span><span class="s4">=(</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Punctuation</span><span class="s4">, </span><span class="s5">'::'</span><span class="s4">))</span>
+        <span class="s1">nidx</span><span class="s4">, </span><span class="s1">next_ </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_next</span><span class="s4">(</span><span class="s1">midx</span><span class="s4">, </span><span class="s1">skip_ws</span><span class="s4">=</span><span class="s3">False</span><span class="s4">)</span>
+        <span class="s3">return </span><span class="s1">next_</span><span class="s4">.</span><span class="s1">value </span><span class="s3">if </span><span class="s1">next_ </span><span class="s3">else None</span>
+
+    <span class="s3">def </span><span class="s1">get_ordering</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the ordering or ``None`` as uppercase string.&quot;&quot;&quot;</span>
+        <span class="s1">_</span><span class="s4">, </span><span class="s1">ordering </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">token_next_by</span><span class="s4">(</span><span class="s1">t</span><span class="s4">=</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">.</span><span class="s1">Order</span><span class="s4">)</span>
+        <span class="s3">return </span><span class="s1">ordering</span><span class="s4">.</span><span class="s1">normalized </span><span class="s3">if </span><span class="s1">ordering </span><span class="s3">else None</span>
+
+    <span class="s3">def </span><span class="s1">get_array_indices</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns an iterator of index token lists&quot;&quot;&quot;</span>
+
+        <span class="s3">for </span><span class="s1">token </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">:</span>
+            <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">token</span><span class="s4">, </span><span class="s1">SquareBrackets</span><span class="s4">):</span>
+                <span class="s0"># Use [1:-1] index to discard the square brackets</span>
+                <span class="s3">yield </span><span class="s1">token</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s6">1</span><span class="s4">:-</span><span class="s6">1</span><span class="s4">]</span>
+
+
+<span class="s3">class </span><span class="s1">IdentifierList</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;A list of :class:`~sqlparse.sql.Identifier`\'s.&quot;&quot;&quot;</span>
+
+    <span class="s3">def </span><span class="s1">get_identifiers</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns the identifiers. 
+ 
+        Whitespaces and punctuations are not included in this generator. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">for </span><span class="s1">token </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">:</span>
+            <span class="s3">if not </span><span class="s4">(</span><span class="s1">token</span><span class="s4">.</span><span class="s1">is_whitespace </span><span class="s3">or </span><span class="s1">token</span><span class="s4">.</span><span class="s1">match</span><span class="s4">(</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Punctuation</span><span class="s4">, </span><span class="s5">','</span><span class="s4">)):</span>
+                <span class="s3">yield </span><span class="s1">token</span>
+
+
+<span class="s3">class </span><span class="s1">TypedLiteral</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;A typed literal, such as &quot;date '2001-09-28'&quot; or &quot;interval '2 hours'&quot;.&quot;&quot;&quot;</span>
+    <span class="s1">M_OPEN </span><span class="s4">= [(</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Name</span><span class="s4">.</span><span class="s1">Builtin</span><span class="s4">, </span><span class="s3">None</span><span class="s4">), (</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">&quot;TIMESTAMP&quot;</span><span class="s4">)]</span>
+    <span class="s1">M_CLOSE </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">String</span><span class="s4">.</span><span class="s1">Single</span><span class="s4">, </span><span class="s3">None</span>
+    <span class="s1">M_EXTEND </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, (</span><span class="s5">&quot;DAY&quot;</span><span class="s4">, </span><span class="s5">&quot;HOUR&quot;</span><span class="s4">, </span><span class="s5">&quot;MINUTE&quot;</span><span class="s4">, </span><span class="s5">&quot;MONTH&quot;</span><span class="s4">, </span><span class="s5">&quot;SECOND&quot;</span><span class="s4">, </span><span class="s5">&quot;YEAR&quot;</span><span class="s4">)</span>
+
+
+<span class="s3">class </span><span class="s1">Parenthesis</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;Tokens between parenthesis.&quot;&quot;&quot;</span>
+    <span class="s1">M_OPEN </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Punctuation</span><span class="s4">, </span><span class="s5">'('</span>
+    <span class="s1">M_CLOSE </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Punctuation</span><span class="s4">, </span><span class="s5">')'</span>
+
+    <span class="s4">@</span><span class="s1">property</span>
+    <span class="s3">def </span><span class="s1">_groupable_tokens</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s6">1</span><span class="s4">:-</span><span class="s6">1</span><span class="s4">]</span>
+
+
+<span class="s3">class </span><span class="s1">SquareBrackets</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;Tokens between square brackets&quot;&quot;&quot;</span>
+    <span class="s1">M_OPEN </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Punctuation</span><span class="s4">, </span><span class="s5">'['</span>
+    <span class="s1">M_CLOSE </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Punctuation</span><span class="s4">, </span><span class="s5">']'</span>
+
+    <span class="s4">@</span><span class="s1">property</span>
+    <span class="s3">def </span><span class="s1">_groupable_tokens</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s6">1</span><span class="s4">:-</span><span class="s6">1</span><span class="s4">]</span>
+
+
+<span class="s3">class </span><span class="s1">Assignment</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;An assignment like 'var := val;'&quot;&quot;&quot;</span>
+
+
+<span class="s3">class </span><span class="s1">If</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;An 'if' clause with possible 'else if' or 'else' parts.&quot;&quot;&quot;</span>
+    <span class="s1">M_OPEN </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'IF'</span>
+    <span class="s1">M_CLOSE </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'END IF'</span>
+
+
+<span class="s3">class </span><span class="s1">For</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;A 'FOR' loop.&quot;&quot;&quot;</span>
+    <span class="s1">M_OPEN </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, (</span><span class="s5">'FOR'</span><span class="s4">, </span><span class="s5">'FOREACH'</span><span class="s4">)</span>
+    <span class="s1">M_CLOSE </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'END LOOP'</span>
+
+
+<span class="s3">class </span><span class="s1">Comparison</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;A comparison used for example in WHERE clauses.&quot;&quot;&quot;</span>
+
+    <span class="s4">@</span><span class="s1">property</span>
+    <span class="s3">def </span><span class="s1">left</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s6">0</span><span class="s4">]</span>
+
+    <span class="s4">@</span><span class="s1">property</span>
+    <span class="s3">def </span><span class="s1">right</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[-</span><span class="s6">1</span><span class="s4">]</span>
+
+
+<span class="s3">class </span><span class="s1">Comment</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;A comment.&quot;&quot;&quot;</span>
+
+    <span class="s3">def </span><span class="s1">is_multiline</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s3">return </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens </span><span class="s3">and </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[</span><span class="s6">0</span><span class="s4">].</span><span class="s1">ttype </span><span class="s4">== </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Comment</span><span class="s4">.</span><span class="s1">Multiline</span>
+
+
+<span class="s3">class </span><span class="s1">Where</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;A WHERE clause.&quot;&quot;&quot;</span>
+    <span class="s1">M_OPEN </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'WHERE'</span>
+    <span class="s1">M_CLOSE </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, (</span>
+        <span class="s5">'ORDER BY'</span><span class="s4">, </span><span class="s5">'GROUP BY'</span><span class="s4">, </span><span class="s5">'LIMIT'</span><span class="s4">, </span><span class="s5">'UNION'</span><span class="s4">, </span><span class="s5">'UNION ALL'</span><span class="s4">, </span><span class="s5">'EXCEPT'</span><span class="s4">,</span>
+        <span class="s5">'HAVING'</span><span class="s4">, </span><span class="s5">'RETURNING'</span><span class="s4">, </span><span class="s5">'INTO'</span><span class="s4">)</span>
+
+
+<span class="s3">class </span><span class="s1">Having</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;A HAVING clause.&quot;&quot;&quot;</span>
+    <span class="s1">M_OPEN </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'HAVING'</span>
+    <span class="s1">M_CLOSE </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, (</span><span class="s5">'ORDER BY'</span><span class="s4">, </span><span class="s5">'LIMIT'</span><span class="s4">)</span>
+
+
+<span class="s3">class </span><span class="s1">Case</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;A CASE statement with one or more WHEN and possibly an ELSE part.&quot;&quot;&quot;</span>
+    <span class="s1">M_OPEN </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'CASE'</span>
+    <span class="s1">M_CLOSE </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'END'</span>
+
+    <span class="s3">def </span><span class="s1">get_cases</span><span class="s4">(</span><span class="s1">self</span><span class="s4">, </span><span class="s1">skip_ws</span><span class="s4">=</span><span class="s3">False</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Returns a list of 2-tuples (condition, value). 
+ 
+        If an ELSE exists condition is None. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">CONDITION </span><span class="s4">= </span><span class="s6">1</span>
+        <span class="s1">VALUE </span><span class="s4">= </span><span class="s6">2</span>
+
+        <span class="s1">ret </span><span class="s4">= []</span>
+        <span class="s1">mode </span><span class="s4">= </span><span class="s1">CONDITION</span>
+
+        <span class="s3">for </span><span class="s1">token </span><span class="s3">in </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">:</span>
+            <span class="s0"># Set mode from the current statement</span>
+            <span class="s3">if </span><span class="s1">token</span><span class="s4">.</span><span class="s1">match</span><span class="s4">(</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'CASE'</span><span class="s4">):</span>
+                <span class="s3">continue</span>
+
+            <span class="s3">elif </span><span class="s1">skip_ws </span><span class="s3">and </span><span class="s1">token</span><span class="s4">.</span><span class="s1">ttype </span><span class="s3">in </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Whitespace</span><span class="s4">:</span>
+                <span class="s3">continue</span>
+
+            <span class="s3">elif </span><span class="s1">token</span><span class="s4">.</span><span class="s1">match</span><span class="s4">(</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'WHEN'</span><span class="s4">):</span>
+                <span class="s1">ret</span><span class="s4">.</span><span class="s1">append</span><span class="s4">(([], []))</span>
+                <span class="s1">mode </span><span class="s4">= </span><span class="s1">CONDITION</span>
+
+            <span class="s3">elif </span><span class="s1">token</span><span class="s4">.</span><span class="s1">match</span><span class="s4">(</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'THEN'</span><span class="s4">):</span>
+                <span class="s1">mode </span><span class="s4">= </span><span class="s1">VALUE</span>
+
+            <span class="s3">elif </span><span class="s1">token</span><span class="s4">.</span><span class="s1">match</span><span class="s4">(</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'ELSE'</span><span class="s4">):</span>
+                <span class="s1">ret</span><span class="s4">.</span><span class="s1">append</span><span class="s4">((</span><span class="s3">None</span><span class="s4">, []))</span>
+                <span class="s1">mode </span><span class="s4">= </span><span class="s1">VALUE</span>
+
+            <span class="s3">elif </span><span class="s1">token</span><span class="s4">.</span><span class="s1">match</span><span class="s4">(</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'END'</span><span class="s4">):</span>
+                <span class="s1">mode </span><span class="s4">= </span><span class="s3">None</span>
+
+            <span class="s0"># First condition without preceding WHEN</span>
+            <span class="s3">if </span><span class="s1">mode </span><span class="s3">and not </span><span class="s1">ret</span><span class="s4">:</span>
+                <span class="s1">ret</span><span class="s4">.</span><span class="s1">append</span><span class="s4">(([], []))</span>
+
+            <span class="s0"># Append token depending of the current mode</span>
+            <span class="s3">if </span><span class="s1">mode </span><span class="s4">== </span><span class="s1">CONDITION</span><span class="s4">:</span>
+                <span class="s1">ret</span><span class="s4">[-</span><span class="s6">1</span><span class="s4">][</span><span class="s6">0</span><span class="s4">].</span><span class="s1">append</span><span class="s4">(</span><span class="s1">token</span><span class="s4">)</span>
+
+            <span class="s3">elif </span><span class="s1">mode </span><span class="s4">== </span><span class="s1">VALUE</span><span class="s4">:</span>
+                <span class="s1">ret</span><span class="s4">[-</span><span class="s6">1</span><span class="s4">][</span><span class="s6">1</span><span class="s4">].</span><span class="s1">append</span><span class="s4">(</span><span class="s1">token</span><span class="s4">)</span>
+
+        <span class="s0"># Return cases list</span>
+        <span class="s3">return </span><span class="s1">ret</span>
+
+
+<span class="s3">class </span><span class="s1">Function</span><span class="s4">(</span><span class="s1">NameAliasMixin</span><span class="s4">, </span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;A function or procedure call.&quot;&quot;&quot;</span>
+
+    <span class="s3">def </span><span class="s1">get_parameters</span><span class="s4">(</span><span class="s1">self</span><span class="s4">):</span>
+        <span class="s2">&quot;&quot;&quot;Return a list of parameters.&quot;&quot;&quot;</span>
+        <span class="s1">parenthesis </span><span class="s4">= </span><span class="s1">self</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">[-</span><span class="s6">1</span><span class="s4">]</span>
+        <span class="s3">for </span><span class="s1">token </span><span class="s3">in </span><span class="s1">parenthesis</span><span class="s4">.</span><span class="s1">tokens</span><span class="s4">:</span>
+            <span class="s3">if </span><span class="s1">isinstance</span><span class="s4">(</span><span class="s1">token</span><span class="s4">, </span><span class="s1">IdentifierList</span><span class="s4">):</span>
+                <span class="s3">return </span><span class="s1">token</span><span class="s4">.</span><span class="s1">get_identifiers</span><span class="s4">()</span>
+            <span class="s3">elif </span><span class="s1">imt</span><span class="s4">(</span><span class="s1">token</span><span class="s4">, </span><span class="s1">i</span><span class="s4">=(</span><span class="s1">Function</span><span class="s4">, </span><span class="s1">Identifier</span><span class="s4">), </span><span class="s1">t</span><span class="s4">=</span><span class="s1">T</span><span class="s4">.</span><span class="s1">Literal</span><span class="s4">):</span>
+                <span class="s3">return </span><span class="s4">[</span><span class="s1">token</span><span class="s4">, ]</span>
+        <span class="s3">return </span><span class="s4">[]</span>
+
+
+<span class="s3">class </span><span class="s1">Begin</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;A BEGIN/END block.&quot;&quot;&quot;</span>
+    <span class="s1">M_OPEN </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'BEGIN'</span>
+    <span class="s1">M_CLOSE </span><span class="s4">= </span><span class="s1">T</span><span class="s4">.</span><span class="s1">Keyword</span><span class="s4">, </span><span class="s5">'END'</span>
+
+
+<span class="s3">class </span><span class="s1">Operation</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;Grouping of operations&quot;&quot;&quot;</span>
+
+
+<span class="s3">class </span><span class="s1">Values</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;Grouping of values&quot;&quot;&quot;</span>
+
+
+<span class="s3">class </span><span class="s1">Command</span><span class="s4">(</span><span class="s1">TokenList</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;Grouping of CLI commands.&quot;&quot;&quot;</span>
+</pre>
+</body>
+</html>

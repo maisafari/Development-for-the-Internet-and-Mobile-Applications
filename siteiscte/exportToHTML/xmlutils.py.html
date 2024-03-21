@@ -1,0 +1,57 @@
+<html>
+<head>
+<title>xmlutils.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+xmlutils.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Utilities for XML generation/parsing. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">re</span>
+<span class="s2">from </span><span class="s1">xml</span><span class="s3">.</span><span class="s1">sax</span><span class="s3">.</span><span class="s1">saxutils </span><span class="s2">import </span><span class="s1">XMLGenerator</span>
+
+
+<span class="s2">class </span><span class="s1">UnserializableContentError</span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">):</span>
+    <span class="s2">pass</span>
+
+
+<span class="s2">class </span><span class="s1">SimplerXMLGenerator</span><span class="s3">(</span><span class="s1">XMLGenerator</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">addQuickElement</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">contents</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">attrs</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s0">&quot;Convenience method for adding an element with no children&quot;</span>
+        <span class="s2">if </span><span class="s1">attrs </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s1">attrs </span><span class="s3">= {}</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">startElement</span><span class="s3">(</span><span class="s1">name</span><span class="s3">, </span><span class="s1">attrs</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">contents </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">characters</span><span class="s3">(</span><span class="s1">contents</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">endElement</span><span class="s3">(</span><span class="s1">name</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">characters</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">content</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">content </span><span class="s2">and </span><span class="s1">re</span><span class="s3">.</span><span class="s1">search</span><span class="s3">(</span><span class="s4">r&quot;[\x00-\x08\x0B-\x0C\x0E-\x1F]&quot;</span><span class="s3">, </span><span class="s1">content</span><span class="s3">):</span>
+            <span class="s5"># Fail loudly when content has control chars (unsupported in XML 1.0)</span>
+            <span class="s5"># See https://www.w3.org/International/questions/qa-controls</span>
+            <span class="s2">raise </span><span class="s1">UnserializableContentError</span><span class="s3">(</span>
+                <span class="s4">&quot;Control characters are not supported in XML 1.0&quot;</span>
+            <span class="s3">)</span>
+        <span class="s1">XMLGenerator</span><span class="s3">.</span><span class="s1">characters</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">content</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">startElement</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">attrs</span><span class="s3">):</span>
+        <span class="s5"># Sort attrs for a deterministic output.</span>
+        <span class="s1">sorted_attrs </span><span class="s3">= </span><span class="s1">dict</span><span class="s3">(</span><span class="s1">sorted</span><span class="s3">(</span><span class="s1">attrs</span><span class="s3">.</span><span class="s1">items</span><span class="s3">())) </span><span class="s2">if </span><span class="s1">attrs </span><span class="s2">else </span><span class="s1">attrs</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">startElement</span><span class="s3">(</span><span class="s1">name</span><span class="s3">, </span><span class="s1">sorted_attrs</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

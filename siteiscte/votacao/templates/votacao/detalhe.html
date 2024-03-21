@@ -2,8 +2,6 @@
 {% if error_message %}
 <p><strong>{{ error_message }}</strong></p>
 {% endif %}
-<a href="{% url 'votacao:criar_opcao' questao_id=questao.id %}">Adicionar Opção</a>
-
 <form action="{% url 'votacao:voto' questao.id %}"
 method="post">
 {% csrf_token %}
@@ -11,10 +9,16 @@ method="post">
 <input type="radio" name="opcao"
 id="opcao{{ forloop.counter }}"
 value="{{ opcao.id }}" />
-<label for="opcao{{ forloop.counter }}">
-{{ opcao.opcao_texto }}
-</label>
+<label for="opcao{{ forloop.counter }}">{{ opcao.opcao_texto }}</label>
+    <input type="hidden" name="opcao_id" value="{{ opcao.id }}">
+  <button type="submit" name = "opcao_id" onclick="return confirm('Tem certeza que deseja remover a opção?')">Remover Opção</button>
 <br />
 {% endfor %}
-<input type="submit" value="Voto" />
+<input type="submit" name ="Voto" value="Voto" />
+</form>
+<a href="{% url 'votacao:criaropcao' questao.id %}">Criar Nova Opção</a>
+<form method="post" action="{% url 'votacao:remover_questao' questao.id %}">
+  {% csrf_token %}
+  <input type="hidden" name="questao_id" value="{{ questao.id }}">
+  <button type="submit" name="questao_id" onclick="return confirm('Tem certeza que deseja remover esta questão?')">Remover Questão</button>
 </form>

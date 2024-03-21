@@ -1,0 +1,61 @@
+<html>
+<head>
+<title>related_widget_wrapper.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #bcbec4;}
+.s1 { color: #d5b778;}
+.s2 { color: #bababa;}
+.s3 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+related_widget_wrapper.html</font>
+</center></td></tr></table>
+<pre><span class="s0">{% load i18n static %}</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;related-widget-wrapper&quot; </span><span class="s2">{% if not model_has_limit_choices_to %}data-model-ref</span><span class="s3">=&quot;{{ model }}&quot;</span><span class="s2">{% endif %}</span><span class="s1">&gt;</span>
+    <span class="s0">{{ rendered_widget }}</span>
+    <span class="s0">{% block links %}</span>
+        <span class="s0">{% spaceless %}</span>
+        <span class="s0">{% if not is_hidden %}</span>
+        <span class="s0">{% if can_change_related %}</span>
+        <span class="s1">&lt;a </span><span class="s2">class</span><span class="s3">=&quot;related-widget-wrapper-link change-related&quot; </span><span class="s2">id</span><span class="s3">=&quot;change_id_{{ name }}&quot;</span>
+            <span class="s2">data-href-template</span><span class="s3">=&quot;{{ change_related_template_url }}?{{ url_params }}&quot;</span>
+            <span class="s2">data-popup</span><span class="s3">=&quot;yes&quot;</span>
+            <span class="s2">title</span><span class="s3">=&quot;{% blocktranslate %}Change selected {{ model }}{% endblocktranslate %}&quot;</span><span class="s1">&gt;</span>
+            <span class="s1">&lt;img </span><span class="s2">src</span><span class="s3">=&quot;{% static 'admin/img/icon-changelink.svg' %}&quot; </span><span class="s2">alt</span><span class="s3">=&quot;&quot; </span><span class="s2">width</span><span class="s3">=&quot;20&quot; </span><span class="s2">height</span><span class="s3">=&quot;20&quot;</span><span class="s1">&gt;</span>
+        <span class="s1">&lt;/a&gt;</span>
+        <span class="s0">{% endif %}</span>
+        <span class="s0">{% if can_add_related %}</span>
+        <span class="s1">&lt;a </span><span class="s2">class</span><span class="s3">=&quot;related-widget-wrapper-link add-related&quot; </span><span class="s2">id</span><span class="s3">=&quot;add_id_{{ name }}&quot;</span>
+            <span class="s2">data-popup</span><span class="s3">=&quot;yes&quot;</span>
+            <span class="s2">href</span><span class="s3">=&quot;{{ add_related_url }}?{{ url_params }}&quot;</span>
+            <span class="s2">title</span><span class="s3">=&quot;{% blocktranslate %}Add another {{ model }}{% endblocktranslate %}&quot;</span><span class="s1">&gt;</span>
+            <span class="s1">&lt;img </span><span class="s2">src</span><span class="s3">=&quot;{% static 'admin/img/icon-addlink.svg' %}&quot; </span><span class="s2">alt</span><span class="s3">=&quot;&quot; </span><span class="s2">width</span><span class="s3">=&quot;20&quot; </span><span class="s2">height</span><span class="s3">=&quot;20&quot;</span><span class="s1">&gt;</span>
+        <span class="s1">&lt;/a&gt;</span>
+        <span class="s0">{% endif %}</span>
+        <span class="s0">{% if can_delete_related %}</span>
+        <span class="s1">&lt;a </span><span class="s2">class</span><span class="s3">=&quot;related-widget-wrapper-link delete-related&quot; </span><span class="s2">id</span><span class="s3">=&quot;delete_id_{{ name }}&quot;</span>
+            <span class="s2">data-href-template</span><span class="s3">=&quot;{{ delete_related_template_url }}?{{ url_params }}&quot;</span>
+            <span class="s2">data-popup</span><span class="s3">=&quot;yes&quot;</span>
+            <span class="s2">title</span><span class="s3">=&quot;{% blocktranslate %}Delete selected {{ model }}{% endblocktranslate %}&quot;</span><span class="s1">&gt;</span>
+            <span class="s1">&lt;img </span><span class="s2">src</span><span class="s3">=&quot;{% static 'admin/img/icon-deletelink.svg' %}&quot; </span><span class="s2">alt</span><span class="s3">=&quot;&quot; </span><span class="s2">width</span><span class="s3">=&quot;20&quot; </span><span class="s2">height</span><span class="s3">=&quot;20&quot;</span><span class="s1">&gt;</span>
+        <span class="s1">&lt;/a&gt;</span>
+        <span class="s0">{% endif %}</span>
+        <span class="s0">{% if can_view_related %}</span>
+          <span class="s1">&lt;a </span><span class="s2">class</span><span class="s3">=&quot;related-widget-wrapper-link view-related&quot; </span><span class="s2">id</span><span class="s3">=&quot;view_id_{{ name }}&quot;</span>
+             <span class="s2">data-href-template</span><span class="s3">=&quot;{{ change_related_template_url }}?{{ view_related_url_params }}&quot;</span>
+             <span class="s2">title</span><span class="s3">=&quot;{% blocktranslate %}View selected {{ model }}{% endblocktranslate %}&quot;</span><span class="s1">&gt;</span>
+            <span class="s1">&lt;img </span><span class="s2">src</span><span class="s3">=&quot;{% static 'admin/img/icon-viewlink.svg' %}&quot; </span><span class="s2">alt</span><span class="s3">=&quot;&quot; </span><span class="s2">width</span><span class="s3">=&quot;20&quot; </span><span class="s2">height</span><span class="s3">=&quot;20&quot;</span><span class="s1">&gt;</span>
+          <span class="s1">&lt;/a&gt;</span>
+        <span class="s0">{% endif %}</span>
+        <span class="s0">{% endif %}</span>
+        <span class="s0">{% endspaceless %}</span>
+    <span class="s0">{% endblock %}</span>
+<span class="s1">&lt;/div&gt;</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<html>
+<head>
+<title>cache.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+cache.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">cache </span><span class="s0">import </span><span class="s1">InvalidCacheBackendError</span><span class="s2">, </span><span class="s1">caches</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">cache</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">make_template_fragment_key</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template </span><span class="s0">import </span><span class="s1">Library</span><span class="s2">, </span><span class="s1">Node</span><span class="s2">, </span><span class="s1">TemplateSyntaxError</span><span class="s2">, </span><span class="s1">VariableDoesNotExist</span>
+
+<span class="s1">register </span><span class="s2">= </span><span class="s1">Library</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">CacheNode</span><span class="s2">(</span><span class="s1">Node</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">nodelist</span><span class="s2">, </span><span class="s1">expire_time_var</span><span class="s2">, </span><span class="s1">fragment_name</span><span class="s2">, </span><span class="s1">vary_on</span><span class="s2">, </span><span class="s1">cache_name</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">nodelist </span><span class="s2">= </span><span class="s1">nodelist</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">expire_time_var </span><span class="s2">= </span><span class="s1">expire_time_var</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">fragment_name </span><span class="s2">= </span><span class="s1">fragment_name</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">vary_on </span><span class="s2">= </span><span class="s1">vary_on</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">cache_name </span><span class="s2">= </span><span class="s1">cache_name</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">expire_time </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">expire_time_var</span><span class="s2">.</span><span class="s1">resolve</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">VariableDoesNotExist</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                <span class="s3">'&quot;cache&quot; tag got an unknown variable: %r' </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">expire_time_var</span><span class="s2">.</span><span class="s1">var</span>
+            <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">expire_time </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">expire_time </span><span class="s2">= </span><span class="s1">int</span><span class="s2">(</span><span class="s1">expire_time</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s2">(</span><span class="s1">ValueError</span><span class="s2">, </span><span class="s1">TypeError</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                    <span class="s3">'&quot;cache&quot; tag got a non-integer timeout value: %r' </span><span class="s2">% </span><span class="s1">expire_time</span>
+                <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">cache_name</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">cache_name </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">cache_name</span><span class="s2">.</span><span class="s1">resolve</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">VariableDoesNotExist</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                    <span class="s3">'&quot;cache&quot; tag got an unknown variable: %r' </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">cache_name</span><span class="s2">.</span><span class="s1">var</span>
+                <span class="s2">)</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">fragment_cache </span><span class="s2">= </span><span class="s1">caches</span><span class="s2">[</span><span class="s1">cache_name</span><span class="s2">]</span>
+            <span class="s0">except </span><span class="s1">InvalidCacheBackendError</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                    <span class="s3">&quot;Invalid cache name specified for cache tag: %r&quot; </span><span class="s2">% </span><span class="s1">cache_name</span>
+                <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">fragment_cache </span><span class="s2">= </span><span class="s1">caches</span><span class="s2">[</span><span class="s3">&quot;template_fragments&quot;</span><span class="s2">]</span>
+            <span class="s0">except </span><span class="s1">InvalidCacheBackendError</span><span class="s2">:</span>
+                <span class="s1">fragment_cache </span><span class="s2">= </span><span class="s1">caches</span><span class="s2">[</span><span class="s3">&quot;default&quot;</span><span class="s2">]</span>
+
+        <span class="s1">vary_on </span><span class="s2">= [</span><span class="s1">var</span><span class="s2">.</span><span class="s1">resolve</span><span class="s2">(</span><span class="s1">context</span><span class="s2">) </span><span class="s0">for </span><span class="s1">var </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">vary_on</span><span class="s2">]</span>
+        <span class="s1">cache_key </span><span class="s2">= </span><span class="s1">make_template_fragment_key</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">fragment_name</span><span class="s2">, </span><span class="s1">vary_on</span><span class="s2">)</span>
+        <span class="s1">value </span><span class="s2">= </span><span class="s1">fragment_cache</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">cache_key</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">value </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">value </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">nodelist</span><span class="s2">.</span><span class="s1">render</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+            <span class="s1">fragment_cache</span><span class="s2">.</span><span class="s1">set</span><span class="s2">(</span><span class="s1">cache_key</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">expire_time</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">value</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s3">&quot;cache&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">do_cache</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    This will cache the contents of a template fragment for a given amount 
+    of time. 
+ 
+    Usage:: 
+ 
+        {% load cache %} 
+        {% cache [expire_time] [fragment_name] %} 
+            .. some expensive processing .. 
+        {% endcache %} 
+ 
+    This tag also supports varying by a list of arguments:: 
+ 
+        {% load cache %} 
+        {% cache [expire_time] [fragment_name] [var1] [var2] .. %} 
+            .. some expensive processing .. 
+        {% endcache %} 
+ 
+    Optionally the cache to use may be specified thus:: 
+ 
+        {% cache ....  using=&quot;cachename&quot; %} 
+ 
+    Each unique set of arguments will result in a unique cache entry. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">nodelist </span><span class="s2">= </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">parse</span><span class="s2">((</span><span class="s3">&quot;endcache&quot;</span><span class="s2">,))</span>
+    <span class="s1">parser</span><span class="s2">.</span><span class="s1">delete_first_token</span><span class="s2">()</span>
+    <span class="s1">tokens </span><span class="s2">= </span><span class="s1">token</span><span class="s2">.</span><span class="s1">split_contents</span><span class="s2">()</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">tokens</span><span class="s2">) &lt; </span><span class="s5">3</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span><span class="s3">&quot;'%r' tag requires at least 2 arguments.&quot; </span><span class="s2">% </span><span class="s1">tokens</span><span class="s2">[</span><span class="s5">0</span><span class="s2">])</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">tokens</span><span class="s2">) &gt; </span><span class="s5">3 </span><span class="s0">and </span><span class="s1">tokens</span><span class="s2">[-</span><span class="s5">1</span><span class="s2">].</span><span class="s1">startswith</span><span class="s2">(</span><span class="s3">&quot;using=&quot;</span><span class="s2">):</span>
+        <span class="s1">cache_name </span><span class="s2">= </span><span class="s1">parser</span><span class="s2">.</span><span class="s1">compile_filter</span><span class="s2">(</span><span class="s1">tokens</span><span class="s2">[-</span><span class="s5">1</span><span class="s2">].</span><span class="s1">removeprefix</span><span class="s2">(</span><span class="s3">&quot;using=&quot;</span><span class="s2">))</span>
+        <span class="s1">tokens </span><span class="s2">= </span><span class="s1">tokens</span><span class="s2">[:-</span><span class="s5">1</span><span class="s2">]</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">cache_name </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s0">return </span><span class="s1">CacheNode</span><span class="s2">(</span>
+        <span class="s1">nodelist</span><span class="s2">,</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">compile_filter</span><span class="s2">(</span><span class="s1">tokens</span><span class="s2">[</span><span class="s5">1</span><span class="s2">]),</span>
+        <span class="s1">tokens</span><span class="s2">[</span><span class="s5">2</span><span class="s2">],  </span><span class="s6"># fragment_name can't be a variable.</span>
+        <span class="s2">[</span><span class="s1">parser</span><span class="s2">.</span><span class="s1">compile_filter</span><span class="s2">(</span><span class="s1">t</span><span class="s2">) </span><span class="s0">for </span><span class="s1">t </span><span class="s0">in </span><span class="s1">tokens</span><span class="s2">[</span><span class="s5">3</span><span class="s2">:]],</span>
+        <span class="s1">cache_name</span><span class="s2">,</span>
+    <span class="s2">)</span>
+</pre>
+</body>
+</html>

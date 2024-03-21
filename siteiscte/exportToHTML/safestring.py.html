@@ -1,0 +1,94 @@
+<html>
+<head>
+<title>safestring.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+safestring.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Functions for working with &quot;safe strings&quot;: strings that can be displayed safely 
+without further escaping in HTML. Marking something as a &quot;safe string&quot; means 
+that the producer of the string has already turned characters that should not 
+be interpreted by the HTML engine (e.g. '&lt;') into the appropriate entities. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">functools </span><span class="s2">import </span><span class="s1">wraps</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">functional </span><span class="s2">import </span><span class="s1">keep_lazy</span>
+
+
+<span class="s2">class </span><span class="s1">SafeData</span><span class="s3">:</span>
+    <span class="s1">__slots__ </span><span class="s3">= ()</span>
+
+    <span class="s2">def </span><span class="s1">__html__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the html representation of a string for interoperability. 
+ 
+        This allows other template engines to understand Django's SafeData. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+
+<span class="s2">class </span><span class="s1">SafeString</span><span class="s3">(</span><span class="s1">str</span><span class="s3">, </span><span class="s1">SafeData</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    A str subclass that has been specifically marked as &quot;safe&quot; for HTML output 
+    purposes. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">__slots__ </span><span class="s3">= ()</span>
+
+    <span class="s2">def </span><span class="s1">__add__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">rhs</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Concatenating a safe string with another safe bytestring or 
+        safe string is safe. Otherwise, the result is no longer safe. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">t </span><span class="s3">= </span><span class="s1">super</span><span class="s3">().</span><span class="s1">__add__</span><span class="s3">(</span><span class="s1">rhs</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">rhs</span><span class="s3">, </span><span class="s1">SafeData</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">SafeString</span><span class="s3">(</span><span class="s1">t</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">t</span>
+
+    <span class="s2">def </span><span class="s1">__str__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span>
+
+
+<span class="s1">SafeText </span><span class="s3">= </span><span class="s1">SafeString  </span><span class="s4"># For backwards compatibility since Django 2.0.</span>
+
+
+<span class="s2">def </span><span class="s1">_safety_decorator</span><span class="s3">(</span><span class="s1">safety_marker</span><span class="s3">, </span><span class="s1">func</span><span class="s3">):</span>
+    <span class="s3">@</span><span class="s1">wraps</span><span class="s3">(</span><span class="s1">func</span><span class="s3">)</span>
+    <span class="s2">def </span><span class="s1">wrapper</span><span class="s3">(*</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">safety_marker</span><span class="s3">(</span><span class="s1">func</span><span class="s3">(*</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">))</span>
+
+    <span class="s2">return </span><span class="s1">wrapper</span>
+
+
+<span class="s3">@</span><span class="s1">keep_lazy</span><span class="s3">(</span><span class="s1">SafeString</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s1">s</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Explicitly mark a string as safe for (HTML) output purposes. The returned 
+    object can be used everywhere a string is appropriate. 
+ 
+    If used on a method as a decorator, mark the returned data as safe. 
+ 
+    Can be called multiple times on a single string. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">s</span><span class="s3">, </span><span class="s5">&quot;__html__&quot;</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">s</span>
+    <span class="s2">if </span><span class="s1">callable</span><span class="s3">(</span><span class="s1">s</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">_safety_decorator</span><span class="s3">(</span><span class="s1">mark_safe</span><span class="s3">, </span><span class="s1">s</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">SafeString</span><span class="s3">(</span><span class="s1">s</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

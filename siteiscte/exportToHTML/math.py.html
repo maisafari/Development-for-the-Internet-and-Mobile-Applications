@@ -1,0 +1,236 @@
+<html>
+<head>
+<title>math.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #2aacb8;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+math.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">math</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">expressions </span><span class="s0">import </span><span class="s1">Func</span><span class="s2">, </span><span class="s1">Value</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">fields </span><span class="s0">import </span><span class="s1">FloatField</span><span class="s2">, </span><span class="s1">IntegerField</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">functions </span><span class="s0">import </span><span class="s1">Cast</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">functions</span><span class="s2">.</span><span class="s1">mixins </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">FixDecimalInputMixin</span><span class="s2">,</span>
+    <span class="s1">NumericOutputFieldMixin</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">lookups </span><span class="s0">import </span><span class="s1">Transform</span>
+
+
+<span class="s0">class </span><span class="s1">Abs</span><span class="s2">(</span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;ABS&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;abs&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ACos</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;ACOS&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;acos&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ASin</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;ASIN&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;asin&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ATan</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;ATAN&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;atan&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">ATan2</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;ATAN2&quot;</span>
+    <span class="s1">arity </span><span class="s2">= </span><span class="s4">2</span>
+
+    <span class="s0">def </span><span class="s1">as_sqlite</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">getattr</span><span class="s2">(</span>
+            <span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">, </span><span class="s3">&quot;spatialite&quot;</span><span class="s2">, </span><span class="s0">False</span>
+        <span class="s2">) </span><span class="s0">or </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">spatial_version </span><span class="s2">&gt;= (</span><span class="s4">5</span><span class="s2">, </span><span class="s4">0</span><span class="s2">, </span><span class="s4">0</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">)</span>
+        <span class="s5"># This function is usually ATan2(y, x), returning the inverse tangent</span>
+        <span class="s5"># of y / x, but it's ATan2(x, y) on SpatiaLite &lt; 5.0.0.</span>
+        <span class="s5"># Cast integers to float to avoid inconsistent/buggy behavior if the</span>
+        <span class="s5"># arguments are mixed between integer and float or decimal.</span>
+        <span class="s5"># https://www.gaia-gis.it/fossil/libspatialite/tktview?name=0f72cca3a2</span>
+        <span class="s1">clone </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s1">clone</span><span class="s2">.</span><span class="s1">set_source_expressions</span><span class="s2">(</span>
+            <span class="s2">[</span>
+                <span class="s2">(</span>
+                    <span class="s1">Cast</span><span class="s2">(</span><span class="s1">expression</span><span class="s2">, </span><span class="s1">FloatField</span><span class="s2">())</span>
+                    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">expression</span><span class="s2">.</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">IntegerField</span><span class="s2">)</span>
+                    <span class="s0">else </span><span class="s1">expression</span>
+                <span class="s2">)</span>
+                <span class="s0">for </span><span class="s1">expression </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_source_expressions</span><span class="s2">()[::-</span><span class="s4">1</span><span class="s2">]</span>
+            <span class="s2">]</span>
+        <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">clone</span><span class="s2">.</span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">Ceil</span><span class="s2">(</span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;CEILING&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;ceil&quot;</span>
+
+    <span class="s0">def </span><span class="s1">as_oracle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">function</span><span class="s2">=</span><span class="s3">&quot;CEIL&quot;</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">Cos</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;COS&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;cos&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">Cot</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;COT&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;cot&quot;</span>
+
+    <span class="s0">def </span><span class="s1">as_oracle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">as_sql</span><span class="s2">(</span>
+            <span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">template</span><span class="s2">=</span><span class="s3">&quot;(1 / TAN(%(expressions)s))&quot;</span><span class="s2">, **</span><span class="s1">extra_context</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">Degrees</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;DEGREES&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;degrees&quot;</span>
+
+    <span class="s0">def </span><span class="s1">as_oracle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">as_sql</span><span class="s2">(</span>
+            <span class="s1">compiler</span><span class="s2">,</span>
+            <span class="s1">connection</span><span class="s2">,</span>
+            <span class="s1">template</span><span class="s2">=</span><span class="s3">&quot;((%%(expressions)s) * 180 / %s)&quot; </span><span class="s2">% </span><span class="s1">math</span><span class="s2">.</span><span class="s1">pi</span><span class="s2">,</span>
+            <span class="s2">**</span><span class="s1">extra_context</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">Exp</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;EXP&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;exp&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">Floor</span><span class="s2">(</span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;FLOOR&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;floor&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">Ln</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;LN&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;ln&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">Log</span><span class="s2">(</span><span class="s1">FixDecimalInputMixin</span><span class="s2">, </span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;LOG&quot;</span>
+    <span class="s1">arity </span><span class="s2">= </span><span class="s4">2</span>
+
+    <span class="s0">def </span><span class="s1">as_sqlite</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">, </span><span class="s3">&quot;spatialite&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">)</span>
+        <span class="s5"># This function is usually Log(b, x) returning the logarithm of x to</span>
+        <span class="s5"># the base b, but on SpatiaLite it's Log(x, b).</span>
+        <span class="s1">clone </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s1">clone</span><span class="s2">.</span><span class="s1">set_source_expressions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_source_expressions</span><span class="s2">()[::-</span><span class="s4">1</span><span class="s2">])</span>
+        <span class="s0">return </span><span class="s1">clone</span><span class="s2">.</span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">Mod</span><span class="s2">(</span><span class="s1">FixDecimalInputMixin</span><span class="s2">, </span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;MOD&quot;</span>
+    <span class="s1">arity </span><span class="s2">= </span><span class="s4">2</span>
+
+
+<span class="s0">class </span><span class="s1">Pi</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;PI&quot;</span>
+    <span class="s1">arity </span><span class="s2">= </span><span class="s4">0</span>
+
+    <span class="s0">def </span><span class="s1">as_oracle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">as_sql</span><span class="s2">(</span>
+            <span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">template</span><span class="s2">=</span><span class="s1">str</span><span class="s2">(</span><span class="s1">math</span><span class="s2">.</span><span class="s1">pi</span><span class="s2">), **</span><span class="s1">extra_context</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">Power</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;POWER&quot;</span>
+    <span class="s1">arity </span><span class="s2">= </span><span class="s4">2</span>
+
+
+<span class="s0">class </span><span class="s1">Radians</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;RADIANS&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;radians&quot;</span>
+
+    <span class="s0">def </span><span class="s1">as_oracle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">as_sql</span><span class="s2">(</span>
+            <span class="s1">compiler</span><span class="s2">,</span>
+            <span class="s1">connection</span><span class="s2">,</span>
+            <span class="s1">template</span><span class="s2">=</span><span class="s3">&quot;((%%(expressions)s) * %s / 180)&quot; </span><span class="s2">% </span><span class="s1">math</span><span class="s2">.</span><span class="s1">pi</span><span class="s2">,</span>
+            <span class="s2">**</span><span class="s1">extra_context</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">Random</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Func</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;RANDOM&quot;</span>
+    <span class="s1">arity </span><span class="s2">= </span><span class="s4">0</span>
+
+    <span class="s0">def </span><span class="s1">as_mysql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">function</span><span class="s2">=</span><span class="s3">&quot;RAND&quot;</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_oracle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">as_sql</span><span class="s2">(</span>
+            <span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">function</span><span class="s2">=</span><span class="s3">&quot;DBMS_RANDOM.VALUE&quot;</span><span class="s2">, **</span><span class="s1">extra_context</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_sqlite</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">as_sql</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">function</span><span class="s2">=</span><span class="s3">&quot;RAND&quot;</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_group_by_cols</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">[]</span>
+
+
+<span class="s0">class </span><span class="s1">Round</span><span class="s2">(</span><span class="s1">FixDecimalInputMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;ROUND&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;round&quot;</span>
+    <span class="s1">arity </span><span class="s2">= </span><span class="s0">None  </span><span class="s5"># Override Transform's arity=1 to enable passing precision.</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">expression</span><span class="s2">, </span><span class="s1">precision</span><span class="s2">=</span><span class="s4">0</span><span class="s2">, **</span><span class="s1">extra</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">expression</span><span class="s2">, </span><span class="s1">precision</span><span class="s2">, **</span><span class="s1">extra</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">as_sqlite</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">):</span>
+        <span class="s1">precision </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_source_expressions</span><span class="s2">()[</span><span class="s4">1</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">precision</span><span class="s2">, </span><span class="s1">Value</span><span class="s2">) </span><span class="s0">and </span><span class="s1">precision</span><span class="s2">.</span><span class="s1">value </span><span class="s2">&lt; </span><span class="s4">0</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;SQLite does not support negative precision.&quot;</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">as_sqlite</span><span class="s2">(</span><span class="s1">compiler</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, **</span><span class="s1">extra_context</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_resolve_output_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">source </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_source_expressions</span><span class="s2">()[</span><span class="s4">0</span><span class="s2">]</span>
+        <span class="s0">return </span><span class="s1">source</span><span class="s2">.</span><span class="s1">output_field</span>
+
+
+<span class="s0">class </span><span class="s1">Sign</span><span class="s2">(</span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;SIGN&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;sign&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">Sin</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;SIN&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;sin&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">Sqrt</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;SQRT&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;sqrt&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">Tan</span><span class="s2">(</span><span class="s1">NumericOutputFieldMixin</span><span class="s2">, </span><span class="s1">Transform</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;TAN&quot;</span>
+    <span class="s1">lookup_name </span><span class="s2">= </span><span class="s3">&quot;tan&quot;</span>
+</pre>
+</body>
+</html>

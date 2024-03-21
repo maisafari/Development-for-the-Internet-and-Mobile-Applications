@@ -1,0 +1,56 @@
+<html>
+<head>
+<title>change_list_results.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #bcbec4;}
+.s1 { color: #d5b778;}
+.s2 { color: #bababa;}
+.s3 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+change_list_results.html</font>
+</center></td></tr></table>
+<pre><span class="s0">{% load i18n %}</span>
+<span class="s0">{% if result_hidden_fields %}</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;hiddenfields&quot;</span><span class="s1">&gt;</span><span class="s0">{# DIV for HTML validation #}</span>
+<span class="s0">{% for item in result_hidden_fields %}{{ item }}{% endfor %}</span>
+<span class="s1">&lt;/div&gt;</span>
+<span class="s0">{% endif %}</span>
+<span class="s0">{% if results %}</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;results&quot;</span><span class="s1">&gt;</span>
+<span class="s1">&lt;table </span><span class="s2">id</span><span class="s3">=&quot;result_list&quot;</span><span class="s1">&gt;</span>
+<span class="s1">&lt;thead&gt;</span>
+<span class="s1">&lt;tr&gt;</span>
+<span class="s0">{% for header in result_headers %}</span>
+<span class="s1">&lt;th </span><span class="s2">scope</span><span class="s3">=&quot;col&quot;</span><span class="s2">{{ header.class_attrib }}</span><span class="s1">&gt;</span>
+   <span class="s0">{% if header.sortable and header.sort_priority &gt; 0 %}</span>
+       <span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;sortoptions&quot;</span><span class="s1">&gt;</span>
+         <span class="s1">&lt;a </span><span class="s2">class</span><span class="s3">=&quot;sortremove&quot; </span><span class="s2">href</span><span class="s3">=&quot;{{ header.url_remove }}&quot; </span><span class="s2">title</span><span class="s3">=&quot;{% translate &quot;</span><span class="s2">Remove from sorting</span><span class="s0">&quot; %}&quot;&gt;</span><span class="s1">&lt;/a&gt;</span>
+         <span class="s0">{% if num_sorted_fields &gt; 1 %}</span><span class="s1">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;sortpriority&quot; </span><span class="s2">title</span><span class="s3">=&quot;{% blocktranslate with priority_number=header.sort_priority %}Sorting priority: {{ priority_number }}{% endblocktranslate %}&quot;</span><span class="s1">&gt;</span><span class="s0">{{ header.sort_priority }}</span><span class="s1">&lt;/span&gt;</span><span class="s0">{% endif %}</span>
+         <span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{{ header.url_toggle }}&quot; </span><span class="s2">class</span><span class="s3">=&quot;toggle {{ header.ascending|yesno:'ascending,descending' }}&quot; </span><span class="s2">title</span><span class="s3">=&quot;{% translate &quot;</span><span class="s2">Toggle sorting</span><span class="s0">&quot; %}&quot;&gt;</span><span class="s1">&lt;/a&gt;</span>
+       <span class="s1">&lt;/div&gt;</span>
+   <span class="s0">{% endif %}</span>
+   <span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;text&quot;</span><span class="s1">&gt;</span><span class="s0">{% if header.sortable %}</span><span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{{ header.url_primary }}&quot;</span><span class="s1">&gt;</span><span class="s0">{{ header.text|capfirst }}</span><span class="s1">&lt;/a&gt;</span><span class="s0">{% else %}</span><span class="s1">&lt;span&gt;</span><span class="s0">{{ header.text|capfirst }}</span><span class="s1">&lt;/span&gt;</span><span class="s0">{% endif %}</span><span class="s1">&lt;/div&gt;</span>
+   <span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;clear&quot;</span><span class="s1">&gt;&lt;/div&gt;</span>
+<span class="s1">&lt;/th&gt;</span><span class="s0">{% endfor %}</span>
+<span class="s1">&lt;/tr&gt;</span>
+<span class="s1">&lt;/thead&gt;</span>
+<span class="s1">&lt;tbody&gt;</span>
+<span class="s0">{% for result in results %}</span>
+<span class="s0">{% if result.form and result.form.non_field_errors %}</span>
+    <span class="s1">&lt;tr&gt;&lt;td </span><span class="s2">colspan</span><span class="s3">=&quot;{{ result|length }}&quot;</span><span class="s1">&gt;</span><span class="s0">{{ result.form.non_field_errors }}</span><span class="s1">&lt;/td&gt;&lt;/tr&gt;</span>
+<span class="s0">{% endif %}</span>
+<span class="s1">&lt;tr&gt;</span><span class="s0">{% for item in result %}{{ item }}{% endfor %}</span><span class="s1">&lt;/tr&gt;</span>
+<span class="s0">{% endfor %}</span>
+<span class="s1">&lt;/tbody&gt;</span>
+<span class="s1">&lt;/table&gt;</span>
+<span class="s1">&lt;/div&gt;</span>
+<span class="s0">{% endif %}</span>
+</pre>
+</body>
+</html>

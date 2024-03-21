@@ -1,0 +1,70 @@
+<html>
+<head>
+<title>clickjacking.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+clickjacking.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Clickjacking Protection Middleware. 
+ 
+This module provides a middleware that implements protection against a 
+malicious site loading resources from your site in a hidden frame. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf </span><span class="s2">import </span><span class="s1">settings</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">deprecation </span><span class="s2">import </span><span class="s1">MiddlewareMixin</span>
+
+
+<span class="s2">class </span><span class="s1">XFrameOptionsMiddleware</span><span class="s3">(</span><span class="s1">MiddlewareMixin</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Set the X-Frame-Options HTTP header in HTTP responses. 
+ 
+    Do not set the header if it's already set or if the response contains 
+    a xframe_options_exempt value set to True. 
+ 
+    By default, set the X-Frame-Options header to 'DENY', meaning the response 
+    cannot be displayed in a frame, regardless of the site attempting to do so. 
+    To enable the response to be loaded on a frame within the same site, set 
+    X_FRAME_OPTIONS in your project's Django settings to 'SAMEORIGIN'. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">process_response</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">response</span><span class="s3">):</span>
+        <span class="s4"># Don't set it if it's already in the response</span>
+        <span class="s2">if </span><span class="s1">response</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s5">&quot;X-Frame-Options&quot;</span><span class="s3">) </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">response</span>
+
+        <span class="s4"># Don't set it if they used @xframe_options_exempt</span>
+        <span class="s2">if </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">response</span><span class="s3">, </span><span class="s5">&quot;xframe_options_exempt&quot;</span><span class="s3">, </span><span class="s2">False</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">response</span>
+
+        <span class="s1">response</span><span class="s3">.</span><span class="s1">headers</span><span class="s3">[</span><span class="s5">&quot;X-Frame-Options&quot;</span><span class="s3">] = </span><span class="s1">self</span><span class="s3">.</span><span class="s1">get_xframe_options_value</span><span class="s3">(</span>
+            <span class="s1">request</span><span class="s3">,</span>
+            <span class="s1">response</span><span class="s3">,</span>
+        <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">response</span>
+
+    <span class="s2">def </span><span class="s1">get_xframe_options_value</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">request</span><span class="s3">, </span><span class="s1">response</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Get the value to set for the X_FRAME_OPTIONS header. Use the value from 
+        the X_FRAME_OPTIONS setting, or 'DENY' if not set. 
+ 
+        This method can be overridden if needed, allowing it to vary based on 
+        the request or response. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">settings</span><span class="s3">, </span><span class="s5">&quot;X_FRAME_OPTIONS&quot;</span><span class="s3">, </span><span class="s5">&quot;DENY&quot;</span><span class="s3">).</span><span class="s1">upper</span><span class="s3">()</span>
+</pre>
+</body>
+</html>

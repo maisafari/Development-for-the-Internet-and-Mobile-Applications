@@ -1,0 +1,548 @@
+<html>
+<head>
+<title>text.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #2aacb8;}
+.s5 { color: #7a7e85;}
+.s6 { color: #6aab73;}
+.s7 { color: #a5c261;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+text.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">gzip</span>
+<span class="s0">import </span><span class="s1">re</span>
+<span class="s0">import </span><span class="s1">secrets</span>
+<span class="s0">import </span><span class="s1">unicodedata</span>
+<span class="s0">from </span><span class="s1">gzip </span><span class="s0">import </span><span class="s1">GzipFile</span>
+<span class="s0">from </span><span class="s1">gzip </span><span class="s0">import </span><span class="s1">compress </span><span class="s0">as </span><span class="s1">gzip_compress</span>
+<span class="s0">from </span><span class="s1">io </span><span class="s0">import </span><span class="s1">BytesIO</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">SuspiciousFileOperation</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">SimpleLazyObject</span><span class="s2">, </span><span class="s1">keep_lazy_text</span><span class="s2">, </span><span class="s1">lazy</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">regex_helper </span><span class="s0">import </span><span class="s1">_lazy_re_compile</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">translation </span><span class="s0">import </span><span class="s1">gettext </span><span class="s0">as </span><span class="s1">_</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">translation </span><span class="s0">import </span><span class="s1">gettext_lazy</span><span class="s2">, </span><span class="s1">pgettext</span>
+
+
+<span class="s2">@</span><span class="s1">keep_lazy_text</span>
+<span class="s0">def </span><span class="s1">capfirst</span><span class="s2">(</span><span class="s1">x</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;Capitalize the first letter of a string.&quot;&quot;&quot;</span>
+    <span class="s0">if not </span><span class="s1">x</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">x</span>
+    <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">x</span><span class="s2">, </span><span class="s1">str</span><span class="s2">):</span>
+        <span class="s1">x </span><span class="s2">= </span><span class="s1">str</span><span class="s2">(</span><span class="s1">x</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">x</span><span class="s2">[</span><span class="s4">0</span><span class="s2">].</span><span class="s1">upper</span><span class="s2">() + </span><span class="s1">x</span><span class="s2">[</span><span class="s4">1</span><span class="s2">:]</span>
+
+
+<span class="s5"># ----- Begin security-related performance workaround -----</span>
+
+<span class="s5"># We used to have, below</span>
+<span class="s5">#</span>
+<span class="s5"># re_words = _lazy_re_compile(r&quot;&lt;[^&gt;]+?&gt;|([^&lt;&gt;\s]+)&quot;, re.S)</span>
+<span class="s5">#</span>
+<span class="s5"># But it was shown that this regex, in the way we use it here, has some</span>
+<span class="s5"># catastrophic edge-case performance features. Namely, when it is applied to</span>
+<span class="s5"># text with only open brackets &quot;&lt;&lt;&lt;...&quot;. The class below provides the services</span>
+<span class="s5"># and correct answers for the use cases, but in these edge cases does it much</span>
+<span class="s5"># faster.</span>
+<span class="s1">re_notag </span><span class="s2">= </span><span class="s1">_lazy_re_compile</span><span class="s2">(</span><span class="s6">r&quot;([^&lt;&gt;\s]+)&quot;</span><span class="s2">, </span><span class="s1">re</span><span class="s2">.</span><span class="s1">S</span><span class="s2">)</span>
+<span class="s1">re_prt </span><span class="s2">= </span><span class="s1">_lazy_re_compile</span><span class="s2">(</span><span class="s6">r&quot;&lt;|([^&lt;&gt;\s]+)&quot;</span><span class="s2">, </span><span class="s1">re</span><span class="s2">.</span><span class="s1">S</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">WordsRegex</span><span class="s2">:</span>
+    <span class="s2">@</span><span class="s1">staticmethod</span>
+    <span class="s0">def </span><span class="s1">search</span><span class="s2">(</span><span class="s1">text</span><span class="s2">, </span><span class="s1">pos</span><span class="s2">):</span>
+        <span class="s5"># Look for &quot;&lt;&quot; or a non-tag word.</span>
+        <span class="s1">partial </span><span class="s2">= </span><span class="s1">re_prt</span><span class="s2">.</span><span class="s1">search</span><span class="s2">(</span><span class="s1">text</span><span class="s2">, </span><span class="s1">pos</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">partial </span><span class="s0">is None or </span><span class="s1">partial</span><span class="s2">[</span><span class="s4">1</span><span class="s2">] </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">partial</span>
+
+        <span class="s5"># &quot;&lt;&quot; was found, look for a closing &quot;&gt;&quot;.</span>
+        <span class="s1">end </span><span class="s2">= </span><span class="s1">text</span><span class="s2">.</span><span class="s1">find</span><span class="s2">(</span><span class="s6">&quot;&gt;&quot;</span><span class="s2">, </span><span class="s1">partial</span><span class="s2">.</span><span class="s1">end</span><span class="s2">(</span><span class="s4">0</span><span class="s2">))</span>
+        <span class="s0">if </span><span class="s1">end </span><span class="s2">&lt; </span><span class="s4">0</span><span class="s2">:</span>
+            <span class="s5"># &quot;&gt;&quot; cannot be found, look for a word.</span>
+            <span class="s0">return </span><span class="s1">re_notag</span><span class="s2">.</span><span class="s1">search</span><span class="s2">(</span><span class="s1">text</span><span class="s2">, </span><span class="s1">pos </span><span class="s2">+ </span><span class="s4">1</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s5"># &quot;&lt;&quot; followed by a &quot;&gt;&quot; was found -- fake a match.</span>
+            <span class="s1">end </span><span class="s2">+= </span><span class="s4">1</span>
+            <span class="s0">return </span><span class="s1">FakeMatch</span><span class="s2">(</span><span class="s1">text</span><span class="s2">[</span><span class="s1">partial</span><span class="s2">.</span><span class="s1">start</span><span class="s2">(</span><span class="s4">0</span><span class="s2">) : </span><span class="s1">end</span><span class="s2">], </span><span class="s1">end</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">FakeMatch</span><span class="s2">:</span>
+    <span class="s1">__slots__ </span><span class="s2">= [</span><span class="s6">&quot;_text&quot;</span><span class="s2">, </span><span class="s6">&quot;_end&quot;</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">end</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">group</span><span class="s2">=</span><span class="s4">0</span><span class="s2">):</span>
+        <span class="s0">assert </span><span class="s1">group </span><span class="s2">== </span><span class="s4">0</span><span class="s2">, </span><span class="s6">&quot;This specific object takes only group=0&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_end</span>
+
+    <span class="s0">def </span><span class="s1">__getitem__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">group</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">group </span><span class="s2">== </span><span class="s4">1</span><span class="s2">:</span>
+            <span class="s0">return None</span>
+        <span class="s0">assert </span><span class="s1">group </span><span class="s2">== </span><span class="s4">0</span><span class="s2">, </span><span class="s6">&quot;This specific object takes only group in {0,1}&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_text</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">text</span><span class="s2">, </span><span class="s1">end</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_text</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_end </span><span class="s2">= </span><span class="s1">text</span><span class="s2">, </span><span class="s1">end</span>
+
+
+<span class="s5"># ----- End security-related performance workaround -----</span>
+
+<span class="s5"># Set up regular expressions.</span>
+<span class="s1">re_words </span><span class="s2">= </span><span class="s1">WordsRegex</span>
+<span class="s1">re_chars </span><span class="s2">= </span><span class="s1">_lazy_re_compile</span><span class="s2">(</span><span class="s6">r&quot;&lt;[^&gt;]+?&gt;|(.)&quot;</span><span class="s2">, </span><span class="s1">re</span><span class="s2">.</span><span class="s1">S</span><span class="s2">)</span>
+<span class="s1">re_tag </span><span class="s2">= </span><span class="s1">_lazy_re_compile</span><span class="s2">(</span><span class="s6">r&quot;&lt;(/)?(\S+?)(?:(\s*/)|\s.*?)?&gt;&quot;</span><span class="s2">, </span><span class="s1">re</span><span class="s2">.</span><span class="s1">S</span><span class="s2">)</span>
+<span class="s1">re_newlines </span><span class="s2">= </span><span class="s1">_lazy_re_compile</span><span class="s2">(</span><span class="s6">r&quot;\r\n|\r&quot;</span><span class="s2">)  </span><span class="s5"># Used in normalize_newlines</span>
+<span class="s1">re_camel_case </span><span class="s2">= </span><span class="s1">_lazy_re_compile</span><span class="s2">(</span><span class="s6">r&quot;(((?&lt;=[a-z])[A-Z])|([A-Z](?![A-Z]|$)))&quot;</span><span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">keep_lazy_text</span>
+<span class="s0">def </span><span class="s1">wrap</span><span class="s2">(</span><span class="s1">text</span><span class="s2">, </span><span class="s1">width</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    A word-wrap function that preserves existing line breaks. Expects that 
+    existing line breaks are posix newlines. 
+ 
+    Preserve all white space except added line breaks consume the space on 
+    which they break the line. 
+ 
+    Don't wrap long words, thus the output text may have lines longer than 
+    ``width``. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">_generator</span><span class="s2">():</span>
+        <span class="s0">for </span><span class="s1">line </span><span class="s0">in </span><span class="s1">text</span><span class="s2">.</span><span class="s1">splitlines</span><span class="s2">(</span><span class="s0">True</span><span class="s2">):  </span><span class="s5"># True keeps trailing linebreaks</span>
+            <span class="s1">max_width </span><span class="s2">= </span><span class="s1">min</span><span class="s2">((</span><span class="s1">line</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s6">&quot;</span><span class="s0">\n</span><span class="s6">&quot;</span><span class="s2">) </span><span class="s0">and </span><span class="s1">width </span><span class="s2">+ </span><span class="s4">1 </span><span class="s0">or </span><span class="s1">width</span><span class="s2">), </span><span class="s1">width</span><span class="s2">)</span>
+            <span class="s0">while </span><span class="s1">len</span><span class="s2">(</span><span class="s1">line</span><span class="s2">) &gt; </span><span class="s1">max_width</span><span class="s2">:</span>
+                <span class="s1">space </span><span class="s2">= </span><span class="s1">line</span><span class="s2">[: </span><span class="s1">max_width </span><span class="s2">+ </span><span class="s4">1</span><span class="s2">].</span><span class="s1">rfind</span><span class="s2">(</span><span class="s6">&quot; &quot;</span><span class="s2">) + </span><span class="s4">1</span>
+                <span class="s0">if </span><span class="s1">space </span><span class="s2">== </span><span class="s4">0</span><span class="s2">:</span>
+                    <span class="s1">space </span><span class="s2">= </span><span class="s1">line</span><span class="s2">.</span><span class="s1">find</span><span class="s2">(</span><span class="s6">&quot; &quot;</span><span class="s2">) + </span><span class="s4">1</span>
+                    <span class="s0">if </span><span class="s1">space </span><span class="s2">== </span><span class="s4">0</span><span class="s2">:</span>
+                        <span class="s0">yield </span><span class="s1">line</span>
+                        <span class="s1">line </span><span class="s2">= </span><span class="s6">&quot;&quot;</span>
+                        <span class="s0">break</span>
+                <span class="s0">yield </span><span class="s6">&quot;%s</span><span class="s0">\n</span><span class="s6">&quot; </span><span class="s2">% </span><span class="s1">line</span><span class="s2">[: </span><span class="s1">space </span><span class="s2">- </span><span class="s4">1</span><span class="s2">]</span>
+                <span class="s1">line </span><span class="s2">= </span><span class="s1">line</span><span class="s2">[</span><span class="s1">space</span><span class="s2">:]</span>
+                <span class="s1">max_width </span><span class="s2">= </span><span class="s1">min</span><span class="s2">((</span><span class="s1">line</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s6">&quot;</span><span class="s0">\n</span><span class="s6">&quot;</span><span class="s2">) </span><span class="s0">and </span><span class="s1">width </span><span class="s2">+ </span><span class="s4">1 </span><span class="s0">or </span><span class="s1">width</span><span class="s2">), </span><span class="s1">width</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">line</span><span class="s2">:</span>
+                <span class="s0">yield </span><span class="s1">line</span>
+
+    <span class="s0">return </span><span class="s6">&quot;&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">_generator</span><span class="s2">())</span>
+
+
+<span class="s0">def </span><span class="s1">add_truncation_text</span><span class="s2">(</span><span class="s1">text</span><span class="s2">, </span><span class="s1">truncate</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">truncate </span><span class="s0">is None</span><span class="s2">:</span>
+        <span class="s1">truncate </span><span class="s2">= </span><span class="s1">pgettext</span><span class="s2">(</span>
+            <span class="s6">&quot;String to return when truncating text&quot;</span><span class="s2">, </span><span class="s6">&quot;%(truncated_text)s…&quot;</span>
+        <span class="s2">)</span>
+    <span class="s0">if </span><span class="s6">&quot;%(truncated_text)s&quot; </span><span class="s0">in </span><span class="s1">truncate</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">truncate </span><span class="s2">% {</span><span class="s6">&quot;truncated_text&quot;</span><span class="s2">: </span><span class="s1">text</span><span class="s2">}</span>
+    <span class="s5"># The truncation text didn't contain the %(truncated_text)s string</span>
+    <span class="s5"># replacement argument so just append it to the text.</span>
+    <span class="s0">if </span><span class="s1">text</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s1">truncate</span><span class="s2">):</span>
+        <span class="s5"># But don't append the truncation text if the current text already ends</span>
+        <span class="s5"># in this.</span>
+        <span class="s0">return </span><span class="s1">text</span>
+    <span class="s0">return </span><span class="s6">f&quot;</span><span class="s0">{</span><span class="s1">text</span><span class="s0">}{</span><span class="s1">truncate</span><span class="s0">}</span><span class="s6">&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">Truncator</span><span class="s2">(</span><span class="s1">SimpleLazyObject</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    An object used to truncate text, either by characters or words. 
+ 
+    When truncating HTML text (either chars or words), input will be limited to 
+    at most `MAX_LENGTH_HTML` characters. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s5"># 5 million characters are approximately 4000 text pages or 3 web pages.</span>
+    <span class="s1">MAX_LENGTH_HTML </span><span class="s2">= </span><span class="s4">5_000_000</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">text</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s0">lambda</span><span class="s2">: </span><span class="s1">str</span><span class="s2">(</span><span class="s1">text</span><span class="s2">))</span>
+
+    <span class="s0">def </span><span class="s1">chars</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">num</span><span class="s2">, </span><span class="s1">truncate</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">html</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the text truncated to be no longer than the specified number 
+        of characters. 
+ 
+        `truncate` specifies what should be used to notify that the string has 
+        been truncated, defaulting to a translatable string of an ellipsis. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_setup</span><span class="s2">()</span>
+        <span class="s1">length </span><span class="s2">= </span><span class="s1">int</span><span class="s2">(</span><span class="s1">num</span><span class="s2">)</span>
+        <span class="s1">text </span><span class="s2">= </span><span class="s1">unicodedata</span><span class="s2">.</span><span class="s1">normalize</span><span class="s2">(</span><span class="s6">&quot;NFC&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_wrapped</span><span class="s2">)</span>
+
+        <span class="s5"># Calculate the length to truncate to (max length - end_text length)</span>
+        <span class="s1">truncate_len </span><span class="s2">= </span><span class="s1">length</span>
+        <span class="s0">for </span><span class="s1">char </span><span class="s0">in </span><span class="s1">add_truncation_text</span><span class="s2">(</span><span class="s6">&quot;&quot;</span><span class="s2">, </span><span class="s1">truncate</span><span class="s2">):</span>
+            <span class="s0">if not </span><span class="s1">unicodedata</span><span class="s2">.</span><span class="s1">combining</span><span class="s2">(</span><span class="s1">char</span><span class="s2">):</span>
+                <span class="s1">truncate_len </span><span class="s2">-= </span><span class="s4">1</span>
+                <span class="s0">if </span><span class="s1">truncate_len </span><span class="s2">== </span><span class="s4">0</span><span class="s2">:</span>
+                    <span class="s0">break</span>
+        <span class="s0">if </span><span class="s1">html</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_truncate_html</span><span class="s2">(</span><span class="s1">length</span><span class="s2">, </span><span class="s1">truncate</span><span class="s2">, </span><span class="s1">text</span><span class="s2">, </span><span class="s1">truncate_len</span><span class="s2">, </span><span class="s0">False</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_text_chars</span><span class="s2">(</span><span class="s1">length</span><span class="s2">, </span><span class="s1">truncate</span><span class="s2">, </span><span class="s1">text</span><span class="s2">, </span><span class="s1">truncate_len</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_text_chars</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">length</span><span class="s2">, </span><span class="s1">truncate</span><span class="s2">, </span><span class="s1">text</span><span class="s2">, </span><span class="s1">truncate_len</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Truncate a string after a certain number of chars.&quot;&quot;&quot;</span>
+        <span class="s1">s_len </span><span class="s2">= </span><span class="s4">0</span>
+        <span class="s1">end_index </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s0">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">char </span><span class="s0">in </span><span class="s1">enumerate</span><span class="s2">(</span><span class="s1">text</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">unicodedata</span><span class="s2">.</span><span class="s1">combining</span><span class="s2">(</span><span class="s1">char</span><span class="s2">):</span>
+                <span class="s5"># Don't consider combining characters</span>
+                <span class="s5"># as adding to the string length</span>
+                <span class="s0">continue</span>
+            <span class="s1">s_len </span><span class="s2">+= </span><span class="s4">1</span>
+            <span class="s0">if </span><span class="s1">end_index </span><span class="s0">is None and </span><span class="s1">s_len </span><span class="s2">&gt; </span><span class="s1">truncate_len</span><span class="s2">:</span>
+                <span class="s1">end_index </span><span class="s2">= </span><span class="s1">i</span>
+            <span class="s0">if </span><span class="s1">s_len </span><span class="s2">&gt; </span><span class="s1">length</span><span class="s2">:</span>
+                <span class="s5"># Return the truncated string</span>
+                <span class="s0">return </span><span class="s1">add_truncation_text</span><span class="s2">(</span><span class="s1">text</span><span class="s2">[: </span><span class="s1">end_index </span><span class="s0">or </span><span class="s4">0</span><span class="s2">], </span><span class="s1">truncate</span><span class="s2">)</span>
+
+        <span class="s5"># Return the original string since no truncation was necessary</span>
+        <span class="s0">return </span><span class="s1">text</span>
+
+    <span class="s0">def </span><span class="s1">words</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">num</span><span class="s2">, </span><span class="s1">truncate</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">html</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Truncate a string after a certain number of words. `truncate` specifies 
+        what should be used to notify that the string has been truncated, 
+        defaulting to ellipsis. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_setup</span><span class="s2">()</span>
+        <span class="s1">length </span><span class="s2">= </span><span class="s1">int</span><span class="s2">(</span><span class="s1">num</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">html</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_truncate_html</span><span class="s2">(</span><span class="s1">length</span><span class="s2">, </span><span class="s1">truncate</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_wrapped</span><span class="s2">, </span><span class="s1">length</span><span class="s2">, </span><span class="s0">True</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_text_words</span><span class="s2">(</span><span class="s1">length</span><span class="s2">, </span><span class="s1">truncate</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_text_words</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">length</span><span class="s2">, </span><span class="s1">truncate</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Truncate a string after a certain number of words. 
+ 
+        Strip newlines in the string. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">words </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_wrapped</span><span class="s2">.</span><span class="s1">split</span><span class="s2">()</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">words</span><span class="s2">) &gt; </span><span class="s1">length</span><span class="s2">:</span>
+            <span class="s1">words </span><span class="s2">= </span><span class="s1">words</span><span class="s2">[:</span><span class="s1">length</span><span class="s2">]</span>
+            <span class="s0">return </span><span class="s1">add_truncation_text</span><span class="s2">(</span><span class="s6">&quot; &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">words</span><span class="s2">), </span><span class="s1">truncate</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s6">&quot; &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">words</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_truncate_html</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">length</span><span class="s2">, </span><span class="s1">truncate</span><span class="s2">, </span><span class="s1">text</span><span class="s2">, </span><span class="s1">truncate_len</span><span class="s2">, </span><span class="s1">words</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Truncate HTML to a certain number of chars (not counting tags and 
+        comments), or, if words is True, then to a certain number of words. 
+        Close opened tags if they were correctly closed in the given HTML. 
+ 
+        Preserve newlines in the HTML. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">words </span><span class="s0">and </span><span class="s1">length </span><span class="s2">&lt;= </span><span class="s4">0</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s6">&quot;&quot;</span>
+
+        <span class="s1">size_limited </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">text</span><span class="s2">) &gt; </span><span class="s1">self</span><span class="s2">.</span><span class="s1">MAX_LENGTH_HTML</span><span class="s2">:</span>
+            <span class="s1">text </span><span class="s2">= </span><span class="s1">text</span><span class="s2">[: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">MAX_LENGTH_HTML</span><span class="s2">]</span>
+            <span class="s1">size_limited </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s1">html4_singlets </span><span class="s2">= (</span>
+            <span class="s6">&quot;br&quot;</span><span class="s2">,</span>
+            <span class="s6">&quot;col&quot;</span><span class="s2">,</span>
+            <span class="s6">&quot;link&quot;</span><span class="s2">,</span>
+            <span class="s6">&quot;base&quot;</span><span class="s2">,</span>
+            <span class="s6">&quot;img&quot;</span><span class="s2">,</span>
+            <span class="s6">&quot;param&quot;</span><span class="s2">,</span>
+            <span class="s6">&quot;area&quot;</span><span class="s2">,</span>
+            <span class="s6">&quot;hr&quot;</span><span class="s2">,</span>
+            <span class="s6">&quot;input&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+        <span class="s5"># Count non-HTML chars/words and keep note of open tags</span>
+        <span class="s1">pos </span><span class="s2">= </span><span class="s4">0</span>
+        <span class="s1">end_text_pos </span><span class="s2">= </span><span class="s4">0</span>
+        <span class="s1">current_len </span><span class="s2">= </span><span class="s4">0</span>
+        <span class="s1">open_tags </span><span class="s2">= []</span>
+
+        <span class="s1">regex </span><span class="s2">= </span><span class="s1">re_words </span><span class="s0">if </span><span class="s1">words </span><span class="s0">else </span><span class="s1">re_chars</span>
+
+        <span class="s0">while </span><span class="s1">current_len </span><span class="s2">&lt;= </span><span class="s1">length</span><span class="s2">:</span>
+            <span class="s1">m </span><span class="s2">= </span><span class="s1">regex</span><span class="s2">.</span><span class="s1">search</span><span class="s2">(</span><span class="s1">text</span><span class="s2">, </span><span class="s1">pos</span><span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">m</span><span class="s2">:</span>
+                <span class="s5"># Checked through whole string</span>
+                <span class="s0">break</span>
+            <span class="s1">pos </span><span class="s2">= </span><span class="s1">m</span><span class="s2">.</span><span class="s1">end</span><span class="s2">(</span><span class="s4">0</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">m</span><span class="s2">[</span><span class="s4">1</span><span class="s2">]:</span>
+                <span class="s5"># It's an actual non-HTML word or char</span>
+                <span class="s1">current_len </span><span class="s2">+= </span><span class="s4">1</span>
+                <span class="s0">if </span><span class="s1">current_len </span><span class="s2">== </span><span class="s1">truncate_len</span><span class="s2">:</span>
+                    <span class="s1">end_text_pos </span><span class="s2">= </span><span class="s1">pos</span>
+                <span class="s0">continue</span>
+            <span class="s5"># Check for tag</span>
+            <span class="s1">tag </span><span class="s2">= </span><span class="s1">re_tag</span><span class="s2">.</span><span class="s1">match</span><span class="s2">(</span><span class="s1">m</span><span class="s2">[</span><span class="s4">0</span><span class="s2">])</span>
+            <span class="s0">if not </span><span class="s1">tag </span><span class="s0">or </span><span class="s1">current_len </span><span class="s2">&gt;= </span><span class="s1">truncate_len</span><span class="s2">:</span>
+                <span class="s5"># Don't worry about non tags or tags after our truncate point</span>
+                <span class="s0">continue</span>
+            <span class="s1">closing_tag</span><span class="s2">, </span><span class="s1">tagname</span><span class="s2">, </span><span class="s1">self_closing </span><span class="s2">= </span><span class="s1">tag</span><span class="s2">.</span><span class="s1">groups</span><span class="s2">()</span>
+            <span class="s5"># Element names are always case-insensitive</span>
+            <span class="s1">tagname </span><span class="s2">= </span><span class="s1">tagname</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">()</span>
+            <span class="s0">if </span><span class="s1">self_closing </span><span class="s0">or </span><span class="s1">tagname </span><span class="s0">in </span><span class="s1">html4_singlets</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+            <span class="s0">elif </span><span class="s1">closing_tag</span><span class="s2">:</span>
+                <span class="s5"># Check for match in open tags list</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">i </span><span class="s2">= </span><span class="s1">open_tags</span><span class="s2">.</span><span class="s1">index</span><span class="s2">(</span><span class="s1">tagname</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">ValueError</span><span class="s2">:</span>
+                    <span class="s0">pass</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s5"># SGML: An end tag closes, back to the matching start tag,</span>
+                    <span class="s5"># all unclosed intervening start tags with omitted end tags</span>
+                    <span class="s1">open_tags </span><span class="s2">= </span><span class="s1">open_tags</span><span class="s2">[</span><span class="s1">i </span><span class="s2">+ </span><span class="s4">1 </span><span class="s2">:]</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s5"># Add it to the start of the open tags list</span>
+                <span class="s1">open_tags</span><span class="s2">.</span><span class="s1">insert</span><span class="s2">(</span><span class="s4">0</span><span class="s2">, </span><span class="s1">tagname</span><span class="s2">)</span>
+
+        <span class="s1">truncate_text </span><span class="s2">= </span><span class="s1">add_truncation_text</span><span class="s2">(</span><span class="s6">&quot;&quot;</span><span class="s2">, </span><span class="s1">truncate</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">current_len </span><span class="s2">&lt;= </span><span class="s1">length</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">size_limited </span><span class="s0">and </span><span class="s1">truncate_text</span><span class="s2">:</span>
+                <span class="s1">text </span><span class="s2">+= </span><span class="s1">truncate_text</span>
+            <span class="s0">return </span><span class="s1">text</span>
+
+        <span class="s1">out </span><span class="s2">= </span><span class="s1">text</span><span class="s2">[:</span><span class="s1">end_text_pos</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">truncate_text</span><span class="s2">:</span>
+            <span class="s1">out </span><span class="s2">+= </span><span class="s1">truncate_text</span>
+        <span class="s5"># Close any tags still open</span>
+        <span class="s0">for </span><span class="s1">tag </span><span class="s0">in </span><span class="s1">open_tags</span><span class="s2">:</span>
+            <span class="s1">out </span><span class="s2">+= </span><span class="s6">&quot;&lt;/%s&gt;&quot; </span><span class="s2">% </span><span class="s1">tag</span>
+        <span class="s5"># Return string</span>
+        <span class="s0">return </span><span class="s1">out</span>
+
+
+<span class="s2">@</span><span class="s1">keep_lazy_text</span>
+<span class="s0">def </span><span class="s1">get_valid_filename</span><span class="s2">(</span><span class="s1">name</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Return the given string converted to a string that can be used for a clean 
+    filename. Remove leading and trailing spaces; convert other spaces to 
+    underscores; and remove anything that is not an alphanumeric, dash, 
+    underscore, or dot. 
+    &gt;&gt;&gt; get_valid_filename(&quot;john's portrait in 2004.jpg&quot;) 
+    'johns_portrait_in_2004.jpg' 
+    &quot;&quot;&quot;</span>
+    <span class="s1">s </span><span class="s2">= </span><span class="s1">str</span><span class="s2">(</span><span class="s1">name</span><span class="s2">).</span><span class="s1">strip</span><span class="s2">().</span><span class="s1">replace</span><span class="s2">(</span><span class="s6">&quot; &quot;</span><span class="s2">, </span><span class="s6">&quot;_&quot;</span><span class="s2">)</span>
+    <span class="s1">s </span><span class="s2">= </span><span class="s1">re</span><span class="s2">.</span><span class="s1">sub</span><span class="s2">(</span><span class="s6">r&quot;(?u)[^-\w.]&quot;</span><span class="s2">, </span><span class="s6">&quot;&quot;</span><span class="s2">, </span><span class="s1">s</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">s </span><span class="s0">in </span><span class="s2">{</span><span class="s6">&quot;&quot;</span><span class="s2">, </span><span class="s6">&quot;.&quot;</span><span class="s2">, </span><span class="s6">&quot;..&quot;</span><span class="s2">}:</span>
+        <span class="s0">raise </span><span class="s1">SuspiciousFileOperation</span><span class="s2">(</span><span class="s6">&quot;Could not derive file name from '%s'&quot; </span><span class="s2">% </span><span class="s1">name</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">s</span>
+
+
+<span class="s2">@</span><span class="s1">keep_lazy_text</span>
+<span class="s0">def </span><span class="s1">get_text_list</span><span class="s2">(</span><span class="s1">list_</span><span class="s2">, </span><span class="s1">last_word</span><span class="s2">=</span><span class="s1">gettext_lazy</span><span class="s2">(</span><span class="s6">&quot;or&quot;</span><span class="s2">)):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    &gt;&gt;&gt; get_text_list(['a', 'b', 'c', 'd']) 
+    'a, b, c or d' 
+    &gt;&gt;&gt; get_text_list(['a', 'b', 'c'], 'and') 
+    'a, b and c' 
+    &gt;&gt;&gt; get_text_list(['a', 'b'], 'and') 
+    'a and b' 
+    &gt;&gt;&gt; get_text_list(['a']) 
+    'a' 
+    &gt;&gt;&gt; get_text_list([]) 
+    '' 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if not </span><span class="s1">list_</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s6">&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">list_</span><span class="s2">) == </span><span class="s4">1</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">str</span><span class="s2">(</span><span class="s1">list_</span><span class="s2">[</span><span class="s4">0</span><span class="s2">])</span>
+    <span class="s0">return </span><span class="s6">&quot;%s %s %s&quot; </span><span class="s2">% (</span>
+        <span class="s5"># Translators: This string is used as a separator between list elements</span>
+        <span class="s1">_</span><span class="s2">(</span><span class="s6">&quot;, &quot;</span><span class="s2">).</span><span class="s1">join</span><span class="s2">(</span><span class="s1">str</span><span class="s2">(</span><span class="s1">i</span><span class="s2">) </span><span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">list_</span><span class="s2">[:-</span><span class="s4">1</span><span class="s2">]),</span>
+        <span class="s1">str</span><span class="s2">(</span><span class="s1">last_word</span><span class="s2">),</span>
+        <span class="s1">str</span><span class="s2">(</span><span class="s1">list_</span><span class="s2">[-</span><span class="s4">1</span><span class="s2">]),</span>
+    <span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">keep_lazy_text</span>
+<span class="s0">def </span><span class="s1">normalize_newlines</span><span class="s2">(</span><span class="s1">text</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;Normalize CRLF and CR newlines to just LF.&quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">re_newlines</span><span class="s2">.</span><span class="s1">sub</span><span class="s2">(</span><span class="s6">&quot;</span><span class="s0">\n</span><span class="s6">&quot;</span><span class="s2">, </span><span class="s1">str</span><span class="s2">(</span><span class="s1">text</span><span class="s2">))</span>
+
+
+<span class="s2">@</span><span class="s1">keep_lazy_text</span>
+<span class="s0">def </span><span class="s1">phone2numeric</span><span class="s2">(</span><span class="s1">phone</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;Convert a phone number with letters into its numeric equivalent.&quot;&quot;&quot;</span>
+    <span class="s1">char2number </span><span class="s2">= {</span>
+        <span class="s6">&quot;a&quot;</span><span class="s2">: </span><span class="s6">&quot;2&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;b&quot;</span><span class="s2">: </span><span class="s6">&quot;2&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;c&quot;</span><span class="s2">: </span><span class="s6">&quot;2&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;d&quot;</span><span class="s2">: </span><span class="s6">&quot;3&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;e&quot;</span><span class="s2">: </span><span class="s6">&quot;3&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;f&quot;</span><span class="s2">: </span><span class="s6">&quot;3&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;g&quot;</span><span class="s2">: </span><span class="s6">&quot;4&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;h&quot;</span><span class="s2">: </span><span class="s6">&quot;4&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;i&quot;</span><span class="s2">: </span><span class="s6">&quot;4&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;j&quot;</span><span class="s2">: </span><span class="s6">&quot;5&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;k&quot;</span><span class="s2">: </span><span class="s6">&quot;5&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;l&quot;</span><span class="s2">: </span><span class="s6">&quot;5&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;m&quot;</span><span class="s2">: </span><span class="s6">&quot;6&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;n&quot;</span><span class="s2">: </span><span class="s6">&quot;6&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;o&quot;</span><span class="s2">: </span><span class="s6">&quot;6&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;p&quot;</span><span class="s2">: </span><span class="s6">&quot;7&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;q&quot;</span><span class="s2">: </span><span class="s6">&quot;7&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;r&quot;</span><span class="s2">: </span><span class="s6">&quot;7&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;s&quot;</span><span class="s2">: </span><span class="s6">&quot;7&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;t&quot;</span><span class="s2">: </span><span class="s6">&quot;8&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;u&quot;</span><span class="s2">: </span><span class="s6">&quot;8&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;v&quot;</span><span class="s2">: </span><span class="s6">&quot;8&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;w&quot;</span><span class="s2">: </span><span class="s6">&quot;9&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;x&quot;</span><span class="s2">: </span><span class="s6">&quot;9&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;y&quot;</span><span class="s2">: </span><span class="s6">&quot;9&quot;</span><span class="s2">,</span>
+        <span class="s6">&quot;z&quot;</span><span class="s2">: </span><span class="s6">&quot;9&quot;</span><span class="s2">,</span>
+    <span class="s2">}</span>
+    <span class="s0">return </span><span class="s6">&quot;&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">char2number</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">c</span><span class="s2">, </span><span class="s1">c</span><span class="s2">) </span><span class="s0">for </span><span class="s1">c </span><span class="s0">in </span><span class="s1">phone</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">())</span>
+
+
+<span class="s0">def </span><span class="s1">_get_random_filename</span><span class="s2">(</span><span class="s1">max_random_bytes</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s7">b&quot;a&quot; </span><span class="s2">* </span><span class="s1">secrets</span><span class="s2">.</span><span class="s1">randbelow</span><span class="s2">(</span><span class="s1">max_random_bytes</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">compress_string</span><span class="s2">(</span><span class="s1">s</span><span class="s2">, *, </span><span class="s1">max_random_bytes</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+    <span class="s1">compressed_data </span><span class="s2">= </span><span class="s1">gzip_compress</span><span class="s2">(</span><span class="s1">s</span><span class="s2">, </span><span class="s1">compresslevel</span><span class="s2">=</span><span class="s4">6</span><span class="s2">, </span><span class="s1">mtime</span><span class="s2">=</span><span class="s4">0</span><span class="s2">)</span>
+
+    <span class="s0">if not </span><span class="s1">max_random_bytes</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">compressed_data</span>
+
+    <span class="s1">compressed_view </span><span class="s2">= </span><span class="s1">memoryview</span><span class="s2">(</span><span class="s1">compressed_data</span><span class="s2">)</span>
+    <span class="s1">header </span><span class="s2">= </span><span class="s1">bytearray</span><span class="s2">(</span><span class="s1">compressed_view</span><span class="s2">[:</span><span class="s4">10</span><span class="s2">])</span>
+    <span class="s1">header</span><span class="s2">[</span><span class="s4">3</span><span class="s2">] = </span><span class="s1">gzip</span><span class="s2">.</span><span class="s1">FNAME</span>
+
+    <span class="s1">filename </span><span class="s2">= </span><span class="s1">_get_random_filename</span><span class="s2">(</span><span class="s1">max_random_bytes</span><span class="s2">) + </span><span class="s7">b&quot;</span><span class="s0">\x00</span><span class="s7">&quot;</span>
+
+    <span class="s0">return </span><span class="s1">bytes</span><span class="s2">(</span><span class="s1">header</span><span class="s2">) + </span><span class="s1">filename </span><span class="s2">+ </span><span class="s1">compressed_view</span><span class="s2">[</span><span class="s4">10</span><span class="s2">:]</span>
+
+
+<span class="s0">class </span><span class="s1">StreamingBuffer</span><span class="s2">(</span><span class="s1">BytesIO</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">read</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">ret </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">getvalue</span><span class="s2">()</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">seek</span><span class="s2">(</span><span class="s4">0</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">truncate</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">ret</span>
+
+
+<span class="s5"># Like compress_string, but for iterators of strings.</span>
+<span class="s0">def </span><span class="s1">compress_sequence</span><span class="s2">(</span><span class="s1">sequence</span><span class="s2">, *, </span><span class="s1">max_random_bytes</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+    <span class="s1">buf </span><span class="s2">= </span><span class="s1">StreamingBuffer</span><span class="s2">()</span>
+    <span class="s1">filename </span><span class="s2">= </span><span class="s1">_get_random_filename</span><span class="s2">(</span><span class="s1">max_random_bytes</span><span class="s2">) </span><span class="s0">if </span><span class="s1">max_random_bytes </span><span class="s0">else None</span>
+    <span class="s0">with </span><span class="s1">GzipFile</span><span class="s2">(</span>
+        <span class="s1">filename</span><span class="s2">=</span><span class="s1">filename</span><span class="s2">, </span><span class="s1">mode</span><span class="s2">=</span><span class="s6">&quot;wb&quot;</span><span class="s2">, </span><span class="s1">compresslevel</span><span class="s2">=</span><span class="s4">6</span><span class="s2">, </span><span class="s1">fileobj</span><span class="s2">=</span><span class="s1">buf</span><span class="s2">, </span><span class="s1">mtime</span><span class="s2">=</span><span class="s4">0</span>
+    <span class="s2">) </span><span class="s0">as </span><span class="s1">zfile</span><span class="s2">:</span>
+        <span class="s5"># Output headers...</span>
+        <span class="s0">yield </span><span class="s1">buf</span><span class="s2">.</span><span class="s1">read</span><span class="s2">()</span>
+        <span class="s0">for </span><span class="s1">item </span><span class="s0">in </span><span class="s1">sequence</span><span class="s2">:</span>
+            <span class="s1">zfile</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">item</span><span class="s2">)</span>
+            <span class="s1">data </span><span class="s2">= </span><span class="s1">buf</span><span class="s2">.</span><span class="s1">read</span><span class="s2">()</span>
+            <span class="s0">if </span><span class="s1">data</span><span class="s2">:</span>
+                <span class="s0">yield </span><span class="s1">data</span>
+    <span class="s0">yield </span><span class="s1">buf</span><span class="s2">.</span><span class="s1">read</span><span class="s2">()</span>
+
+
+<span class="s5"># Expression to match some_token and some_token=&quot;with spaces&quot; (and similarly</span>
+<span class="s5"># for single-quoted strings).</span>
+<span class="s1">smart_split_re </span><span class="s2">= </span><span class="s1">_lazy_re_compile</span><span class="s2">(</span>
+    <span class="s6">r&quot;&quot;&quot; 
+    ((?: 
+        [^\s'&quot;]* 
+        (?: 
+            (?:&quot;(?:[^&quot;\\]|\\.)*&quot; | '(?:[^'\\]|\\.)*') 
+            [^\s'&quot;]* 
+        )+ 
+    ) | \S+) 
+&quot;&quot;&quot;</span><span class="s2">,</span>
+    <span class="s1">re</span><span class="s2">.</span><span class="s1">VERBOSE</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">smart_split</span><span class="s2">(</span><span class="s1">text</span><span class="s2">):</span>
+    <span class="s3">r&quot;&quot;&quot; 
+    Generator that splits a string by spaces, leaving quoted phrases together. 
+    Supports both single and double quotes, and supports escaping quotes with 
+    backslashes. In the output, strings will keep their initial and trailing 
+    quote marks and escaped quotes will remain escaped (the results can then 
+    be further processed with unescape_string_literal()). 
+ 
+    &gt;&gt;&gt; list(smart_split(r'This is &quot;a person\'s&quot; test.')) 
+    ['This', 'is', '&quot;a person\\\'s&quot;', 'test.'] 
+    &gt;&gt;&gt; list(smart_split(r&quot;Another 'person\'s' test.&quot;)) 
+    ['Another', &quot;'person\\'s'&quot;, 'test.'] 
+    &gt;&gt;&gt; list(smart_split(r'A &quot;\&quot;funky\&quot; style&quot; test.')) 
+    ['A', '&quot;\\&quot;funky\\&quot; style&quot;', 'test.'] 
+    &quot;&quot;&quot;</span>
+    <span class="s0">for </span><span class="s1">bit </span><span class="s0">in </span><span class="s1">smart_split_re</span><span class="s2">.</span><span class="s1">finditer</span><span class="s2">(</span><span class="s1">str</span><span class="s2">(</span><span class="s1">text</span><span class="s2">)):</span>
+        <span class="s0">yield </span><span class="s1">bit</span><span class="s2">[</span><span class="s4">0</span><span class="s2">]</span>
+
+
+<span class="s2">@</span><span class="s1">keep_lazy_text</span>
+<span class="s0">def </span><span class="s1">unescape_string_literal</span><span class="s2">(</span><span class="s1">s</span><span class="s2">):</span>
+    <span class="s3">r&quot;&quot;&quot; 
+    Convert quoted string literals to unquoted strings with escaped quotes and 
+    backslashes unquoted:: 
+ 
+        &gt;&gt;&gt; unescape_string_literal('&quot;abc&quot;') 
+        'abc' 
+        &gt;&gt;&gt; unescape_string_literal(&quot;'abc'&quot;) 
+        'abc' 
+        &gt;&gt;&gt; unescape_string_literal('&quot;a \&quot;bc\&quot;&quot;') 
+        'a &quot;bc&quot;' 
+        &gt;&gt;&gt; unescape_string_literal(&quot;'\'ab\' c'&quot;) 
+        &quot;'ab' c&quot; 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if not </span><span class="s1">s </span><span class="s0">or </span><span class="s1">s</span><span class="s2">[</span><span class="s4">0</span><span class="s2">] </span><span class="s0">not in </span><span class="s6">&quot;</span><span class="s0">\&quot;</span><span class="s6">'&quot; </span><span class="s0">or </span><span class="s1">s</span><span class="s2">[-</span><span class="s4">1</span><span class="s2">] != </span><span class="s1">s</span><span class="s2">[</span><span class="s4">0</span><span class="s2">]:</span>
+        <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s6">&quot;Not a string literal: %r&quot; </span><span class="s2">% </span><span class="s1">s</span><span class="s2">)</span>
+    <span class="s1">quote </span><span class="s2">= </span><span class="s1">s</span><span class="s2">[</span><span class="s4">0</span><span class="s2">]</span>
+    <span class="s0">return </span><span class="s1">s</span><span class="s2">[</span><span class="s4">1</span><span class="s2">:-</span><span class="s4">1</span><span class="s2">].</span><span class="s1">replace</span><span class="s2">(</span><span class="s6">r&quot;\%s&quot; </span><span class="s2">% </span><span class="s1">quote</span><span class="s2">, </span><span class="s1">quote</span><span class="s2">).</span><span class="s1">replace</span><span class="s2">(</span><span class="s6">r&quot;\\&quot;</span><span class="s2">, </span><span class="s6">&quot;</span><span class="s0">\\</span><span class="s6">&quot;</span><span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">keep_lazy_text</span>
+<span class="s0">def </span><span class="s1">slugify</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">allow_unicode</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Convert to ASCII if 'allow_unicode' is False. Convert spaces or repeated 
+    dashes to single dashes. Remove characters that aren't alphanumerics, 
+    underscores, or hyphens. Convert to lowercase. Also strip leading and 
+    trailing whitespace, dashes, and underscores. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">value </span><span class="s2">= </span><span class="s1">str</span><span class="s2">(</span><span class="s1">value</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">allow_unicode</span><span class="s2">:</span>
+        <span class="s1">value </span><span class="s2">= </span><span class="s1">unicodedata</span><span class="s2">.</span><span class="s1">normalize</span><span class="s2">(</span><span class="s6">&quot;NFKC&quot;</span><span class="s2">, </span><span class="s1">value</span><span class="s2">)</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">value </span><span class="s2">= (</span>
+            <span class="s1">unicodedata</span><span class="s2">.</span><span class="s1">normalize</span><span class="s2">(</span><span class="s6">&quot;NFKD&quot;</span><span class="s2">, </span><span class="s1">value</span><span class="s2">)</span>
+            <span class="s2">.</span><span class="s1">encode</span><span class="s2">(</span><span class="s6">&quot;ascii&quot;</span><span class="s2">, </span><span class="s6">&quot;ignore&quot;</span><span class="s2">)</span>
+            <span class="s2">.</span><span class="s1">decode</span><span class="s2">(</span><span class="s6">&quot;ascii&quot;</span><span class="s2">)</span>
+        <span class="s2">)</span>
+    <span class="s1">value </span><span class="s2">= </span><span class="s1">re</span><span class="s2">.</span><span class="s1">sub</span><span class="s2">(</span><span class="s6">r&quot;[^\w\s-]&quot;</span><span class="s2">, </span><span class="s6">&quot;&quot;</span><span class="s2">, </span><span class="s1">value</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">())</span>
+    <span class="s0">return </span><span class="s1">re</span><span class="s2">.</span><span class="s1">sub</span><span class="s2">(</span><span class="s6">r&quot;[-\s]+&quot;</span><span class="s2">, </span><span class="s6">&quot;-&quot;</span><span class="s2">, </span><span class="s1">value</span><span class="s2">).</span><span class="s1">strip</span><span class="s2">(</span><span class="s6">&quot;-_&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">camel_case_to_spaces</span><span class="s2">(</span><span class="s1">value</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Split CamelCase and convert to lowercase. Strip surrounding whitespace. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">re_camel_case</span><span class="s2">.</span><span class="s1">sub</span><span class="s2">(</span><span class="s6">r&quot; \1&quot;</span><span class="s2">, </span><span class="s1">value</span><span class="s2">).</span><span class="s1">strip</span><span class="s2">().</span><span class="s1">lower</span><span class="s2">()</span>
+
+
+<span class="s0">def </span><span class="s1">_format_lazy</span><span class="s2">(</span><span class="s1">format_string</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Apply str.format() on 'format_string' where format_string, args, 
+    and/or kwargs might be lazy. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">format_string</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+
+<span class="s1">format_lazy </span><span class="s2">= </span><span class="s1">lazy</span><span class="s2">(</span><span class="s1">_format_lazy</span><span class="s2">, </span><span class="s1">str</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

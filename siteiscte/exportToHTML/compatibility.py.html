@@ -1,0 +1,70 @@
+<html>
+<head>
+<title>compatibility.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+compatibility.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">inspect</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">sync </span><span class="s0">import </span><span class="s1">iscoroutinefunction</span>
+
+
+<span class="s0">def </span><span class="s1">is_double_callable</span><span class="s2">(</span><span class="s1">application</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Tests to see if an application is a legacy-style (double-callable) application. 
+    &quot;&quot;&quot;</span>
+    <span class="s4"># Look for a hint on the object first</span>
+    <span class="s0">if </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">application</span><span class="s2">, </span><span class="s5">&quot;_asgi_single_callable&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s0">return False</span>
+    <span class="s0">if </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">application</span><span class="s2">, </span><span class="s5">&quot;_asgi_double_callable&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s0">return True</span>
+    <span class="s4"># Uninstanted classes are double-callable</span>
+    <span class="s0">if </span><span class="s1">inspect</span><span class="s2">.</span><span class="s1">isclass</span><span class="s2">(</span><span class="s1">application</span><span class="s2">):</span>
+        <span class="s0">return True</span>
+    <span class="s4"># Instanted classes depend on their __call__</span>
+    <span class="s0">if </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">application</span><span class="s2">, </span><span class="s5">&quot;__call__&quot;</span><span class="s2">):</span>
+        <span class="s4"># We only check to see if its __call__ is a coroutine function -</span>
+        <span class="s4"># if it's not, it still might be a coroutine function itself.</span>
+        <span class="s0">if </span><span class="s1">iscoroutinefunction</span><span class="s2">(</span><span class="s1">application</span><span class="s2">.</span><span class="s1">__call__</span><span class="s2">):</span>
+            <span class="s0">return False</span>
+    <span class="s4"># Non-classes we just check directly</span>
+    <span class="s0">return not </span><span class="s1">iscoroutinefunction</span><span class="s2">(</span><span class="s1">application</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">double_to_single_callable</span><span class="s2">(</span><span class="s1">application</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Transforms a double-callable ASGI application into a single-callable one. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">async def </span><span class="s1">new_application</span><span class="s2">(</span><span class="s1">scope</span><span class="s2">, </span><span class="s1">receive</span><span class="s2">, </span><span class="s1">send</span><span class="s2">):</span>
+        <span class="s1">instance </span><span class="s2">= </span><span class="s1">application</span><span class="s2">(</span><span class="s1">scope</span><span class="s2">)</span>
+        <span class="s0">return await </span><span class="s1">instance</span><span class="s2">(</span><span class="s1">receive</span><span class="s2">, </span><span class="s1">send</span><span class="s2">)</span>
+
+    <span class="s0">return </span><span class="s1">new_application</span>
+
+
+<span class="s0">def </span><span class="s1">guarantee_single_callable</span><span class="s2">(</span><span class="s1">application</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Takes either a single- or double-callable application and always returns it 
+    in single-callable style. Use this to add backwards compatibility for ASGI 
+    2.0 applications to your server/test harness/etc. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">is_double_callable</span><span class="s2">(</span><span class="s1">application</span><span class="s2">):</span>
+        <span class="s1">application </span><span class="s2">= </span><span class="s1">double_to_single_callable</span><span class="s2">(</span><span class="s1">application</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">application</span>
+</pre>
+</body>
+</html>

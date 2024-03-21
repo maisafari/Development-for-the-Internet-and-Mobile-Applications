@@ -1,0 +1,96 @@
+<html>
+<head>
+<title>statistics.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+statistics.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">Aggregate</span><span class="s2">, </span><span class="s1">FloatField</span><span class="s2">, </span><span class="s1">IntegerField</span>
+
+<span class="s1">__all__ </span><span class="s2">= [</span>
+    <span class="s3">&quot;CovarPop&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;Corr&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;RegrAvgX&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;RegrAvgY&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;RegrCount&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;RegrIntercept&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;RegrR2&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;RegrSlope&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;RegrSXX&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;RegrSXY&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;RegrSYY&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;StatAggregate&quot;</span><span class="s2">,</span>
+<span class="s2">]</span>
+
+
+<span class="s0">class </span><span class="s1">StatAggregate</span><span class="s2">(</span><span class="s1">Aggregate</span><span class="s2">):</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">FloatField</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">y</span><span class="s2">, </span><span class="s1">x</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">filter</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">default</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">x </span><span class="s0">or not </span><span class="s1">y</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span><span class="s3">&quot;Both y and x must be provided.&quot;</span><span class="s2">)</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span>
+            <span class="s1">y</span><span class="s2">, </span><span class="s1">x</span><span class="s2">, </span><span class="s1">output_field</span><span class="s2">=</span><span class="s1">output_field</span><span class="s2">, </span><span class="s1">filter</span><span class="s2">=</span><span class="s1">filter</span><span class="s2">, </span><span class="s1">default</span><span class="s2">=</span><span class="s1">default</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">Corr</span><span class="s2">(</span><span class="s1">StatAggregate</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;CORR&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">CovarPop</span><span class="s2">(</span><span class="s1">StatAggregate</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">y</span><span class="s2">, </span><span class="s1">x</span><span class="s2">, </span><span class="s1">sample</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">filter</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">default</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;COVAR_SAMP&quot; </span><span class="s0">if </span><span class="s1">sample </span><span class="s0">else </span><span class="s3">&quot;COVAR_POP&quot;</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">y</span><span class="s2">, </span><span class="s1">x</span><span class="s2">, </span><span class="s1">filter</span><span class="s2">=</span><span class="s1">filter</span><span class="s2">, </span><span class="s1">default</span><span class="s2">=</span><span class="s1">default</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">RegrAvgX</span><span class="s2">(</span><span class="s1">StatAggregate</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;REGR_AVGX&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">RegrAvgY</span><span class="s2">(</span><span class="s1">StatAggregate</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;REGR_AVGY&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">RegrCount</span><span class="s2">(</span><span class="s1">StatAggregate</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;REGR_COUNT&quot;</span>
+    <span class="s1">output_field </span><span class="s2">= </span><span class="s1">IntegerField</span><span class="s2">()</span>
+    <span class="s1">empty_result_set_value </span><span class="s2">= </span><span class="s4">0</span>
+
+
+<span class="s0">class </span><span class="s1">RegrIntercept</span><span class="s2">(</span><span class="s1">StatAggregate</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;REGR_INTERCEPT&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">RegrR2</span><span class="s2">(</span><span class="s1">StatAggregate</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;REGR_R2&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">RegrSlope</span><span class="s2">(</span><span class="s1">StatAggregate</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;REGR_SLOPE&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">RegrSXX</span><span class="s2">(</span><span class="s1">StatAggregate</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;REGR_SXX&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">RegrSXY</span><span class="s2">(</span><span class="s1">StatAggregate</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;REGR_SXY&quot;</span>
+
+
+<span class="s0">class </span><span class="s1">RegrSYY</span><span class="s2">(</span><span class="s1">StatAggregate</span><span class="s2">):</span>
+    <span class="s1">function </span><span class="s2">= </span><span class="s3">&quot;REGR_SYY&quot;</span>
+</pre>
+</body>
+</html>

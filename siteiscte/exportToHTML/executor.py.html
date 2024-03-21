@@ -1,0 +1,433 @@
+<html>
+<head>
+<title>executor.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+.s6 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+executor.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">registry </span><span class="s0">import </span><span class="s1">apps </span><span class="s0">as </span><span class="s1">global_apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">migrations</span><span class="s2">, </span><span class="s1">router</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">InvalidMigrationPlan</span>
+<span class="s0">from </span><span class="s2">.</span><span class="s1">loader </span><span class="s0">import </span><span class="s1">MigrationLoader</span>
+<span class="s0">from </span><span class="s2">.</span><span class="s1">recorder </span><span class="s0">import </span><span class="s1">MigrationRecorder</span>
+<span class="s0">from </span><span class="s2">.</span><span class="s1">state </span><span class="s0">import </span><span class="s1">ProjectState</span>
+
+
+<span class="s0">class </span><span class="s1">MigrationExecutor</span><span class="s2">:</span>
+    <span class="s3">&quot;&quot;&quot; 
+    End-to-end migration execution - load migrations and run them up or down 
+    to a specified set of targets. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">connection</span><span class="s2">, </span><span class="s1">progress_callback</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">connection </span><span class="s2">= </span><span class="s1">connection</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">loader </span><span class="s2">= </span><span class="s1">MigrationLoader</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">recorder </span><span class="s2">= </span><span class="s1">MigrationRecorder</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback </span><span class="s2">= </span><span class="s1">progress_callback</span>
+
+    <span class="s0">def </span><span class="s1">migration_plan</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">targets</span><span class="s2">, </span><span class="s1">clean_start</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Given a set of targets, return a list of (Migration instance, backwards?). 
+        &quot;&quot;&quot;</span>
+        <span class="s1">plan </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">clean_start</span><span class="s2">:</span>
+            <span class="s1">applied </span><span class="s2">= {}</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">applied </span><span class="s2">= </span><span class="s1">dict</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">applied_migrations</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">target </span><span class="s0">in </span><span class="s1">targets</span><span class="s2">:</span>
+            <span class="s4"># If the target is (app_label, None), that means unmigrate everything</span>
+            <span class="s0">if </span><span class="s1">target</span><span class="s2">[</span><span class="s5">1</span><span class="s2">] </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s0">for </span><span class="s1">root </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">root_nodes</span><span class="s2">():</span>
+                    <span class="s0">if </span><span class="s1">root</span><span class="s2">[</span><span class="s5">0</span><span class="s2">] == </span><span class="s1">target</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]:</span>
+                        <span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">backwards_plan</span><span class="s2">(</span><span class="s1">root</span><span class="s2">):</span>
+                            <span class="s0">if </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">applied</span><span class="s2">:</span>
+                                <span class="s1">plan</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">nodes</span><span class="s2">[</span><span class="s1">migration</span><span class="s2">], </span><span class="s0">True</span><span class="s2">))</span>
+                                <span class="s1">applied</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">)</span>
+            <span class="s4"># If the migration is already applied, do backwards mode,</span>
+            <span class="s4"># otherwise do forwards mode.</span>
+            <span class="s0">elif </span><span class="s1">target </span><span class="s0">in </span><span class="s1">applied</span><span class="s2">:</span>
+                <span class="s4"># If the target is missing, it's likely a replaced migration.</span>
+                <span class="s4"># Reload the graph without replacements.</span>
+                <span class="s0">if </span><span class="s2">(</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">replace_migrations</span>
+                    <span class="s0">and </span><span class="s1">target </span><span class="s0">not in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">node_map</span>
+                <span class="s2">):</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">replace_migrations </span><span class="s2">= </span><span class="s0">False</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">build_graph</span><span class="s2">()</span>
+                    <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration_plan</span><span class="s2">(</span><span class="s1">targets</span><span class="s2">, </span><span class="s1">clean_start</span><span class="s2">=</span><span class="s1">clean_start</span><span class="s2">)</span>
+                <span class="s4"># Don't migrate backwards all the way to the target node (that</span>
+                <span class="s4"># may roll back dependencies in other apps that don't need to</span>
+                <span class="s4"># be rolled back); instead roll back through target's immediate</span>
+                <span class="s4"># child(ren) in the same app, and no further.</span>
+                <span class="s1">next_in_app </span><span class="s2">= </span><span class="s1">sorted</span><span class="s2">(</span>
+                    <span class="s1">n</span>
+                    <span class="s0">for </span><span class="s1">n </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">node_map</span><span class="s2">[</span><span class="s1">target</span><span class="s2">].</span><span class="s1">children</span>
+                    <span class="s0">if </span><span class="s1">n</span><span class="s2">[</span><span class="s5">0</span><span class="s2">] == </span><span class="s1">target</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]</span>
+                <span class="s2">)</span>
+                <span class="s0">for </span><span class="s1">node </span><span class="s0">in </span><span class="s1">next_in_app</span><span class="s2">:</span>
+                    <span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">backwards_plan</span><span class="s2">(</span><span class="s1">node</span><span class="s2">):</span>
+                        <span class="s0">if </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">applied</span><span class="s2">:</span>
+                            <span class="s1">plan</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">nodes</span><span class="s2">[</span><span class="s1">migration</span><span class="s2">], </span><span class="s0">True</span><span class="s2">))</span>
+                            <span class="s1">applied</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">forwards_plan</span><span class="s2">(</span><span class="s1">target</span><span class="s2">):</span>
+                    <span class="s0">if </span><span class="s1">migration </span><span class="s0">not in </span><span class="s1">applied</span><span class="s2">:</span>
+                        <span class="s1">plan</span><span class="s2">.</span><span class="s1">append</span><span class="s2">((</span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">nodes</span><span class="s2">[</span><span class="s1">migration</span><span class="s2">], </span><span class="s0">False</span><span class="s2">))</span>
+                        <span class="s1">applied</span><span class="s2">[</span><span class="s1">migration</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">nodes</span><span class="s2">[</span><span class="s1">migration</span><span class="s2">]</span>
+        <span class="s0">return </span><span class="s1">plan</span>
+
+    <span class="s0">def </span><span class="s1">_create_project_state</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">with_applied_migrations</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Create a project state including all the applications without 
+        migrations and applied migrations if with_applied_migrations=True. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">state </span><span class="s2">= </span><span class="s1">ProjectState</span><span class="s2">(</span><span class="s1">real_apps</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">unmigrated_apps</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">with_applied_migrations</span><span class="s2">:</span>
+            <span class="s4"># Create the forwards plan Django would follow on an empty database</span>
+            <span class="s1">full_plan </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration_plan</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">leaf_nodes</span><span class="s2">(), </span><span class="s1">clean_start</span><span class="s2">=</span><span class="s0">True</span>
+            <span class="s2">)</span>
+            <span class="s1">applied_migrations </span><span class="s2">= {</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">nodes</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]</span>
+                <span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">applied_migrations</span>
+                <span class="s0">if </span><span class="s1">key </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">nodes</span>
+            <span class="s2">}</span>
+            <span class="s0">for </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">_ </span><span class="s0">in </span><span class="s1">full_plan</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">applied_migrations</span><span class="s2">:</span>
+                    <span class="s1">migration</span><span class="s2">.</span><span class="s1">mutate_state</span><span class="s2">(</span><span class="s1">state</span><span class="s2">, </span><span class="s1">preserve</span><span class="s2">=</span><span class="s0">False</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">state</span>
+
+    <span class="s0">def </span><span class="s1">migrate</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">targets</span><span class="s2">, </span><span class="s1">plan</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">state</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">fake</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">fake_initial</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Migrate the database up to the given targets. 
+ 
+        Django first needs to create all project states before a migration is 
+        (un)applied and in a second step run all the database operations. 
+        &quot;&quot;&quot;</span>
+        <span class="s4"># The django_migrations table must be present to record applied</span>
+        <span class="s4"># migrations, but don't create it if there are no migrations to apply.</span>
+        <span class="s0">if </span><span class="s1">plan </span><span class="s2">== []:</span>
+            <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">recorder</span><span class="s2">.</span><span class="s1">has_table</span><span class="s2">():</span>
+                <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_create_project_state</span><span class="s2">(</span><span class="s1">with_applied_migrations</span><span class="s2">=</span><span class="s0">False</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">recorder</span><span class="s2">.</span><span class="s1">ensure_schema</span><span class="s2">()</span>
+
+        <span class="s0">if </span><span class="s1">plan </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">plan </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration_plan</span><span class="s2">(</span><span class="s1">targets</span><span class="s2">)</span>
+        <span class="s4"># Create the forwards plan Django would follow on an empty database</span>
+        <span class="s1">full_plan </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration_plan</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">leaf_nodes</span><span class="s2">(), </span><span class="s1">clean_start</span><span class="s2">=</span><span class="s0">True</span>
+        <span class="s2">)</span>
+
+        <span class="s1">all_forwards </span><span class="s2">= </span><span class="s1">all</span><span class="s2">(</span><span class="s0">not </span><span class="s1">backwards </span><span class="s0">for </span><span class="s1">mig</span><span class="s2">, </span><span class="s1">backwards </span><span class="s0">in </span><span class="s1">plan</span><span class="s2">)</span>
+        <span class="s1">all_backwards </span><span class="s2">= </span><span class="s1">all</span><span class="s2">(</span><span class="s1">backwards </span><span class="s0">for </span><span class="s1">mig</span><span class="s2">, </span><span class="s1">backwards </span><span class="s0">in </span><span class="s1">plan</span><span class="s2">)</span>
+
+        <span class="s0">if not </span><span class="s1">plan</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">state </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s4"># The resulting state should include applied migrations.</span>
+                <span class="s1">state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_create_project_state</span><span class="s2">(</span><span class="s1">with_applied_migrations</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">all_forwards </span><span class="s2">== </span><span class="s1">all_backwards</span><span class="s2">:</span>
+            <span class="s4"># This should only happen if there's a mixed plan</span>
+            <span class="s0">raise </span><span class="s1">InvalidMigrationPlan</span><span class="s2">(</span>
+                <span class="s6">&quot;Migration plans with both forwards and backwards migrations &quot;</span>
+                <span class="s6">&quot;are not supported. Please split your migration process into &quot;</span>
+                <span class="s6">&quot;separate plans of only forwards OR backwards migrations.&quot;</span><span class="s2">,</span>
+                <span class="s1">plan</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">all_forwards</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">state </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s4"># The resulting state should still include applied migrations.</span>
+                <span class="s1">state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_create_project_state</span><span class="s2">(</span><span class="s1">with_applied_migrations</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+            <span class="s1">state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_migrate_all_forwards</span><span class="s2">(</span>
+                <span class="s1">state</span><span class="s2">, </span><span class="s1">plan</span><span class="s2">, </span><span class="s1">full_plan</span><span class="s2">, </span><span class="s1">fake</span><span class="s2">=</span><span class="s1">fake</span><span class="s2">, </span><span class="s1">fake_initial</span><span class="s2">=</span><span class="s1">fake_initial</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s4"># No need to check for `elif all_backwards` here, as that condition</span>
+            <span class="s4"># would always evaluate to true.</span>
+            <span class="s1">state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_migrate_all_backwards</span><span class="s2">(</span><span class="s1">plan</span><span class="s2">, </span><span class="s1">full_plan</span><span class="s2">, </span><span class="s1">fake</span><span class="s2">=</span><span class="s1">fake</span><span class="s2">)</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">check_replacements</span><span class="s2">()</span>
+
+        <span class="s0">return </span><span class="s1">state</span>
+
+    <span class="s0">def </span><span class="s1">_migrate_all_forwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">state</span><span class="s2">, </span><span class="s1">plan</span><span class="s2">, </span><span class="s1">full_plan</span><span class="s2">, </span><span class="s1">fake</span><span class="s2">, </span><span class="s1">fake_initial</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Take a list of 2-tuples of the form (migration instance, False) and 
+        apply them in the order they occur in the full_plan. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">migrations_to_run </span><span class="s2">= {</span><span class="s1">m</span><span class="s2">[</span><span class="s5">0</span><span class="s2">] </span><span class="s0">for </span><span class="s1">m </span><span class="s0">in </span><span class="s1">plan</span><span class="s2">}</span>
+        <span class="s0">for </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">_ </span><span class="s0">in </span><span class="s1">full_plan</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">migrations_to_run</span><span class="s2">:</span>
+                <span class="s4"># We remove every migration that we applied from these sets so</span>
+                <span class="s4"># that we can bail out once the last migration has been applied</span>
+                <span class="s4"># and don't always run until the very end of the migration</span>
+                <span class="s4"># process.</span>
+                <span class="s0">break</span>
+            <span class="s0">if </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">migrations_to_run</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s6">&quot;apps&quot; </span><span class="s0">not in </span><span class="s1">state</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">:</span>
+                    <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">(</span><span class="s6">&quot;render_start&quot;</span><span class="s2">)</span>
+                    <span class="s1">state</span><span class="s2">.</span><span class="s1">apps  </span><span class="s4"># Render all -- performance critical</span>
+                    <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">(</span><span class="s6">&quot;render_success&quot;</span><span class="s2">)</span>
+                <span class="s1">state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">apply_migration</span><span class="s2">(</span>
+                    <span class="s1">state</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">fake</span><span class="s2">=</span><span class="s1">fake</span><span class="s2">, </span><span class="s1">fake_initial</span><span class="s2">=</span><span class="s1">fake_initial</span>
+                <span class="s2">)</span>
+                <span class="s1">migrations_to_run</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s1">state</span>
+
+    <span class="s0">def </span><span class="s1">_migrate_all_backwards</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">plan</span><span class="s2">, </span><span class="s1">full_plan</span><span class="s2">, </span><span class="s1">fake</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Take a list of 2-tuples of the form (migration instance, True) and 
+        unapply them in reverse order they occur in the full_plan. 
+ 
+        Since unapplying a migration requires the project state prior to that 
+        migration, Django will compute the migration states before each of them 
+        in a first run over the plan and then unapply them in a second run over 
+        the plan. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">migrations_to_run </span><span class="s2">= {</span><span class="s1">m</span><span class="s2">[</span><span class="s5">0</span><span class="s2">] </span><span class="s0">for </span><span class="s1">m </span><span class="s0">in </span><span class="s1">plan</span><span class="s2">}</span>
+        <span class="s4"># Holds all migration states prior to the migrations being unapplied</span>
+        <span class="s1">states </span><span class="s2">= {}</span>
+        <span class="s1">state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_create_project_state</span><span class="s2">()</span>
+        <span class="s1">applied_migrations </span><span class="s2">= {</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">nodes</span><span class="s2">[</span><span class="s1">key</span><span class="s2">]</span>
+            <span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">applied_migrations</span>
+            <span class="s0">if </span><span class="s1">key </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">nodes</span>
+        <span class="s2">}</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">(</span><span class="s6">&quot;render_start&quot;</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">_ </span><span class="s0">in </span><span class="s1">full_plan</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">migrations_to_run</span><span class="s2">:</span>
+                <span class="s4"># We remove every migration that we applied from this set so</span>
+                <span class="s4"># that we can bail out once the last migration has been applied</span>
+                <span class="s4"># and don't always run until the very end of the migration</span>
+                <span class="s4"># process.</span>
+                <span class="s0">break</span>
+            <span class="s0">if </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">migrations_to_run</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s6">&quot;apps&quot; </span><span class="s0">not in </span><span class="s1">state</span><span class="s2">.</span><span class="s1">__dict__</span><span class="s2">:</span>
+                    <span class="s1">state</span><span class="s2">.</span><span class="s1">apps  </span><span class="s4"># Render all -- performance critical</span>
+                <span class="s4"># The state before this migration</span>
+                <span class="s1">states</span><span class="s2">[</span><span class="s1">migration</span><span class="s2">] = </span><span class="s1">state</span>
+                <span class="s4"># The old state keeps as-is, we continue with the new state</span>
+                <span class="s1">state </span><span class="s2">= </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">mutate_state</span><span class="s2">(</span><span class="s1">state</span><span class="s2">, </span><span class="s1">preserve</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+                <span class="s1">migrations_to_run</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">)</span>
+            <span class="s0">elif </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">applied_migrations</span><span class="s2">:</span>
+                <span class="s4"># Only mutate the state if the migration is actually applied</span>
+                <span class="s4"># to make sure the resulting state doesn't include changes</span>
+                <span class="s4"># from unrelated migrations.</span>
+                <span class="s1">migration</span><span class="s2">.</span><span class="s1">mutate_state</span><span class="s2">(</span><span class="s1">state</span><span class="s2">, </span><span class="s1">preserve</span><span class="s2">=</span><span class="s0">False</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">(</span><span class="s6">&quot;render_success&quot;</span><span class="s2">)</span>
+
+        <span class="s0">for </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">_ </span><span class="s0">in </span><span class="s1">plan</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">unapply_migration</span><span class="s2">(</span><span class="s1">states</span><span class="s2">[</span><span class="s1">migration</span><span class="s2">], </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">fake</span><span class="s2">=</span><span class="s1">fake</span><span class="s2">)</span>
+            <span class="s1">applied_migrations</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">)</span>
+
+        <span class="s4"># Generate the post migration state by starting from the state before</span>
+        <span class="s4"># the last migration is unapplied and mutating it to include all the</span>
+        <span class="s4"># remaining applied migrations.</span>
+        <span class="s1">last_unapplied_migration </span><span class="s2">= </span><span class="s1">plan</span><span class="s2">[-</span><span class="s5">1</span><span class="s2">][</span><span class="s5">0</span><span class="s2">]</span>
+        <span class="s1">state </span><span class="s2">= </span><span class="s1">states</span><span class="s2">[</span><span class="s1">last_unapplied_migration</span><span class="s2">]</span>
+        <span class="s0">for </span><span class="s1">index</span><span class="s2">, (</span><span class="s1">migration</span><span class="s2">, </span><span class="s1">_</span><span class="s2">) </span><span class="s0">in </span><span class="s1">enumerate</span><span class="s2">(</span><span class="s1">full_plan</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">migration </span><span class="s2">== </span><span class="s1">last_unapplied_migration</span><span class="s2">:</span>
+                <span class="s0">for </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">_ </span><span class="s0">in </span><span class="s1">full_plan</span><span class="s2">[</span><span class="s1">index</span><span class="s2">:]:</span>
+                    <span class="s0">if </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">applied_migrations</span><span class="s2">:</span>
+                        <span class="s1">migration</span><span class="s2">.</span><span class="s1">mutate_state</span><span class="s2">(</span><span class="s1">state</span><span class="s2">, </span><span class="s1">preserve</span><span class="s2">=</span><span class="s0">False</span><span class="s2">)</span>
+                <span class="s0">break</span>
+
+        <span class="s0">return </span><span class="s1">state</span>
+
+    <span class="s0">def </span><span class="s1">apply_migration</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">state</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">fake</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">fake_initial</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Run a migration forwards.&quot;&quot;&quot;</span>
+        <span class="s1">migration_recorded </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">(</span><span class="s6">&quot;apply_start&quot;</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">fake</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">fake</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">fake_initial</span><span class="s2">:</span>
+                <span class="s4"># Test to see if this is an already-applied initial migration</span>
+                <span class="s1">applied</span><span class="s2">, </span><span class="s1">state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">detect_soft_applied</span><span class="s2">(</span><span class="s1">state</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">applied</span><span class="s2">:</span>
+                    <span class="s1">fake </span><span class="s2">= </span><span class="s0">True</span>
+            <span class="s0">if not </span><span class="s1">fake</span><span class="s2">:</span>
+                <span class="s4"># Alright, do it normally</span>
+                <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">schema_editor</span><span class="s2">(</span>
+                    <span class="s1">atomic</span><span class="s2">=</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">atomic</span>
+                <span class="s2">) </span><span class="s0">as </span><span class="s1">schema_editor</span><span class="s2">:</span>
+                    <span class="s1">state </span><span class="s2">= </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">apply</span><span class="s2">(</span><span class="s1">state</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">)</span>
+                    <span class="s0">if not </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">deferred_sql</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">record_migration</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">)</span>
+                        <span class="s1">migration_recorded </span><span class="s2">= </span><span class="s0">True</span>
+        <span class="s0">if not </span><span class="s1">migration_recorded</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">record_migration</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">)</span>
+        <span class="s4"># Report progress</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">(</span><span class="s6">&quot;apply_success&quot;</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">fake</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">state</span>
+
+    <span class="s0">def </span><span class="s1">record_migration</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">):</span>
+        <span class="s4"># For replacement migrations, record individual statuses</span>
+        <span class="s0">if </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">replaces</span><span class="s2">:</span>
+            <span class="s0">for </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">name </span><span class="s0">in </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">replaces</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">recorder</span><span class="s2">.</span><span class="s1">record_applied</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">name</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">recorder</span><span class="s2">.</span><span class="s1">record_applied</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">unapply_migration</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">state</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">fake</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Run a migration backwards.&quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">(</span><span class="s6">&quot;unapply_start&quot;</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">fake</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">fake</span><span class="s2">:</span>
+            <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">schema_editor</span><span class="s2">(</span>
+                <span class="s1">atomic</span><span class="s2">=</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">atomic</span>
+            <span class="s2">) </span><span class="s0">as </span><span class="s1">schema_editor</span><span class="s2">:</span>
+                <span class="s1">state </span><span class="s2">= </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">unapply</span><span class="s2">(</span><span class="s1">state</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">)</span>
+        <span class="s4"># For replacement migrations, also record individual statuses.</span>
+        <span class="s0">if </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">replaces</span><span class="s2">:</span>
+            <span class="s0">for </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">name </span><span class="s0">in </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">replaces</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">recorder</span><span class="s2">.</span><span class="s1">record_unapplied</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">name</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">recorder</span><span class="s2">.</span><span class="s1">record_unapplied</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+        <span class="s4"># Report progress</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">progress_callback</span><span class="s2">(</span><span class="s6">&quot;unapply_success&quot;</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">, </span><span class="s1">fake</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">state</span>
+
+    <span class="s0">def </span><span class="s1">check_replacements</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Mark replacement migrations applied if their replaced set all are. 
+ 
+        Do this unconditionally on every migrate, rather than just when 
+        migrations are applied or unapplied, to correctly handle the case 
+        when a new squash migration is pushed to a deployment that already had 
+        all its replaced migrations applied. In this case no new migration will 
+        be applied, but the applied state of the squashed migration must be 
+        maintained. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">applied </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">recorder</span><span class="s2">.</span><span class="s1">applied_migrations</span><span class="s2">()</span>
+        <span class="s0">for </span><span class="s1">key</span><span class="s2">, </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">replacements</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s1">all_applied </span><span class="s2">= </span><span class="s1">all</span><span class="s2">(</span><span class="s1">m </span><span class="s0">in </span><span class="s1">applied </span><span class="s0">for </span><span class="s1">m </span><span class="s0">in </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">replaces</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">all_applied </span><span class="s0">and </span><span class="s1">key </span><span class="s0">not in </span><span class="s1">applied</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">recorder</span><span class="s2">.</span><span class="s1">record_applied</span><span class="s2">(*</span><span class="s1">key</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">detect_soft_applied</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">project_state</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Test whether a migration has been implicitly applied - that the 
+        tables or columns it would create exist. This is intended only for use 
+        on initial migrations (as it only looks for CreateModel and AddField). 
+        &quot;&quot;&quot;</span>
+
+        <span class="s0">def </span><span class="s1">should_skip_detecting_model</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+            <span class="s3">&quot;&quot;&quot; 
+            No need to detect tables for proxy models, unmanaged models, or 
+            models that can't be migrated on the current database. 
+            &quot;&quot;&quot;</span>
+            <span class="s0">return </span><span class="s2">(</span>
+                <span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">proxy</span>
+                <span class="s0">or not </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">managed</span>
+                <span class="s0">or not </span><span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate</span><span class="s2">(</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">,</span>
+                    <span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">,</span>
+                    <span class="s1">model_name</span><span class="s2">=</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">initial </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s4"># Bail if the migration isn't the first one in its app</span>
+            <span class="s0">if </span><span class="s1">any</span><span class="s2">(</span><span class="s1">app </span><span class="s2">== </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label </span><span class="s0">for </span><span class="s1">app</span><span class="s2">, </span><span class="s1">name </span><span class="s0">in </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">dependencies</span><span class="s2">):</span>
+                <span class="s0">return False</span><span class="s2">, </span><span class="s1">project_state</span>
+        <span class="s0">elif </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">initial </span><span class="s0">is False</span><span class="s2">:</span>
+            <span class="s4"># Bail if it's NOT an initial migration</span>
+            <span class="s0">return False</span><span class="s2">, </span><span class="s1">project_state</span>
+
+        <span class="s0">if </span><span class="s1">project_state </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">after_state </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">project_state</span><span class="s2">(</span>
+                <span class="s2">(</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">name</span><span class="s2">), </span><span class="s1">at_end</span><span class="s2">=</span><span class="s0">True</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">after_state </span><span class="s2">= </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">mutate_state</span><span class="s2">(</span><span class="s1">project_state</span><span class="s2">)</span>
+        <span class="s1">apps </span><span class="s2">= </span><span class="s1">after_state</span><span class="s2">.</span><span class="s1">apps</span>
+        <span class="s1">found_create_model_migration </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s1">found_add_field_migration </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s1">fold_identifier_case </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">features</span><span class="s2">.</span><span class="s1">ignores_table_name_case</span>
+        <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">cursor</span><span class="s2">() </span><span class="s0">as </span><span class="s1">cursor</span><span class="s2">:</span>
+            <span class="s1">existing_table_names </span><span class="s2">= </span><span class="s1">set</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">introspection</span><span class="s2">.</span><span class="s1">table_names</span><span class="s2">(</span><span class="s1">cursor</span><span class="s2">)</span>
+            <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">fold_identifier_case</span><span class="s2">:</span>
+                <span class="s1">existing_table_names </span><span class="s2">= {</span>
+                    <span class="s1">name</span><span class="s2">.</span><span class="s1">casefold</span><span class="s2">() </span><span class="s0">for </span><span class="s1">name </span><span class="s0">in </span><span class="s1">existing_table_names</span>
+                <span class="s2">}</span>
+        <span class="s4"># Make sure all create model and add field operations are done</span>
+        <span class="s0">for </span><span class="s1">operation </span><span class="s0">in </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">operations</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">operation</span><span class="s2">, </span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">CreateModel</span><span class="s2">):</span>
+                <span class="s1">model </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">operation</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">swapped</span><span class="s2">:</span>
+                    <span class="s4"># We have to fetch the model to test with from the</span>
+                    <span class="s4"># main app cache, as it's not a direct dependency.</span>
+                    <span class="s1">model </span><span class="s2">= </span><span class="s1">global_apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">swapped</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">should_skip_detecting_model</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+                    <span class="s0">continue</span>
+                <span class="s1">db_table </span><span class="s2">= </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">db_table</span>
+                <span class="s0">if </span><span class="s1">fold_identifier_case</span><span class="s2">:</span>
+                    <span class="s1">db_table </span><span class="s2">= </span><span class="s1">db_table</span><span class="s2">.</span><span class="s1">casefold</span><span class="s2">()</span>
+                <span class="s0">if </span><span class="s1">db_table </span><span class="s0">not in </span><span class="s1">existing_table_names</span><span class="s2">:</span>
+                    <span class="s0">return False</span><span class="s2">, </span><span class="s1">project_state</span>
+                <span class="s1">found_create_model_migration </span><span class="s2">= </span><span class="s0">True</span>
+            <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">operation</span><span class="s2">, </span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">AddField</span><span class="s2">):</span>
+                <span class="s1">model </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">operation</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">swapped</span><span class="s2">:</span>
+                    <span class="s4"># We have to fetch the model to test with from the</span>
+                    <span class="s4"># main app cache, as it's not a direct dependency.</span>
+                    <span class="s1">model </span><span class="s2">= </span><span class="s1">global_apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">swapped</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">should_skip_detecting_model</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+                    <span class="s0">continue</span>
+
+                <span class="s1">table </span><span class="s2">= </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">db_table</span>
+                <span class="s1">field </span><span class="s2">= </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">operation</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+
+                <span class="s4"># Handle implicit many-to-many tables created by AddField.</span>
+                <span class="s0">if </span><span class="s1">field</span><span class="s2">.</span><span class="s1">many_to_many</span><span class="s2">:</span>
+                    <span class="s1">through_db_table </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">.</span><span class="s1">through</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">db_table</span>
+                    <span class="s0">if </span><span class="s1">fold_identifier_case</span><span class="s2">:</span>
+                        <span class="s1">through_db_table </span><span class="s2">= </span><span class="s1">through_db_table</span><span class="s2">.</span><span class="s1">casefold</span><span class="s2">()</span>
+                    <span class="s0">if </span><span class="s1">through_db_table </span><span class="s0">not in </span><span class="s1">existing_table_names</span><span class="s2">:</span>
+                        <span class="s0">return False</span><span class="s2">, </span><span class="s1">project_state</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s1">found_add_field_migration </span><span class="s2">= </span><span class="s0">True</span>
+                        <span class="s0">continue</span>
+                <span class="s0">with </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">cursor</span><span class="s2">() </span><span class="s0">as </span><span class="s1">cursor</span><span class="s2">:</span>
+                    <span class="s1">columns </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">introspection</span><span class="s2">.</span><span class="s1">get_table_description</span><span class="s2">(</span>
+                        <span class="s1">cursor</span><span class="s2">, </span><span class="s1">table</span>
+                    <span class="s2">)</span>
+                <span class="s0">for </span><span class="s1">column </span><span class="s0">in </span><span class="s1">columns</span><span class="s2">:</span>
+                    <span class="s1">field_column </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">column</span>
+                    <span class="s1">column_name </span><span class="s2">= </span><span class="s1">column</span><span class="s2">.</span><span class="s1">name</span>
+                    <span class="s0">if </span><span class="s1">fold_identifier_case</span><span class="s2">:</span>
+                        <span class="s1">column_name </span><span class="s2">= </span><span class="s1">column_name</span><span class="s2">.</span><span class="s1">casefold</span><span class="s2">()</span>
+                        <span class="s1">field_column </span><span class="s2">= </span><span class="s1">field_column</span><span class="s2">.</span><span class="s1">casefold</span><span class="s2">()</span>
+                    <span class="s0">if </span><span class="s1">column_name </span><span class="s2">== </span><span class="s1">field_column</span><span class="s2">:</span>
+                        <span class="s1">found_add_field_migration </span><span class="s2">= </span><span class="s0">True</span>
+                        <span class="s0">break</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s0">return False</span><span class="s2">, </span><span class="s1">project_state</span>
+        <span class="s4"># If we get this far and we found at least one CreateModel or AddField</span>
+        <span class="s4"># migration, the migration is considered implicitly applied.</span>
+        <span class="s0">return </span><span class="s2">(</span><span class="s1">found_create_model_migration </span><span class="s0">or </span><span class="s1">found_add_field_migration</span><span class="s2">), </span><span class="s1">after_state</span>
+</pre>
+</body>
+</html>

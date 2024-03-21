@@ -1,0 +1,215 @@
+<html>
+<head>
+<title>schema.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+schema.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">DatabaseError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">backends</span><span class="s2">.</span><span class="s1">sqlite3</span><span class="s2">.</span><span class="s1">schema </span><span class="s0">import </span><span class="s1">DatabaseSchemaEditor</span>
+
+
+<span class="s0">class </span><span class="s1">SpatialiteSchemaEditor</span><span class="s2">(</span><span class="s1">DatabaseSchemaEditor</span><span class="s2">):</span>
+    <span class="s1">sql_add_geometry_column </span><span class="s2">= (</span>
+        <span class="s3">&quot;SELECT AddGeometryColumn(%(table)s, %(column)s, %(srid)s, &quot;</span>
+        <span class="s3">&quot;%(geom_type)s, %(dim)s, %(null)s)&quot;</span>
+    <span class="s2">)</span>
+    <span class="s1">sql_add_spatial_index </span><span class="s2">= </span><span class="s3">&quot;SELECT CreateSpatialIndex(%(table)s, %(column)s)&quot;</span>
+    <span class="s1">sql_drop_spatial_index </span><span class="s2">= </span><span class="s3">&quot;DROP TABLE idx_%(table)s_%(column)s&quot;</span>
+    <span class="s1">sql_recover_geometry_metadata </span><span class="s2">= (</span>
+        <span class="s3">&quot;SELECT RecoverGeometryColumn(%(table)s, %(column)s, %(srid)s, &quot;</span>
+        <span class="s3">&quot;%(geom_type)s, %(dim)s)&quot;</span>
+    <span class="s2">)</span>
+    <span class="s1">sql_remove_geometry_metadata </span><span class="s2">= </span><span class="s3">&quot;SELECT DiscardGeometryColumn(%(table)s, %(column)s)&quot;</span>
+    <span class="s1">sql_discard_geometry_columns </span><span class="s2">= (</span>
+        <span class="s3">&quot;DELETE FROM %(geom_table)s WHERE f_table_name = %(table)s&quot;</span>
+    <span class="s2">)</span>
+    <span class="s1">sql_update_geometry_columns </span><span class="s2">= (</span>
+        <span class="s3">&quot;UPDATE %(geom_table)s SET f_table_name = %(new_table)s &quot;</span>
+        <span class="s3">&quot;WHERE f_table_name = %(old_table)s&quot;</span>
+    <span class="s2">)</span>
+
+    <span class="s1">geometry_tables </span><span class="s2">= [</span>
+        <span class="s3">&quot;geometry_columns&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;geometry_columns_auth&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;geometry_columns_time&quot;</span><span class="s2">,</span>
+        <span class="s3">&quot;geometry_columns_statistics&quot;</span><span class="s2">,</span>
+    <span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">geometry_sql </span><span class="s2">= []</span>
+
+    <span class="s0">def </span><span class="s1">geo_quote_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">ops</span><span class="s2">.</span><span class="s1">geo_quote_name</span><span class="s2">(</span><span class="s1">name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">column_sql</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model</span><span class="s2">, </span><span class="s1">field</span><span class="s2">, </span><span class="s1">include_default</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">GeometryField</span>
+
+        <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">GeometryField</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">super</span><span class="s2">().</span><span class="s1">column_sql</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">field</span><span class="s2">, </span><span class="s1">include_default</span><span class="s2">)</span>
+
+        <span class="s4"># Geometry columns are created by the `AddGeometryColumn` function</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">geometry_sql</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">sql_add_geometry_column</span>
+            <span class="s2">% {</span>
+                <span class="s3">&quot;table&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">geo_quote_name</span><span class="s2">(</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">db_table</span><span class="s2">),</span>
+                <span class="s3">&quot;column&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">geo_quote_name</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">column</span><span class="s2">),</span>
+                <span class="s3">&quot;srid&quot;</span><span class="s2">: </span><span class="s1">field</span><span class="s2">.</span><span class="s1">srid</span><span class="s2">,</span>
+                <span class="s3">&quot;geom_type&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">geo_quote_name</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">geom_type</span><span class="s2">),</span>
+                <span class="s3">&quot;dim&quot;</span><span class="s2">: </span><span class="s1">field</span><span class="s2">.</span><span class="s1">dim</span><span class="s2">,</span>
+                <span class="s3">&quot;null&quot;</span><span class="s2">: </span><span class="s1">int</span><span class="s2">(</span><span class="s0">not </span><span class="s1">field</span><span class="s2">.</span><span class="s1">null</span><span class="s2">),</span>
+            <span class="s2">}</span>
+        <span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">field</span><span class="s2">.</span><span class="s1">spatial_index</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">geometry_sql</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">sql_add_spatial_index</span>
+                <span class="s2">% {</span>
+                    <span class="s3">&quot;table&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">db_table</span><span class="s2">),</span>
+                    <span class="s3">&quot;column&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">column</span><span class="s2">),</span>
+                <span class="s2">}</span>
+            <span class="s2">)</span>
+        <span class="s0">return None</span><span class="s2">, </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">remove_geometry_metadata</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model</span><span class="s2">, </span><span class="s1">field</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">sql_remove_geometry_metadata</span>
+            <span class="s2">% {</span>
+                <span class="s3">&quot;table&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">db_table</span><span class="s2">),</span>
+                <span class="s3">&quot;column&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">column</span><span class="s2">),</span>
+            <span class="s2">}</span>
+        <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">sql_drop_spatial_index</span>
+            <span class="s2">% {</span>
+                <span class="s3">&quot;table&quot;</span><span class="s2">: </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">db_table</span><span class="s2">,</span>
+                <span class="s3">&quot;column&quot;</span><span class="s2">: </span><span class="s1">field</span><span class="s2">.</span><span class="s1">column</span><span class="s2">,</span>
+            <span class="s2">}</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">create_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">create_model</span><span class="s2">(</span><span class="s1">model</span><span class="s2">)</span>
+        <span class="s4"># Create geometry columns</span>
+        <span class="s0">for </span><span class="s1">sql </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">geometry_sql</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span><span class="s1">sql</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">geometry_sql </span><span class="s2">= []</span>
+
+    <span class="s0">def </span><span class="s1">delete_model</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">GeometryField</span>
+
+        <span class="s4"># Drop spatial metadata (dropping the table does not automatically remove them)</span>
+        <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">local_fields</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">GeometryField</span><span class="s2">):</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">remove_geometry_metadata</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">field</span><span class="s2">)</span>
+        <span class="s4"># Make sure all geom stuff is gone</span>
+        <span class="s0">for </span><span class="s1">geom_table </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">geometry_tables</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">sql_discard_geometry_columns</span>
+                    <span class="s2">% {</span>
+                        <span class="s3">&quot;geom_table&quot;</span><span class="s2">: </span><span class="s1">geom_table</span><span class="s2">,</span>
+                        <span class="s3">&quot;table&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">db_table</span><span class="s2">),</span>
+                    <span class="s2">}</span>
+                <span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">DatabaseError</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">delete_model</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">add_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model</span><span class="s2">, </span><span class="s1">field</span><span class="s2">):</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">GeometryField</span>
+
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">GeometryField</span><span class="s2">):</span>
+            <span class="s4"># Populate self.geometry_sql</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">column_sql</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">field</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">sql </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">geometry_sql</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span><span class="s1">sql</span><span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">geometry_sql </span><span class="s2">= []</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">super</span><span class="s2">().</span><span class="s1">add_field</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">field</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">remove_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model</span><span class="s2">, </span><span class="s1">field</span><span class="s2">):</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">GeometryField</span>
+
+        <span class="s4"># NOTE: If the field is a geometry field, the table is just recreated,</span>
+        <span class="s4"># the parent's remove_field can't be used cause it will skip the</span>
+        <span class="s4"># recreation if the field does not have a database type. Geometry fields</span>
+        <span class="s4"># do not have a db type cause they are added and removed via stored</span>
+        <span class="s4"># procedures.</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">GeometryField</span><span class="s2">):</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">_remake_table</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">delete_field</span><span class="s2">=</span><span class="s1">field</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">super</span><span class="s2">().</span><span class="s1">remove_field</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">field</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">alter_db_table</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model</span><span class="s2">, </span><span class="s1">old_db_table</span><span class="s2">, </span><span class="s1">new_db_table</span><span class="s2">):</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">gis</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">GeometryField</span>
+
+        <span class="s0">if </span><span class="s1">old_db_table </span><span class="s2">== </span><span class="s1">new_db_table </span><span class="s0">or </span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">features</span><span class="s2">.</span><span class="s1">ignores_table_name_case</span>
+            <span class="s0">and </span><span class="s1">old_db_table</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">() == </span><span class="s1">new_db_table</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">()</span>
+        <span class="s2">):</span>
+            <span class="s0">return</span>
+        <span class="s4"># Remove geometry-ness from temp table</span>
+        <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">local_fields</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">GeometryField</span><span class="s2">):</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">sql_remove_geometry_metadata</span>
+                    <span class="s2">% {</span>
+                        <span class="s3">&quot;table&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">old_db_table</span><span class="s2">),</span>
+                        <span class="s3">&quot;column&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">column</span><span class="s2">),</span>
+                    <span class="s2">}</span>
+                <span class="s2">)</span>
+        <span class="s4"># Alter table</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">alter_db_table</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">old_db_table</span><span class="s2">, </span><span class="s1">new_db_table</span><span class="s2">)</span>
+        <span class="s4"># Repoint any straggler names</span>
+        <span class="s0">for </span><span class="s1">geom_table </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">geometry_tables</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">sql_update_geometry_columns</span>
+                    <span class="s2">% {</span>
+                        <span class="s3">&quot;geom_table&quot;</span><span class="s2">: </span><span class="s1">geom_table</span><span class="s2">,</span>
+                        <span class="s3">&quot;old_table&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">old_db_table</span><span class="s2">),</span>
+                        <span class="s3">&quot;new_table&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span><span class="s1">new_db_table</span><span class="s2">),</span>
+                    <span class="s2">}</span>
+                <span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">DatabaseError</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+        <span class="s4"># Re-add geometry-ness and rename spatial index tables</span>
+        <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">local_fields</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">GeometryField</span><span class="s2">):</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">sql_recover_geometry_metadata</span>
+                    <span class="s2">% {</span>
+                        <span class="s3">&quot;table&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">geo_quote_name</span><span class="s2">(</span><span class="s1">new_db_table</span><span class="s2">),</span>
+                        <span class="s3">&quot;column&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">geo_quote_name</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">column</span><span class="s2">),</span>
+                        <span class="s3">&quot;srid&quot;</span><span class="s2">: </span><span class="s1">field</span><span class="s2">.</span><span class="s1">srid</span><span class="s2">,</span>
+                        <span class="s3">&quot;geom_type&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">geo_quote_name</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">geom_type</span><span class="s2">),</span>
+                        <span class="s3">&quot;dim&quot;</span><span class="s2">: </span><span class="s1">field</span><span class="s2">.</span><span class="s1">dim</span><span class="s2">,</span>
+                    <span class="s2">}</span>
+                <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s3">&quot;spatial_index&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">):</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">execute</span><span class="s2">(</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">sql_rename_table</span>
+                    <span class="s2">% {</span>
+                        <span class="s3">&quot;old_table&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span>
+                            <span class="s3">&quot;idx_%s_%s&quot; </span><span class="s2">% (</span><span class="s1">old_db_table</span><span class="s2">, </span><span class="s1">field</span><span class="s2">.</span><span class="s1">column</span><span class="s2">)</span>
+                        <span class="s2">),</span>
+                        <span class="s3">&quot;new_table&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">quote_name</span><span class="s2">(</span>
+                            <span class="s3">&quot;idx_%s_%s&quot; </span><span class="s2">% (</span><span class="s1">new_db_table</span><span class="s2">, </span><span class="s1">field</span><span class="s2">.</span><span class="s1">column</span><span class="s2">)</span>
+                        <span class="s2">),</span>
+                    <span class="s2">}</span>
+                <span class="s2">)</span>
+</pre>
+</body>
+</html>

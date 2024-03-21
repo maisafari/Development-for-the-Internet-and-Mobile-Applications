@@ -1,0 +1,558 @@
+<html>
+<head>
+<title>admin_list.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+admin_list.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">datetime</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin</span><span class="s2">.</span><span class="s1">templatetags</span><span class="s2">.</span><span class="s1">admin_urls </span><span class="s0">import </span><span class="s1">add_preserved_filters</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">display_for_field</span><span class="s2">,</span>
+    <span class="s1">display_for_value</span><span class="s2">,</span>
+    <span class="s1">get_fields_from_path</span><span class="s2">,</span>
+    <span class="s1">label_for_field</span><span class="s2">,</span>
+    <span class="s1">lookup_field</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin</span><span class="s2">.</span><span class="s1">views</span><span class="s2">.</span><span class="s1">main </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">ALL_VAR</span><span class="s2">,</span>
+    <span class="s1">IS_FACETS_VAR</span><span class="s2">,</span>
+    <span class="s1">IS_POPUP_VAR</span><span class="s2">,</span>
+    <span class="s1">ORDER_VAR</span><span class="s2">,</span>
+    <span class="s1">PAGE_VAR</span><span class="s2">,</span>
+    <span class="s1">SEARCH_VAR</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ObjectDoesNotExist</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">models</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template </span><span class="s0">import </span><span class="s1">Library</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template</span><span class="s2">.</span><span class="s1">loader </span><span class="s0">import </span><span class="s1">get_template</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">templatetags</span><span class="s2">.</span><span class="s1">static </span><span class="s0">import </span><span class="s1">static</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">urls </span><span class="s0">import </span><span class="s1">NoReverseMatch</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">formats</span><span class="s2">, </span><span class="s1">timezone</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">html </span><span class="s0">import </span><span class="s1">format_html</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">safestring </span><span class="s0">import </span><span class="s1">mark_safe</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">text </span><span class="s0">import </span><span class="s1">capfirst</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">translation </span><span class="s0">import </span><span class="s1">gettext </span><span class="s0">as </span><span class="s1">_</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">InclusionAdminNode</span>
+
+<span class="s1">register </span><span class="s2">= </span><span class="s1">Library</span><span class="s2">()</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">simple_tag</span>
+<span class="s0">def </span><span class="s1">paginator_number</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">, </span><span class="s1">i</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Generate an individual page index link in a paginated list. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">i </span><span class="s2">== </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">paginator</span><span class="s2">.</span><span class="s1">ELLIPSIS</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">format_html</span><span class="s2">(</span><span class="s4">&quot;{} &quot;</span><span class="s2">, </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">paginator</span><span class="s2">.</span><span class="s1">ELLIPSIS</span><span class="s2">)</span>
+    <span class="s0">elif </span><span class="s1">i </span><span class="s2">== </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">page_num</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">format_html</span><span class="s2">(</span><span class="s4">'&lt;span class=&quot;this-page&quot;&gt;{}&lt;/span&gt; '</span><span class="s2">, </span><span class="s1">i</span><span class="s2">)</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">format_html</span><span class="s2">(</span>
+            <span class="s4">'&lt;a href=&quot;{}&quot;{}&gt;{}&lt;/a&gt; '</span><span class="s2">,</span>
+            <span class="s1">cl</span><span class="s2">.</span><span class="s1">get_query_string</span><span class="s2">({</span><span class="s1">PAGE_VAR</span><span class="s2">: </span><span class="s1">i</span><span class="s2">}),</span>
+            <span class="s1">mark_safe</span><span class="s2">(</span><span class="s4">' class=&quot;end&quot;' </span><span class="s0">if </span><span class="s1">i </span><span class="s2">== </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">paginator</span><span class="s2">.</span><span class="s1">num_pages </span><span class="s0">else </span><span class="s4">&quot;&quot;</span><span class="s2">),</span>
+            <span class="s1">i</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">pagination</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Generate the series of links to the pages in a paginated list. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">pagination_required </span><span class="s2">= (</span><span class="s0">not </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">show_all </span><span class="s0">or not </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">can_show_all</span><span class="s2">) </span><span class="s0">and </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">multi_page</span>
+    <span class="s1">page_range </span><span class="s2">= (</span>
+        <span class="s1">cl</span><span class="s2">.</span><span class="s1">paginator</span><span class="s2">.</span><span class="s1">get_elided_page_range</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">page_num</span><span class="s2">) </span><span class="s0">if </span><span class="s1">pagination_required </span><span class="s0">else </span><span class="s2">[]</span>
+    <span class="s2">)</span>
+    <span class="s1">need_show_all_link </span><span class="s2">= </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">can_show_all </span><span class="s0">and not </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">show_all </span><span class="s0">and </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">multi_page</span>
+    <span class="s0">return </span><span class="s2">{</span>
+        <span class="s4">&quot;cl&quot;</span><span class="s2">: </span><span class="s1">cl</span><span class="s2">,</span>
+        <span class="s4">&quot;pagination_required&quot;</span><span class="s2">: </span><span class="s1">pagination_required</span><span class="s2">,</span>
+        <span class="s4">&quot;show_all_url&quot;</span><span class="s2">: </span><span class="s1">need_show_all_link </span><span class="s0">and </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">get_query_string</span><span class="s2">({</span><span class="s1">ALL_VAR</span><span class="s2">: </span><span class="s4">&quot;&quot;</span><span class="s2">}),</span>
+        <span class="s4">&quot;page_range&quot;</span><span class="s2">: </span><span class="s1">page_range</span><span class="s2">,</span>
+        <span class="s4">&quot;ALL_VAR&quot;</span><span class="s2">: </span><span class="s1">ALL_VAR</span><span class="s2">,</span>
+        <span class="s4">&quot;1&quot;</span><span class="s2">: </span><span class="s5">1</span><span class="s2">,</span>
+    <span class="s2">}</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s1">name</span><span class="s2">=</span><span class="s4">&quot;pagination&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">pagination_tag</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">InclusionAdminNode</span><span class="s2">(</span>
+        <span class="s1">parser</span><span class="s2">,</span>
+        <span class="s1">token</span><span class="s2">,</span>
+        <span class="s1">func</span><span class="s2">=</span><span class="s1">pagination</span><span class="s2">,</span>
+        <span class="s1">template_name</span><span class="s2">=</span><span class="s4">&quot;pagination.html&quot;</span><span class="s2">,</span>
+        <span class="s1">takes_context</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+    <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">result_headers</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Generate the list column headers. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">ordering_field_columns </span><span class="s2">= </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">get_ordering_field_columns</span><span class="s2">()</span>
+    <span class="s0">for </span><span class="s1">i</span><span class="s2">, </span><span class="s1">field_name </span><span class="s0">in </span><span class="s1">enumerate</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">list_display</span><span class="s2">):</span>
+        <span class="s1">text</span><span class="s2">, </span><span class="s1">attr </span><span class="s2">= </span><span class="s1">label_for_field</span><span class="s2">(</span>
+            <span class="s1">field_name</span><span class="s2">, </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">model_admin</span><span class="s2">=</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">, </span><span class="s1">return_attr</span><span class="s2">=</span><span class="s0">True</span>
+        <span class="s2">)</span>
+        <span class="s1">is_field_sortable </span><span class="s2">= </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">sortable_by </span><span class="s0">is None or </span><span class="s1">field_name </span><span class="s0">in </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">sortable_by</span>
+        <span class="s0">if </span><span class="s1">attr</span><span class="s2">:</span>
+            <span class="s1">field_name </span><span class="s2">= </span><span class="s1">_coerce_field_name</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">, </span><span class="s1">i</span><span class="s2">)</span>
+            <span class="s6"># Potentially not sortable</span>
+
+            <span class="s6"># if the field is the action checkbox: no sorting and special class</span>
+            <span class="s0">if </span><span class="s1">field_name </span><span class="s2">== </span><span class="s4">&quot;action_checkbox&quot;</span><span class="s2">:</span>
+                <span class="s1">aria_label </span><span class="s2">= </span><span class="s1">_</span><span class="s2">(</span><span class="s4">&quot;Select all objects on this page for an action&quot;</span><span class="s2">)</span>
+                <span class="s0">yield </span><span class="s2">{</span>
+                    <span class="s4">&quot;text&quot;</span><span class="s2">: </span><span class="s1">mark_safe</span><span class="s2">(</span>
+                        <span class="s4">f'&lt;input type=&quot;checkbox&quot; id=&quot;action-toggle&quot; '</span>
+                        <span class="s4">f'aria-label=&quot;</span><span class="s0">{</span><span class="s1">aria_label</span><span class="s0">}</span><span class="s4">&quot;&gt;'</span>
+                    <span class="s2">),</span>
+                    <span class="s4">&quot;class_attrib&quot;</span><span class="s2">: </span><span class="s1">mark_safe</span><span class="s2">(</span><span class="s4">' class=&quot;action-checkbox-column&quot;'</span><span class="s2">),</span>
+                    <span class="s4">&quot;sortable&quot;</span><span class="s2">: </span><span class="s0">False</span><span class="s2">,</span>
+                <span class="s2">}</span>
+                <span class="s0">continue</span>
+
+            <span class="s1">admin_order_field </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">attr</span><span class="s2">, </span><span class="s4">&quot;admin_order_field&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+            <span class="s6"># Set ordering for attr that is a property, if defined.</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">attr</span><span class="s2">, </span><span class="s1">property</span><span class="s2">) </span><span class="s0">and </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">attr</span><span class="s2">, </span><span class="s4">&quot;fget&quot;</span><span class="s2">):</span>
+                <span class="s1">admin_order_field </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">attr</span><span class="s2">.</span><span class="s1">fget</span><span class="s2">, </span><span class="s4">&quot;admin_order_field&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">admin_order_field</span><span class="s2">:</span>
+                <span class="s1">is_field_sortable </span><span class="s2">= </span><span class="s0">False</span>
+
+        <span class="s0">if not </span><span class="s1">is_field_sortable</span><span class="s2">:</span>
+            <span class="s6"># Not sortable</span>
+            <span class="s0">yield </span><span class="s2">{</span>
+                <span class="s4">&quot;text&quot;</span><span class="s2">: </span><span class="s1">text</span><span class="s2">,</span>
+                <span class="s4">&quot;class_attrib&quot;</span><span class="s2">: </span><span class="s1">format_html</span><span class="s2">(</span><span class="s4">' class=&quot;column-{}&quot;'</span><span class="s2">, </span><span class="s1">field_name</span><span class="s2">),</span>
+                <span class="s4">&quot;sortable&quot;</span><span class="s2">: </span><span class="s0">False</span><span class="s2">,</span>
+            <span class="s2">}</span>
+            <span class="s0">continue</span>
+
+        <span class="s6"># OK, it is sortable if we got this far</span>
+        <span class="s1">th_classes </span><span class="s2">= [</span><span class="s4">&quot;sortable&quot;</span><span class="s2">, </span><span class="s4">&quot;column-{}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">)]</span>
+        <span class="s1">order_type </span><span class="s2">= </span><span class="s4">&quot;&quot;</span>
+        <span class="s1">new_order_type </span><span class="s2">= </span><span class="s4">&quot;asc&quot;</span>
+        <span class="s1">sort_priority </span><span class="s2">= </span><span class="s5">0</span>
+        <span class="s6"># Is it currently being sorted on?</span>
+        <span class="s1">is_sorted </span><span class="s2">= </span><span class="s1">i </span><span class="s0">in </span><span class="s1">ordering_field_columns</span>
+        <span class="s0">if </span><span class="s1">is_sorted</span><span class="s2">:</span>
+            <span class="s1">order_type </span><span class="s2">= </span><span class="s1">ordering_field_columns</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">i</span><span class="s2">).</span><span class="s1">lower</span><span class="s2">()</span>
+            <span class="s1">sort_priority </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">ordering_field_columns</span><span class="s2">).</span><span class="s1">index</span><span class="s2">(</span><span class="s1">i</span><span class="s2">) + </span><span class="s5">1</span>
+            <span class="s1">th_classes</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s4">&quot;sorted %sending&quot; </span><span class="s2">% </span><span class="s1">order_type</span><span class="s2">)</span>
+            <span class="s1">new_order_type </span><span class="s2">= {</span><span class="s4">&quot;asc&quot;</span><span class="s2">: </span><span class="s4">&quot;desc&quot;</span><span class="s2">, </span><span class="s4">&quot;desc&quot;</span><span class="s2">: </span><span class="s4">&quot;asc&quot;</span><span class="s2">}[</span><span class="s1">order_type</span><span class="s2">]</span>
+
+        <span class="s6"># build new ordering param</span>
+        <span class="s1">o_list_primary </span><span class="s2">= []  </span><span class="s6"># URL for making this field the primary sort</span>
+        <span class="s1">o_list_remove </span><span class="s2">= []  </span><span class="s6"># URL for removing this field from sort</span>
+        <span class="s1">o_list_toggle </span><span class="s2">= []  </span><span class="s6"># URL for toggling order type for this field</span>
+
+        <span class="s0">def </span><span class="s1">make_qs_param</span><span class="s2">(</span><span class="s1">t</span><span class="s2">, </span><span class="s1">n</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s2">(</span><span class="s4">&quot;-&quot; </span><span class="s0">if </span><span class="s1">t </span><span class="s2">== </span><span class="s4">&quot;desc&quot; </span><span class="s0">else </span><span class="s4">&quot;&quot;</span><span class="s2">) + </span><span class="s1">str</span><span class="s2">(</span><span class="s1">n</span><span class="s2">)</span>
+
+        <span class="s0">for </span><span class="s1">j</span><span class="s2">, </span><span class="s1">ot </span><span class="s0">in </span><span class="s1">ordering_field_columns</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s0">if </span><span class="s1">j </span><span class="s2">== </span><span class="s1">i</span><span class="s2">:  </span><span class="s6"># Same column</span>
+                <span class="s1">param </span><span class="s2">= </span><span class="s1">make_qs_param</span><span class="s2">(</span><span class="s1">new_order_type</span><span class="s2">, </span><span class="s1">j</span><span class="s2">)</span>
+                <span class="s6"># We want clicking on this header to bring the ordering to the</span>
+                <span class="s6"># front</span>
+                <span class="s1">o_list_primary</span><span class="s2">.</span><span class="s1">insert</span><span class="s2">(</span><span class="s5">0</span><span class="s2">, </span><span class="s1">param</span><span class="s2">)</span>
+                <span class="s1">o_list_toggle</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">param</span><span class="s2">)</span>
+                <span class="s6"># o_list_remove - omit</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">param </span><span class="s2">= </span><span class="s1">make_qs_param</span><span class="s2">(</span><span class="s1">ot</span><span class="s2">, </span><span class="s1">j</span><span class="s2">)</span>
+                <span class="s1">o_list_primary</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">param</span><span class="s2">)</span>
+                <span class="s1">o_list_toggle</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">param</span><span class="s2">)</span>
+                <span class="s1">o_list_remove</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">param</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">i </span><span class="s0">not in </span><span class="s1">ordering_field_columns</span><span class="s2">:</span>
+            <span class="s1">o_list_primary</span><span class="s2">.</span><span class="s1">insert</span><span class="s2">(</span><span class="s5">0</span><span class="s2">, </span><span class="s1">make_qs_param</span><span class="s2">(</span><span class="s1">new_order_type</span><span class="s2">, </span><span class="s1">i</span><span class="s2">))</span>
+
+        <span class="s0">yield </span><span class="s2">{</span>
+            <span class="s4">&quot;text&quot;</span><span class="s2">: </span><span class="s1">text</span><span class="s2">,</span>
+            <span class="s4">&quot;sortable&quot;</span><span class="s2">: </span><span class="s0">True</span><span class="s2">,</span>
+            <span class="s4">&quot;sorted&quot;</span><span class="s2">: </span><span class="s1">is_sorted</span><span class="s2">,</span>
+            <span class="s4">&quot;ascending&quot;</span><span class="s2">: </span><span class="s1">order_type </span><span class="s2">== </span><span class="s4">&quot;asc&quot;</span><span class="s2">,</span>
+            <span class="s4">&quot;sort_priority&quot;</span><span class="s2">: </span><span class="s1">sort_priority</span><span class="s2">,</span>
+            <span class="s4">&quot;url_primary&quot;</span><span class="s2">: </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">get_query_string</span><span class="s2">({</span><span class="s1">ORDER_VAR</span><span class="s2">: </span><span class="s4">&quot;.&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">o_list_primary</span><span class="s2">)}),</span>
+            <span class="s4">&quot;url_remove&quot;</span><span class="s2">: </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">get_query_string</span><span class="s2">({</span><span class="s1">ORDER_VAR</span><span class="s2">: </span><span class="s4">&quot;.&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">o_list_remove</span><span class="s2">)}),</span>
+            <span class="s4">&quot;url_toggle&quot;</span><span class="s2">: </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">get_query_string</span><span class="s2">({</span><span class="s1">ORDER_VAR</span><span class="s2">: </span><span class="s4">&quot;.&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">o_list_toggle</span><span class="s2">)}),</span>
+            <span class="s4">&quot;class_attrib&quot;</span><span class="s2">: (</span>
+                <span class="s1">format_html</span><span class="s2">(</span><span class="s4">' class=&quot;{}&quot;'</span><span class="s2">, </span><span class="s4">&quot; &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">th_classes</span><span class="s2">)) </span><span class="s0">if </span><span class="s1">th_classes </span><span class="s0">else </span><span class="s4">&quot;&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">}</span>
+
+
+<span class="s0">def </span><span class="s1">_boolean_icon</span><span class="s2">(</span><span class="s1">field_val</span><span class="s2">):</span>
+    <span class="s1">icon_url </span><span class="s2">= </span><span class="s1">static</span><span class="s2">(</span>
+        <span class="s4">&quot;admin/img/icon-%s.svg&quot; </span><span class="s2">% {</span><span class="s0">True</span><span class="s2">: </span><span class="s4">&quot;yes&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">: </span><span class="s4">&quot;no&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">: </span><span class="s4">&quot;unknown&quot;</span><span class="s2">}[</span><span class="s1">field_val</span><span class="s2">]</span>
+    <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">format_html</span><span class="s2">(</span><span class="s4">'&lt;img src=&quot;{}&quot; alt=&quot;{}&quot;&gt;'</span><span class="s2">, </span><span class="s1">icon_url</span><span class="s2">, </span><span class="s1">field_val</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">_coerce_field_name</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">, </span><span class="s1">field_index</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Coerce a field_name (which may be a callable) to a string. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">callable</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">field_name</span><span class="s2">.</span><span class="s1">__name__ </span><span class="s2">== </span><span class="s4">&quot;&lt;lambda&gt;&quot;</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s4">&quot;lambda&quot; </span><span class="s2">+ </span><span class="s1">str</span><span class="s2">(</span><span class="s1">field_index</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">field_name</span><span class="s2">.</span><span class="s1">__name__</span>
+    <span class="s0">return </span><span class="s1">field_name</span>
+
+
+<span class="s0">def </span><span class="s1">items_for_result</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">, </span><span class="s1">result</span><span class="s2">, </span><span class="s1">form</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Generate the actual list of data. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">link_in_col</span><span class="s2">(</span><span class="s1">is_first</span><span class="s2">, </span><span class="s1">field_name</span><span class="s2">, </span><span class="s1">cl</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">list_display_links </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">return False</span>
+        <span class="s0">if </span><span class="s1">is_first </span><span class="s0">and not </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">list_display_links</span><span class="s2">:</span>
+            <span class="s0">return True</span>
+        <span class="s0">return </span><span class="s1">field_name </span><span class="s0">in </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">list_display_links</span>
+
+    <span class="s1">first </span><span class="s2">= </span><span class="s0">True</span>
+    <span class="s1">pk </span><span class="s2">= </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">lookup_opts</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">attname</span>
+    <span class="s0">for </span><span class="s1">field_index</span><span class="s2">, </span><span class="s1">field_name </span><span class="s0">in </span><span class="s1">enumerate</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">list_display</span><span class="s2">):</span>
+        <span class="s1">empty_value_display </span><span class="s2">= </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">get_empty_value_display</span><span class="s2">()</span>
+        <span class="s1">row_classes </span><span class="s2">= [</span><span class="s4">&quot;field-%s&quot; </span><span class="s2">% </span><span class="s1">_coerce_field_name</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">, </span><span class="s1">field_index</span><span class="s2">)]</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">f</span><span class="s2">, </span><span class="s1">attr</span><span class="s2">, </span><span class="s1">value </span><span class="s2">= </span><span class="s1">lookup_field</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">, </span><span class="s1">result</span><span class="s2">, </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">ObjectDoesNotExist</span><span class="s2">:</span>
+            <span class="s1">result_repr </span><span class="s2">= </span><span class="s1">empty_value_display</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">empty_value_display </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span>
+                <span class="s1">attr</span><span class="s2">, </span><span class="s4">&quot;empty_value_display&quot;</span><span class="s2">, </span><span class="s1">empty_value_display</span>
+            <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">f </span><span class="s0">is None or </span><span class="s1">f</span><span class="s2">.</span><span class="s1">auto_created</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">field_name </span><span class="s2">== </span><span class="s4">&quot;action_checkbox&quot;</span><span class="s2">:</span>
+                    <span class="s1">row_classes </span><span class="s2">= [</span><span class="s4">&quot;action-checkbox&quot;</span><span class="s2">]</span>
+                <span class="s1">boolean </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">attr</span><span class="s2">, </span><span class="s4">&quot;boolean&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">)</span>
+                <span class="s6"># Set boolean for attr that is a property, if defined.</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">attr</span><span class="s2">, </span><span class="s1">property</span><span class="s2">) </span><span class="s0">and </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">attr</span><span class="s2">, </span><span class="s4">&quot;fget&quot;</span><span class="s2">):</span>
+                    <span class="s1">boolean </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">attr</span><span class="s2">.</span><span class="s1">fget</span><span class="s2">, </span><span class="s4">&quot;boolean&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">)</span>
+                <span class="s1">result_repr </span><span class="s2">= </span><span class="s1">display_for_value</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">empty_value_display</span><span class="s2">, </span><span class="s1">boolean</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, (</span><span class="s1">datetime</span><span class="s2">.</span><span class="s1">date</span><span class="s2">, </span><span class="s1">datetime</span><span class="s2">.</span><span class="s1">time</span><span class="s2">)):</span>
+                    <span class="s1">row_classes</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s4">&quot;nowrap&quot;</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">f</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">ManyToOneRel</span><span class="s2">):</span>
+                    <span class="s1">field_val </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">result</span><span class="s2">, </span><span class="s1">f</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+                    <span class="s0">if </span><span class="s1">field_val </span><span class="s0">is None</span><span class="s2">:</span>
+                        <span class="s1">result_repr </span><span class="s2">= </span><span class="s1">empty_value_display</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s1">result_repr </span><span class="s2">= </span><span class="s1">field_val</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">result_repr </span><span class="s2">= </span><span class="s1">display_for_field</span><span class="s2">(</span><span class="s1">value</span><span class="s2">, </span><span class="s1">f</span><span class="s2">, </span><span class="s1">empty_value_display</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span>
+                    <span class="s1">f</span><span class="s2">, (</span><span class="s1">models</span><span class="s2">.</span><span class="s1">DateField</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">TimeField</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">ForeignKey</span><span class="s2">)</span>
+                <span class="s2">):</span>
+                    <span class="s1">row_classes</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s4">&quot;nowrap&quot;</span><span class="s2">)</span>
+        <span class="s1">row_class </span><span class="s2">= </span><span class="s1">mark_safe</span><span class="s2">(</span><span class="s4">' class=&quot;%s&quot;' </span><span class="s2">% </span><span class="s4">&quot; &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">row_classes</span><span class="s2">))</span>
+        <span class="s6"># If list_display_links not defined, add the link tag to the first field</span>
+        <span class="s0">if </span><span class="s1">link_in_col</span><span class="s2">(</span><span class="s1">first</span><span class="s2">, </span><span class="s1">field_name</span><span class="s2">, </span><span class="s1">cl</span><span class="s2">):</span>
+            <span class="s1">table_tag </span><span class="s2">= </span><span class="s4">&quot;th&quot; </span><span class="s0">if </span><span class="s1">first </span><span class="s0">else </span><span class="s4">&quot;td&quot;</span>
+            <span class="s1">first </span><span class="s2">= </span><span class="s0">False</span>
+
+            <span class="s6"># Display link to the result's change_view if the url exists, else</span>
+            <span class="s6"># display just the result's representation.</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">url </span><span class="s2">= </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">url_for_result</span><span class="s2">(</span><span class="s1">result</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">NoReverseMatch</span><span class="s2">:</span>
+                <span class="s1">link_or_text </span><span class="s2">= </span><span class="s1">result_repr</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">url </span><span class="s2">= </span><span class="s1">add_preserved_filters</span><span class="s2">(</span>
+                    <span class="s2">{</span><span class="s4">&quot;preserved_filters&quot;</span><span class="s2">: </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">preserved_filters</span><span class="s2">, </span><span class="s4">&quot;opts&quot;</span><span class="s2">: </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">opts</span><span class="s2">}, </span><span class="s1">url</span>
+                <span class="s2">)</span>
+                <span class="s6"># Convert the pk to something that can be used in JavaScript.</span>
+                <span class="s6"># Problem cases are non-ASCII strings.</span>
+                <span class="s0">if </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">to_field</span><span class="s2">:</span>
+                    <span class="s1">attr </span><span class="s2">= </span><span class="s1">str</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">to_field</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">attr </span><span class="s2">= </span><span class="s1">pk</span>
+                <span class="s1">value </span><span class="s2">= </span><span class="s1">result</span><span class="s2">.</span><span class="s1">serializable_value</span><span class="s2">(</span><span class="s1">attr</span><span class="s2">)</span>
+                <span class="s1">link_or_text </span><span class="s2">= </span><span class="s1">format_html</span><span class="s2">(</span>
+                    <span class="s4">'&lt;a href=&quot;{}&quot;{}&gt;{}&lt;/a&gt;'</span><span class="s2">,</span>
+                    <span class="s1">url</span><span class="s2">,</span>
+                    <span class="s2">(</span>
+                        <span class="s1">format_html</span><span class="s2">(</span><span class="s4">' data-popup-opener=&quot;{}&quot;'</span><span class="s2">, </span><span class="s1">value</span><span class="s2">)</span>
+                        <span class="s0">if </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">is_popup</span>
+                        <span class="s0">else </span><span class="s4">&quot;&quot;</span>
+                    <span class="s2">),</span>
+                    <span class="s1">result_repr</span><span class="s2">,</span>
+                <span class="s2">)</span>
+
+            <span class="s0">yield </span><span class="s1">format_html</span><span class="s2">(</span>
+                <span class="s4">&quot;&lt;{}{}&gt;{}&lt;/{}&gt;&quot;</span><span class="s2">, </span><span class="s1">table_tag</span><span class="s2">, </span><span class="s1">row_class</span><span class="s2">, </span><span class="s1">link_or_text</span><span class="s2">, </span><span class="s1">table_tag</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s6"># By default the fields come from ModelAdmin.list_editable, but if we pull</span>
+            <span class="s6"># the fields out of the form instead of list_editable custom admins</span>
+            <span class="s6"># can provide fields on a per request basis</span>
+            <span class="s0">if </span><span class="s2">(</span>
+                <span class="s1">form</span>
+                <span class="s0">and </span><span class="s1">field_name </span><span class="s0">in </span><span class="s1">form</span><span class="s2">.</span><span class="s1">fields</span>
+                <span class="s0">and not </span><span class="s2">(</span>
+                    <span class="s1">field_name </span><span class="s2">== </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">name</span>
+                    <span class="s0">and </span><span class="s1">form</span><span class="s2">[</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">name</span><span class="s2">].</span><span class="s1">is_hidden</span>
+                <span class="s2">)</span>
+            <span class="s2">):</span>
+                <span class="s1">bf </span><span class="s2">= </span><span class="s1">form</span><span class="s2">[</span><span class="s1">field_name</span><span class="s2">]</span>
+                <span class="s1">result_repr </span><span class="s2">= </span><span class="s1">mark_safe</span><span class="s2">(</span><span class="s1">str</span><span class="s2">(</span><span class="s1">bf</span><span class="s2">.</span><span class="s1">errors</span><span class="s2">) + </span><span class="s1">str</span><span class="s2">(</span><span class="s1">bf</span><span class="s2">))</span>
+            <span class="s0">yield </span><span class="s1">format_html</span><span class="s2">(</span><span class="s4">&quot;&lt;td{}&gt;{}&lt;/td&gt;&quot;</span><span class="s2">, </span><span class="s1">row_class</span><span class="s2">, </span><span class="s1">result_repr</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">form </span><span class="s0">and not </span><span class="s1">form</span><span class="s2">[</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">name</span><span class="s2">].</span><span class="s1">is_hidden</span><span class="s2">:</span>
+        <span class="s0">yield </span><span class="s1">format_html</span><span class="s2">(</span><span class="s4">&quot;&lt;td&gt;{}&lt;/td&gt;&quot;</span><span class="s2">, </span><span class="s1">form</span><span class="s2">[</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">name</span><span class="s2">])</span>
+
+
+<span class="s0">class </span><span class="s1">ResultList</span><span class="s2">(</span><span class="s1">list</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Wrapper class used to return items in a list_editable changelist, annotated 
+    with the form object for error reporting purposes. Needed to maintain 
+    backwards compatibility with existing admin templates. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">form</span><span class="s2">, *</span><span class="s1">items</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">form </span><span class="s2">= </span><span class="s1">form</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">items</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">results</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">formset</span><span class="s2">:</span>
+        <span class="s0">for </span><span class="s1">res</span><span class="s2">, </span><span class="s1">form </span><span class="s0">in </span><span class="s1">zip</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">result_list</span><span class="s2">, </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">formset</span><span class="s2">.</span><span class="s1">forms</span><span class="s2">):</span>
+            <span class="s0">yield </span><span class="s1">ResultList</span><span class="s2">(</span><span class="s1">form</span><span class="s2">, </span><span class="s1">items_for_result</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">, </span><span class="s1">res</span><span class="s2">, </span><span class="s1">form</span><span class="s2">))</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s0">for </span><span class="s1">res </span><span class="s0">in </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">result_list</span><span class="s2">:</span>
+            <span class="s0">yield </span><span class="s1">ResultList</span><span class="s2">(</span><span class="s0">None</span><span class="s2">, </span><span class="s1">items_for_result</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">, </span><span class="s1">res</span><span class="s2">, </span><span class="s0">None</span><span class="s2">))</span>
+
+
+<span class="s0">def </span><span class="s1">result_hidden_fields</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">formset</span><span class="s2">:</span>
+        <span class="s0">for </span><span class="s1">res</span><span class="s2">, </span><span class="s1">form </span><span class="s0">in </span><span class="s1">zip</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">result_list</span><span class="s2">, </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">formset</span><span class="s2">.</span><span class="s1">forms</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">form</span><span class="s2">[</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">name</span><span class="s2">].</span><span class="s1">is_hidden</span><span class="s2">:</span>
+                <span class="s0">yield </span><span class="s1">mark_safe</span><span class="s2">(</span><span class="s1">form</span><span class="s2">[</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">name</span><span class="s2">])</span>
+
+
+<span class="s0">def </span><span class="s1">result_list</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Display the headers and data list together. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">headers </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">result_headers</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">))</span>
+    <span class="s1">num_sorted_fields </span><span class="s2">= </span><span class="s5">0</span>
+    <span class="s0">for </span><span class="s1">h </span><span class="s0">in </span><span class="s1">headers</span><span class="s2">:</span>
+        <span class="s0">if </span><span class="s1">h</span><span class="s2">[</span><span class="s4">&quot;sortable&quot;</span><span class="s2">] </span><span class="s0">and </span><span class="s1">h</span><span class="s2">[</span><span class="s4">&quot;sorted&quot;</span><span class="s2">]:</span>
+            <span class="s1">num_sorted_fields </span><span class="s2">+= </span><span class="s5">1</span>
+    <span class="s0">return </span><span class="s2">{</span>
+        <span class="s4">&quot;cl&quot;</span><span class="s2">: </span><span class="s1">cl</span><span class="s2">,</span>
+        <span class="s4">&quot;result_hidden_fields&quot;</span><span class="s2">: </span><span class="s1">list</span><span class="s2">(</span><span class="s1">result_hidden_fields</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">)),</span>
+        <span class="s4">&quot;result_headers&quot;</span><span class="s2">: </span><span class="s1">headers</span><span class="s2">,</span>
+        <span class="s4">&quot;num_sorted_fields&quot;</span><span class="s2">: </span><span class="s1">num_sorted_fields</span><span class="s2">,</span>
+        <span class="s4">&quot;results&quot;</span><span class="s2">: </span><span class="s1">list</span><span class="s2">(</span><span class="s1">results</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">)),</span>
+    <span class="s2">}</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s1">name</span><span class="s2">=</span><span class="s4">&quot;result_list&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">result_list_tag</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">InclusionAdminNode</span><span class="s2">(</span>
+        <span class="s1">parser</span><span class="s2">,</span>
+        <span class="s1">token</span><span class="s2">,</span>
+        <span class="s1">func</span><span class="s2">=</span><span class="s1">result_list</span><span class="s2">,</span>
+        <span class="s1">template_name</span><span class="s2">=</span><span class="s4">&quot;change_list_results.html&quot;</span><span class="s2">,</span>
+        <span class="s1">takes_context</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+    <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">date_hierarchy</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Display the date hierarchy for date drill-down functionality. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">date_hierarchy</span><span class="s2">:</span>
+        <span class="s1">field_name </span><span class="s2">= </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">date_hierarchy</span>
+        <span class="s1">field </span><span class="s2">= </span><span class="s1">get_fields_from_path</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">field_name</span><span class="s2">)[-</span><span class="s5">1</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">models</span><span class="s2">.</span><span class="s1">DateTimeField</span><span class="s2">):</span>
+            <span class="s1">dates_or_datetimes </span><span class="s2">= </span><span class="s4">&quot;datetimes&quot;</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">dates_or_datetimes </span><span class="s2">= </span><span class="s4">&quot;dates&quot;</span>
+        <span class="s1">year_field </span><span class="s2">= </span><span class="s4">&quot;%s__year&quot; </span><span class="s2">% </span><span class="s1">field_name</span>
+        <span class="s1">month_field </span><span class="s2">= </span><span class="s4">&quot;%s__month&quot; </span><span class="s2">% </span><span class="s1">field_name</span>
+        <span class="s1">day_field </span><span class="s2">= </span><span class="s4">&quot;%s__day&quot; </span><span class="s2">% </span><span class="s1">field_name</span>
+        <span class="s1">field_generic </span><span class="s2">= </span><span class="s4">&quot;%s__&quot; </span><span class="s2">% </span><span class="s1">field_name</span>
+        <span class="s1">year_lookup </span><span class="s2">= </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">params</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">year_field</span><span class="s2">)</span>
+        <span class="s1">month_lookup </span><span class="s2">= </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">params</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">month_field</span><span class="s2">)</span>
+        <span class="s1">day_lookup </span><span class="s2">= </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">params</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">day_field</span><span class="s2">)</span>
+
+        <span class="s0">def </span><span class="s1">link</span><span class="s2">(</span><span class="s1">filters</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">get_query_string</span><span class="s2">(</span><span class="s1">filters</span><span class="s2">, [</span><span class="s1">field_generic</span><span class="s2">])</span>
+
+        <span class="s0">if not </span><span class="s2">(</span><span class="s1">year_lookup </span><span class="s0">or </span><span class="s1">month_lookup </span><span class="s0">or </span><span class="s1">day_lookup</span><span class="s2">):</span>
+            <span class="s6"># select appropriate start level</span>
+            <span class="s1">date_range </span><span class="s2">= </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">aggregate</span><span class="s2">(</span>
+                <span class="s1">first</span><span class="s2">=</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Min</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">), </span><span class="s1">last</span><span class="s2">=</span><span class="s1">models</span><span class="s2">.</span><span class="s1">Max</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">)</span>
+            <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">date_range</span><span class="s2">[</span><span class="s4">&quot;first&quot;</span><span class="s2">] </span><span class="s0">and </span><span class="s1">date_range</span><span class="s2">[</span><span class="s4">&quot;last&quot;</span><span class="s2">]:</span>
+                <span class="s0">if </span><span class="s1">dates_or_datetimes </span><span class="s2">== </span><span class="s4">&quot;datetimes&quot;</span><span class="s2">:</span>
+                    <span class="s1">date_range </span><span class="s2">= {</span>
+                        <span class="s1">k</span><span class="s2">: </span><span class="s1">timezone</span><span class="s2">.</span><span class="s1">localtime</span><span class="s2">(</span><span class="s1">v</span><span class="s2">) </span><span class="s0">if </span><span class="s1">timezone</span><span class="s2">.</span><span class="s1">is_aware</span><span class="s2">(</span><span class="s1">v</span><span class="s2">) </span><span class="s0">else </span><span class="s1">v</span>
+                        <span class="s0">for </span><span class="s1">k</span><span class="s2">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">date_range</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()</span>
+                    <span class="s2">}</span>
+                <span class="s0">if </span><span class="s1">date_range</span><span class="s2">[</span><span class="s4">&quot;first&quot;</span><span class="s2">].</span><span class="s1">year </span><span class="s2">== </span><span class="s1">date_range</span><span class="s2">[</span><span class="s4">&quot;last&quot;</span><span class="s2">].</span><span class="s1">year</span><span class="s2">:</span>
+                    <span class="s1">year_lookup </span><span class="s2">= </span><span class="s1">date_range</span><span class="s2">[</span><span class="s4">&quot;first&quot;</span><span class="s2">].</span><span class="s1">year</span>
+                    <span class="s0">if </span><span class="s1">date_range</span><span class="s2">[</span><span class="s4">&quot;first&quot;</span><span class="s2">].</span><span class="s1">month </span><span class="s2">== </span><span class="s1">date_range</span><span class="s2">[</span><span class="s4">&quot;last&quot;</span><span class="s2">].</span><span class="s1">month</span><span class="s2">:</span>
+                        <span class="s1">month_lookup </span><span class="s2">= </span><span class="s1">date_range</span><span class="s2">[</span><span class="s4">&quot;first&quot;</span><span class="s2">].</span><span class="s1">month</span>
+
+        <span class="s0">if </span><span class="s1">year_lookup </span><span class="s0">and </span><span class="s1">month_lookup </span><span class="s0">and </span><span class="s1">day_lookup</span><span class="s2">:</span>
+            <span class="s1">day </span><span class="s2">= </span><span class="s1">datetime</span><span class="s2">.</span><span class="s1">date</span><span class="s2">(</span><span class="s1">int</span><span class="s2">(</span><span class="s1">year_lookup</span><span class="s2">), </span><span class="s1">int</span><span class="s2">(</span><span class="s1">month_lookup</span><span class="s2">), </span><span class="s1">int</span><span class="s2">(</span><span class="s1">day_lookup</span><span class="s2">))</span>
+            <span class="s0">return </span><span class="s2">{</span>
+                <span class="s4">&quot;show&quot;</span><span class="s2">: </span><span class="s0">True</span><span class="s2">,</span>
+                <span class="s4">&quot;back&quot;</span><span class="s2">: {</span>
+                    <span class="s4">&quot;link&quot;</span><span class="s2">: </span><span class="s1">link</span><span class="s2">({</span><span class="s1">year_field</span><span class="s2">: </span><span class="s1">year_lookup</span><span class="s2">, </span><span class="s1">month_field</span><span class="s2">: </span><span class="s1">month_lookup</span><span class="s2">}),</span>
+                    <span class="s4">&quot;title&quot;</span><span class="s2">: </span><span class="s1">capfirst</span><span class="s2">(</span><span class="s1">formats</span><span class="s2">.</span><span class="s1">date_format</span><span class="s2">(</span><span class="s1">day</span><span class="s2">, </span><span class="s4">&quot;YEAR_MONTH_FORMAT&quot;</span><span class="s2">)),</span>
+                <span class="s2">},</span>
+                <span class="s4">&quot;choices&quot;</span><span class="s2">: [</span>
+                    <span class="s2">{</span><span class="s4">&quot;title&quot;</span><span class="s2">: </span><span class="s1">capfirst</span><span class="s2">(</span><span class="s1">formats</span><span class="s2">.</span><span class="s1">date_format</span><span class="s2">(</span><span class="s1">day</span><span class="s2">, </span><span class="s4">&quot;MONTH_DAY_FORMAT&quot;</span><span class="s2">))}</span>
+                <span class="s2">],</span>
+            <span class="s2">}</span>
+        <span class="s0">elif </span><span class="s1">year_lookup </span><span class="s0">and </span><span class="s1">month_lookup</span><span class="s2">:</span>
+            <span class="s1">days </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">queryset</span><span class="s2">, </span><span class="s1">dates_or_datetimes</span><span class="s2">)(</span><span class="s1">field_name</span><span class="s2">, </span><span class="s4">&quot;day&quot;</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s2">{</span>
+                <span class="s4">&quot;show&quot;</span><span class="s2">: </span><span class="s0">True</span><span class="s2">,</span>
+                <span class="s4">&quot;back&quot;</span><span class="s2">: {</span>
+                    <span class="s4">&quot;link&quot;</span><span class="s2">: </span><span class="s1">link</span><span class="s2">({</span><span class="s1">year_field</span><span class="s2">: </span><span class="s1">year_lookup</span><span class="s2">}),</span>
+                    <span class="s4">&quot;title&quot;</span><span class="s2">: </span><span class="s1">str</span><span class="s2">(</span><span class="s1">year_lookup</span><span class="s2">),</span>
+                <span class="s2">},</span>
+                <span class="s4">&quot;choices&quot;</span><span class="s2">: [</span>
+                    <span class="s2">{</span>
+                        <span class="s4">&quot;link&quot;</span><span class="s2">: </span><span class="s1">link</span><span class="s2">(</span>
+                            <span class="s2">{</span>
+                                <span class="s1">year_field</span><span class="s2">: </span><span class="s1">year_lookup</span><span class="s2">,</span>
+                                <span class="s1">month_field</span><span class="s2">: </span><span class="s1">month_lookup</span><span class="s2">,</span>
+                                <span class="s1">day_field</span><span class="s2">: </span><span class="s1">day</span><span class="s2">.</span><span class="s1">day</span><span class="s2">,</span>
+                            <span class="s2">}</span>
+                        <span class="s2">),</span>
+                        <span class="s4">&quot;title&quot;</span><span class="s2">: </span><span class="s1">capfirst</span><span class="s2">(</span><span class="s1">formats</span><span class="s2">.</span><span class="s1">date_format</span><span class="s2">(</span><span class="s1">day</span><span class="s2">, </span><span class="s4">&quot;MONTH_DAY_FORMAT&quot;</span><span class="s2">)),</span>
+                    <span class="s2">}</span>
+                    <span class="s0">for </span><span class="s1">day </span><span class="s0">in </span><span class="s1">days</span>
+                <span class="s2">],</span>
+            <span class="s2">}</span>
+        <span class="s0">elif </span><span class="s1">year_lookup</span><span class="s2">:</span>
+            <span class="s1">months </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">queryset</span><span class="s2">, </span><span class="s1">dates_or_datetimes</span><span class="s2">)(</span><span class="s1">field_name</span><span class="s2">, </span><span class="s4">&quot;month&quot;</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s2">{</span>
+                <span class="s4">&quot;show&quot;</span><span class="s2">: </span><span class="s0">True</span><span class="s2">,</span>
+                <span class="s4">&quot;back&quot;</span><span class="s2">: {</span><span class="s4">&quot;link&quot;</span><span class="s2">: </span><span class="s1">link</span><span class="s2">({}), </span><span class="s4">&quot;title&quot;</span><span class="s2">: </span><span class="s1">_</span><span class="s2">(</span><span class="s4">&quot;All dates&quot;</span><span class="s2">)},</span>
+                <span class="s4">&quot;choices&quot;</span><span class="s2">: [</span>
+                    <span class="s2">{</span>
+                        <span class="s4">&quot;link&quot;</span><span class="s2">: </span><span class="s1">link</span><span class="s2">(</span>
+                            <span class="s2">{</span><span class="s1">year_field</span><span class="s2">: </span><span class="s1">year_lookup</span><span class="s2">, </span><span class="s1">month_field</span><span class="s2">: </span><span class="s1">month</span><span class="s2">.</span><span class="s1">month</span><span class="s2">}</span>
+                        <span class="s2">),</span>
+                        <span class="s4">&quot;title&quot;</span><span class="s2">: </span><span class="s1">capfirst</span><span class="s2">(</span>
+                            <span class="s1">formats</span><span class="s2">.</span><span class="s1">date_format</span><span class="s2">(</span><span class="s1">month</span><span class="s2">, </span><span class="s4">&quot;YEAR_MONTH_FORMAT&quot;</span><span class="s2">)</span>
+                        <span class="s2">),</span>
+                    <span class="s2">}</span>
+                    <span class="s0">for </span><span class="s1">month </span><span class="s0">in </span><span class="s1">months</span>
+                <span class="s2">],</span>
+            <span class="s2">}</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">years </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">.</span><span class="s1">queryset</span><span class="s2">, </span><span class="s1">dates_or_datetimes</span><span class="s2">)(</span><span class="s1">field_name</span><span class="s2">, </span><span class="s4">&quot;year&quot;</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s2">{</span>
+                <span class="s4">&quot;show&quot;</span><span class="s2">: </span><span class="s0">True</span><span class="s2">,</span>
+                <span class="s4">&quot;back&quot;</span><span class="s2">: </span><span class="s0">None</span><span class="s2">,</span>
+                <span class="s4">&quot;choices&quot;</span><span class="s2">: [</span>
+                    <span class="s2">{</span>
+                        <span class="s4">&quot;link&quot;</span><span class="s2">: </span><span class="s1">link</span><span class="s2">({</span><span class="s1">year_field</span><span class="s2">: </span><span class="s1">str</span><span class="s2">(</span><span class="s1">year</span><span class="s2">.</span><span class="s1">year</span><span class="s2">)}),</span>
+                        <span class="s4">&quot;title&quot;</span><span class="s2">: </span><span class="s1">str</span><span class="s2">(</span><span class="s1">year</span><span class="s2">.</span><span class="s1">year</span><span class="s2">),</span>
+                    <span class="s2">}</span>
+                    <span class="s0">for </span><span class="s1">year </span><span class="s0">in </span><span class="s1">years</span>
+                <span class="s2">],</span>
+            <span class="s2">}</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s1">name</span><span class="s2">=</span><span class="s4">&quot;date_hierarchy&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">date_hierarchy_tag</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">InclusionAdminNode</span><span class="s2">(</span>
+        <span class="s1">parser</span><span class="s2">,</span>
+        <span class="s1">token</span><span class="s2">,</span>
+        <span class="s1">func</span><span class="s2">=</span><span class="s1">date_hierarchy</span><span class="s2">,</span>
+        <span class="s1">template_name</span><span class="s2">=</span><span class="s4">&quot;date_hierarchy.html&quot;</span><span class="s2">,</span>
+        <span class="s1">takes_context</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+    <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">search_form</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Display a search form for searching the list. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s2">{</span>
+        <span class="s4">&quot;cl&quot;</span><span class="s2">: </span><span class="s1">cl</span><span class="s2">,</span>
+        <span class="s4">&quot;show_result_count&quot;</span><span class="s2">: </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">result_count </span><span class="s2">!= </span><span class="s1">cl</span><span class="s2">.</span><span class="s1">full_result_count</span><span class="s2">,</span>
+        <span class="s4">&quot;search_var&quot;</span><span class="s2">: </span><span class="s1">SEARCH_VAR</span><span class="s2">,</span>
+        <span class="s4">&quot;is_popup_var&quot;</span><span class="s2">: </span><span class="s1">IS_POPUP_VAR</span><span class="s2">,</span>
+        <span class="s4">&quot;is_facets_var&quot;</span><span class="s2">: </span><span class="s1">IS_FACETS_VAR</span><span class="s2">,</span>
+    <span class="s2">}</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s1">name</span><span class="s2">=</span><span class="s4">&quot;search_form&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">search_form_tag</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">InclusionAdminNode</span><span class="s2">(</span>
+        <span class="s1">parser</span><span class="s2">,</span>
+        <span class="s1">token</span><span class="s2">,</span>
+        <span class="s1">func</span><span class="s2">=</span><span class="s1">search_form</span><span class="s2">,</span>
+        <span class="s1">template_name</span><span class="s2">=</span><span class="s4">&quot;search_form.html&quot;</span><span class="s2">,</span>
+        <span class="s1">takes_context</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+    <span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">simple_tag</span>
+<span class="s0">def </span><span class="s1">admin_list_filter</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">, </span><span class="s1">spec</span><span class="s2">):</span>
+    <span class="s1">tpl </span><span class="s2">= </span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">spec</span><span class="s2">.</span><span class="s1">template</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">tpl</span><span class="s2">.</span><span class="s1">render</span><span class="s2">(</span>
+        <span class="s2">{</span>
+            <span class="s4">&quot;title&quot;</span><span class="s2">: </span><span class="s1">spec</span><span class="s2">.</span><span class="s1">title</span><span class="s2">,</span>
+            <span class="s4">&quot;choices&quot;</span><span class="s2">: </span><span class="s1">list</span><span class="s2">(</span><span class="s1">spec</span><span class="s2">.</span><span class="s1">choices</span><span class="s2">(</span><span class="s1">cl</span><span class="s2">)),</span>
+            <span class="s4">&quot;spec&quot;</span><span class="s2">: </span><span class="s1">spec</span><span class="s2">,</span>
+        <span class="s2">}</span>
+    <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">admin_actions</span><span class="s2">(</span><span class="s1">context</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Track the number of times the action field has been rendered on the page, 
+    so we know which value to use. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">context</span><span class="s2">[</span><span class="s4">&quot;action_index&quot;</span><span class="s2">] = </span><span class="s1">context</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s4">&quot;action_index&quot;</span><span class="s2">, -</span><span class="s5">1</span><span class="s2">) + </span><span class="s5">1</span>
+    <span class="s0">return </span><span class="s1">context</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s1">name</span><span class="s2">=</span><span class="s4">&quot;admin_actions&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">admin_actions_tag</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">InclusionAdminNode</span><span class="s2">(</span>
+        <span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">, </span><span class="s1">func</span><span class="s2">=</span><span class="s1">admin_actions</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">=</span><span class="s4">&quot;actions.html&quot;</span>
+    <span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s1">name</span><span class="s2">=</span><span class="s4">&quot;change_list_object_tools&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">change_list_object_tools_tag</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;Display the row of change list object tools.&quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">InclusionAdminNode</span><span class="s2">(</span>
+        <span class="s1">parser</span><span class="s2">,</span>
+        <span class="s1">token</span><span class="s2">,</span>
+        <span class="s1">func</span><span class="s2">=</span><span class="s0">lambda </span><span class="s1">context</span><span class="s2">: </span><span class="s1">context</span><span class="s2">,</span>
+        <span class="s1">template_name</span><span class="s2">=</span><span class="s4">&quot;change_list_object_tools.html&quot;</span><span class="s2">,</span>
+    <span class="s2">)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<html>
+<head>
+<title>openlayers.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #bcbec4;}
+.s1 { color: #d5b778;}
+.s2 { color: #bababa;}
+.s3 { color: #6aab73;}
+.s4 { color: #cf8e6d;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+openlayers.html</font>
+</center></td></tr></table>
+<pre><span class="s0">{% load i18n l10n %}</span>
+
+<span class="s1">&lt;div </span><span class="s2">id</span><span class="s3">=&quot;{{ id }}_div_map&quot; </span><span class="s2">class</span><span class="s3">=&quot;dj_map_wrapper&quot;</span><span class="s1">&gt;</span>
+    <span class="s0">{# RemovedInDjango51Warning: when the deprecation ends, remove data-width and data-height attributes. #}</span>
+    <span class="s1">&lt;div </span><span class="s2">id</span><span class="s3">=&quot;{{ id }}_map&quot; </span><span class="s2">class</span><span class="s3">=&quot;dj_map&quot; </span><span class="s2">data-width</span><span class="s3">=&quot;{{ map_width }}&quot; </span><span class="s2">data-height</span><span class="s3">=&quot;{{ map_height }}&quot;</span><span class="s1">&gt;&lt;/div&gt;</span>
+    <span class="s0">{% if not disabled %}</span><span class="s1">&lt;span </span><span class="s2">class</span><span class="s3">=&quot;clear_features&quot;</span><span class="s1">&gt;&lt;a </span><span class="s2">href</span><span class="s3">=&quot;&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate &quot;Delete all Features&quot; %}</span><span class="s1">&lt;/a&gt;&lt;/span&gt;</span><span class="s0">{% endif %}</span>
+    <span class="s0">{% if display_raw %}</span><span class="s1">&lt;p&gt;</span><span class="s0">{% translate &quot;Debugging window (serialized value)&quot; %}</span><span class="s1">&lt;/p&gt;</span><span class="s0">{% endif %}</span>
+    <span class="s1">&lt;textarea </span><span class="s2">id</span><span class="s3">=&quot;{{ id }}&quot; </span><span class="s2">class</span><span class="s3">=&quot;vSerializedField required&quot; </span><span class="s2">cols</span><span class="s3">=&quot;150&quot; </span><span class="s2">rows</span><span class="s3">=&quot;10&quot; </span><span class="s2">name</span><span class="s3">=&quot;{{ name }}&quot;</span>
+              <span class="s2">{% if not display_raw %} hidden{% endif %}</span><span class="s1">&gt;</span><span class="s0">{{ serialized }}</span><span class="s1">&lt;/textarea&gt;</span>
+    <span class="s1">&lt;script&gt;</span>
+        <span class="s0">{% block base_layer %}</span>
+            <span class="s4">var </span><span class="s0">base_layer = </span><span class="s4">new </span><span class="s0">ol.layer.Tile({</span>
+                <span class="s0">source: </span><span class="s4">new </span><span class="s0">ol.source.XYZ({</span>
+                    <span class="s0">attributions: </span><span class="s3">&quot;NASA Worldview&quot;</span><span class="s0">,</span>
+                    <span class="s0">maxZoom: </span><span class="s5">8</span><span class="s0">,</span>
+                    <span class="s0">url: </span><span class="s3">&quot;https://map1{a-c}.vis.earthdata.nasa.gov/wmts-webmerc/&quot; </span><span class="s0">+</span>
+                         <span class="s3">&quot;BlueMarble_ShadedRelief_Bathymetry/default/%7BTime%7D/&quot; </span><span class="s0">+</span>
+                         <span class="s3">&quot;GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg&quot;</span>
+                <span class="s0">})</span>
+            <span class="s0">});</span>
+        <span class="s0">{% endblock %}</span>
+        <span class="s0">{% block options %}</span><span class="s4">var </span><span class="s0">options = {</span>
+            <span class="s0">base_layer: base_layer,</span>
+            <span class="s0">geom_name: </span><span class="s3">'{{ geom_type }}'</span><span class="s0">,</span>
+            <span class="s0">id: </span><span class="s3">'{{ id }}'</span><span class="s0">,</span>
+            <span class="s0">map_id: </span><span class="s3">'{{ id }}_map'</span><span class="s0">,</span>
+            <span class="s0">map_srid: {{ map_srid|unlocalize }},</span>
+            <span class="s0">name: </span><span class="s3">'{{ name }}'</span>
+        <span class="s0">};</span>
+        <span class="s0">{% endblock %}</span>
+        <span class="s4">var </span><span class="s0">{{ module }} = </span><span class="s4">new </span><span class="s0">MapWidget(options);</span>
+    <span class="s1">&lt;/script&gt;</span>
+<span class="s1">&lt;/div&gt;</span>
+</pre>
+</body>
+</html>

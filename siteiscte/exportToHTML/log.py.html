@@ -1,0 +1,89 @@
+<html>
+<head>
+<title>log.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+log.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django </span><span class="s0">import </span><span class="s1">template</span>
+
+<span class="s1">register </span><span class="s2">= </span><span class="s1">template</span><span class="s2">.</span><span class="s1">Library</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">AdminLogNode</span><span class="s2">(</span><span class="s1">template</span><span class="s2">.</span><span class="s1">Node</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">limit</span><span class="s2">, </span><span class="s1">varname</span><span class="s2">, </span><span class="s1">user</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">limit </span><span class="s2">= </span><span class="s1">limit</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">varname </span><span class="s2">= </span><span class="s1">varname</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">user </span><span class="s2">= </span><span class="s1">user</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s3">&quot;&lt;GetAdminLog Node&gt;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">render</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">context</span><span class="s2">):</span>
+        <span class="s1">entries </span><span class="s2">= </span><span class="s1">context</span><span class="s2">[</span><span class="s3">&quot;log_entries&quot;</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">user </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">user_id </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">user</span>
+            <span class="s0">if not </span><span class="s1">user_id</span><span class="s2">.</span><span class="s1">isdigit</span><span class="s2">():</span>
+                <span class="s1">user_id </span><span class="s2">= </span><span class="s1">context</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">user</span><span class="s2">].</span><span class="s1">pk</span>
+            <span class="s1">entries </span><span class="s2">= </span><span class="s1">entries</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">user__pk</span><span class="s2">=</span><span class="s1">user_id</span><span class="s2">)</span>
+        <span class="s1">context</span><span class="s2">[</span><span class="s1">self</span><span class="s2">.</span><span class="s1">varname</span><span class="s2">] = </span><span class="s1">entries</span><span class="s2">[: </span><span class="s1">int</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">limit</span><span class="s2">)]</span>
+        <span class="s0">return </span><span class="s3">&quot;&quot;</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span>
+<span class="s0">def </span><span class="s1">get_admin_log</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Populate a template variable with the admin log for the given criteria. 
+ 
+    Usage:: 
+ 
+        {% get_admin_log [limit] as [varname] for_user [context_var_with_user_obj] %} 
+ 
+    Examples:: 
+ 
+        {% get_admin_log 10 as admin_log for_user 23 %} 
+        {% get_admin_log 10 as admin_log for_user user %} 
+        {% get_admin_log 10 as admin_log %} 
+ 
+    Note that ``context_var_containing_user_obj`` can be a hard-coded integer 
+    (user ID) or the name of a template context variable containing the user 
+    object whose ID you want. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">tokens </span><span class="s2">= </span><span class="s1">token</span><span class="s2">.</span><span class="s1">contents</span><span class="s2">.</span><span class="s1">split</span><span class="s2">()</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">tokens</span><span class="s2">) &lt; </span><span class="s5">4</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">template</span><span class="s2">.</span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+            <span class="s3">&quot;'get_admin_log' statements require two arguments&quot;</span>
+        <span class="s2">)</span>
+    <span class="s0">if not </span><span class="s1">tokens</span><span class="s2">[</span><span class="s5">1</span><span class="s2">].</span><span class="s1">isdigit</span><span class="s2">():</span>
+        <span class="s0">raise </span><span class="s1">template</span><span class="s2">.</span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+            <span class="s3">&quot;First argument to 'get_admin_log' must be an integer&quot;</span>
+        <span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">tokens</span><span class="s2">[</span><span class="s5">2</span><span class="s2">] != </span><span class="s3">&quot;as&quot;</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">template</span><span class="s2">.</span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+            <span class="s3">&quot;Second argument to 'get_admin_log' must be 'as'&quot;</span>
+        <span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">tokens</span><span class="s2">) &gt; </span><span class="s5">4</span><span class="s2">:</span>
+        <span class="s0">if </span><span class="s1">tokens</span><span class="s2">[</span><span class="s5">4</span><span class="s2">] != </span><span class="s3">&quot;for_user&quot;</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">template</span><span class="s2">.</span><span class="s1">TemplateSyntaxError</span><span class="s2">(</span>
+                <span class="s3">&quot;Fourth argument to 'get_admin_log' must be 'for_user'&quot;</span>
+            <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">AdminLogNode</span><span class="s2">(</span>
+        <span class="s1">limit</span><span class="s2">=</span><span class="s1">tokens</span><span class="s2">[</span><span class="s5">1</span><span class="s2">],</span>
+        <span class="s1">varname</span><span class="s2">=</span><span class="s1">tokens</span><span class="s2">[</span><span class="s5">3</span><span class="s2">],</span>
+        <span class="s1">user</span><span class="s2">=(</span><span class="s1">tokens</span><span class="s2">[</span><span class="s5">5</span><span class="s2">] </span><span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">tokens</span><span class="s2">) &gt; </span><span class="s5">5 </span><span class="s0">else None</span><span class="s2">),</span>
+    <span class="s2">)</span>
+</pre>
+</body>
+</html>

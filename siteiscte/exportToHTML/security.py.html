@@ -1,0 +1,87 @@
+<html>
+<head>
+<title>security.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+security.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">re</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">HttpResponsePermanentRedirect</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">deprecation </span><span class="s0">import </span><span class="s1">MiddlewareMixin</span>
+
+
+<span class="s0">class </span><span class="s1">SecurityMiddleware</span><span class="s2">(</span><span class="s1">MiddlewareMixin</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">get_response</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">get_response</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">sts_seconds </span><span class="s2">= </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SECURE_HSTS_SECONDS</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">sts_include_subdomains </span><span class="s2">= </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SECURE_HSTS_INCLUDE_SUBDOMAINS</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">sts_preload </span><span class="s2">= </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SECURE_HSTS_PRELOAD</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_nosniff </span><span class="s2">= </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SECURE_CONTENT_TYPE_NOSNIFF</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">redirect </span><span class="s2">= </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SECURE_SSL_REDIRECT</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">redirect_host </span><span class="s2">= </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SECURE_SSL_HOST</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">redirect_exempt </span><span class="s2">= [</span><span class="s1">re</span><span class="s2">.</span><span class="s1">compile</span><span class="s2">(</span><span class="s1">r</span><span class="s2">) </span><span class="s0">for </span><span class="s1">r </span><span class="s0">in </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SECURE_REDIRECT_EXEMPT</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">referrer_policy </span><span class="s2">= </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SECURE_REFERRER_POLICY</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">cross_origin_opener_policy </span><span class="s2">= </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">SECURE_CROSS_ORIGIN_OPENER_POLICY</span>
+
+    <span class="s0">def </span><span class="s1">process_request</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s1">path </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">lstrip</span><span class="s2">(</span><span class="s3">&quot;/&quot;</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">redirect</span>
+            <span class="s0">and not </span><span class="s1">request</span><span class="s2">.</span><span class="s1">is_secure</span><span class="s2">()</span>
+            <span class="s0">and not </span><span class="s1">any</span><span class="s2">(</span><span class="s1">pattern</span><span class="s2">.</span><span class="s1">search</span><span class="s2">(</span><span class="s1">path</span><span class="s2">) </span><span class="s0">for </span><span class="s1">pattern </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">redirect_exempt</span><span class="s2">)</span>
+        <span class="s2">):</span>
+            <span class="s1">host </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">redirect_host </span><span class="s0">or </span><span class="s1">request</span><span class="s2">.</span><span class="s1">get_host</span><span class="s2">()</span>
+            <span class="s0">return </span><span class="s1">HttpResponsePermanentRedirect</span><span class="s2">(</span>
+                <span class="s3">&quot;https://%s%s&quot; </span><span class="s2">% (</span><span class="s1">host</span><span class="s2">, </span><span class="s1">request</span><span class="s2">.</span><span class="s1">get_full_path</span><span class="s2">())</span>
+            <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">process_response</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">response</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">sts_seconds</span>
+            <span class="s0">and </span><span class="s1">request</span><span class="s2">.</span><span class="s1">is_secure</span><span class="s2">()</span>
+            <span class="s0">and </span><span class="s3">&quot;Strict-Transport-Security&quot; </span><span class="s0">not in </span><span class="s1">response</span>
+        <span class="s2">):</span>
+            <span class="s1">sts_header </span><span class="s2">= </span><span class="s3">&quot;max-age=%s&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">sts_seconds</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">sts_include_subdomains</span><span class="s2">:</span>
+                <span class="s1">sts_header </span><span class="s2">+= </span><span class="s3">&quot;; includeSubDomains&quot;</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">sts_preload</span><span class="s2">:</span>
+                <span class="s1">sts_header </span><span class="s2">+= </span><span class="s3">&quot;; preload&quot;</span>
+            <span class="s1">response</span><span class="s2">.</span><span class="s1">headers</span><span class="s2">[</span><span class="s3">&quot;Strict-Transport-Security&quot;</span><span class="s2">] = </span><span class="s1">sts_header</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">content_type_nosniff</span><span class="s2">:</span>
+            <span class="s1">response</span><span class="s2">.</span><span class="s1">headers</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span><span class="s3">&quot;X-Content-Type-Options&quot;</span><span class="s2">, </span><span class="s3">&quot;nosniff&quot;</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">referrer_policy</span><span class="s2">:</span>
+            <span class="s4"># Support a comma-separated string or iterable of values to allow</span>
+            <span class="s4"># fallback.</span>
+            <span class="s1">response</span><span class="s2">.</span><span class="s1">headers</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span>
+                <span class="s3">&quot;Referrer-Policy&quot;</span><span class="s2">,</span>
+                <span class="s3">&quot;,&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span>
+                    <span class="s2">[</span><span class="s1">v</span><span class="s2">.</span><span class="s1">strip</span><span class="s2">() </span><span class="s0">for </span><span class="s1">v </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">referrer_policy</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s3">&quot;,&quot;</span><span class="s2">)]</span>
+                    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">referrer_policy</span><span class="s2">, </span><span class="s1">str</span><span class="s2">)</span>
+                    <span class="s0">else </span><span class="s1">self</span><span class="s2">.</span><span class="s1">referrer_policy</span>
+                <span class="s2">),</span>
+            <span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">cross_origin_opener_policy</span><span class="s2">:</span>
+            <span class="s1">response</span><span class="s2">.</span><span class="s1">setdefault</span><span class="s2">(</span>
+                <span class="s3">&quot;Cross-Origin-Opener-Policy&quot;</span><span class="s2">,</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">cross_origin_opener_policy</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">response</span>
+</pre>
+</body>
+</html>

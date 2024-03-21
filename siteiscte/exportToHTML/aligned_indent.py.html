@@ -1,0 +1,157 @@
+<html>
+<head>
+<title>aligned_indent.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+aligned_indent.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#</span>
+<span class="s0"># Copyright (C) 2009-2020 the sqlparse authors and contributors</span>
+<span class="s0"># &lt;see AUTHORS file&gt;</span>
+<span class="s0">#</span>
+<span class="s0"># This module is part of python-sqlparse and is released under</span>
+<span class="s0"># the BSD License: https://opensource.org/licenses/BSD-3-Clause</span>
+
+<span class="s2">from </span><span class="s1">sqlparse </span><span class="s2">import </span><span class="s1">sql</span><span class="s3">, </span><span class="s1">tokens </span><span class="s2">as </span><span class="s1">T</span>
+<span class="s2">from </span><span class="s1">sqlparse</span><span class="s3">.</span><span class="s1">utils </span><span class="s2">import </span><span class="s1">offset</span><span class="s3">, </span><span class="s1">indent</span>
+
+
+<span class="s2">class </span><span class="s1">AlignedIndentFilter</span><span class="s3">:</span>
+    <span class="s1">join_words </span><span class="s3">= (</span><span class="s4">r'((LEFT\s+|RIGHT\s+|FULL\s+)?'</span>
+                  <span class="s4">r'(INNER\s+|OUTER\s+|STRAIGHT\s+)?|'</span>
+                  <span class="s4">r'(CROSS\s+|NATURAL\s+)?)?JOIN\b'</span><span class="s3">)</span>
+    <span class="s1">by_words </span><span class="s3">= </span><span class="s4">r'(GROUP|ORDER)\s+BY\b'</span>
+    <span class="s1">split_words </span><span class="s3">= (</span><span class="s4">'FROM'</span><span class="s3">,</span>
+                   <span class="s1">join_words</span><span class="s3">, </span><span class="s4">'ON'</span><span class="s3">, </span><span class="s1">by_words</span><span class="s3">,</span>
+                   <span class="s4">'WHERE'</span><span class="s3">, </span><span class="s4">'AND'</span><span class="s3">, </span><span class="s4">'OR'</span><span class="s3">,</span>
+                   <span class="s4">'HAVING'</span><span class="s3">, </span><span class="s4">'LIMIT'</span><span class="s3">,</span>
+                   <span class="s4">'UNION'</span><span class="s3">, </span><span class="s4">'VALUES'</span><span class="s3">,</span>
+                   <span class="s4">'SET'</span><span class="s3">, </span><span class="s4">'BETWEEN'</span><span class="s3">, </span><span class="s4">'EXCEPT'</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">char</span><span class="s3">=</span><span class="s4">' '</span><span class="s3">, </span><span class="s1">n</span><span class="s3">=</span><span class="s4">'</span><span class="s2">\n</span><span class="s4">'</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">n </span><span class="s3">= </span><span class="s1">n</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">offset </span><span class="s3">= </span><span class="s5">0</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">indent </span><span class="s3">= </span><span class="s5">0</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">char </span><span class="s3">= </span><span class="s1">char</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_max_kwd_len </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span><span class="s4">'select'</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">nl</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">offset</span><span class="s3">=</span><span class="s5">1</span><span class="s3">):</span>
+        <span class="s0"># offset = 1 represent a single space after SELECT</span>
+        <span class="s1">offset </span><span class="s3">= -</span><span class="s1">len</span><span class="s3">(</span><span class="s1">offset</span><span class="s3">) </span><span class="s2">if not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">offset</span><span class="s3">, </span><span class="s1">int</span><span class="s3">) </span><span class="s2">else </span><span class="s1">offset</span>
+        <span class="s0"># add two for the space and parenthesis</span>
+        <span class="s1">indent </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">indent </span><span class="s3">* (</span><span class="s5">2 </span><span class="s3">+ </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_max_kwd_len</span><span class="s3">)</span>
+
+        <span class="s2">return </span><span class="s1">sql</span><span class="s3">.</span><span class="s1">Token</span><span class="s3">(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Whitespace</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">n </span><span class="s3">+ </span><span class="s1">self</span><span class="s3">.</span><span class="s1">char </span><span class="s3">* (</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">_max_kwd_len </span><span class="s3">+ </span><span class="s1">offset </span><span class="s3">+ </span><span class="s1">indent </span><span class="s3">+ </span><span class="s1">self</span><span class="s3">.</span><span class="s1">offset</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">_process_statement</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">tlist</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">) &gt; </span><span class="s5">0 </span><span class="s2">and </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">[</span><span class="s5">0</span><span class="s3">].</span><span class="s1">is_whitespace \</span>
+                <span class="s2">and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">indent </span><span class="s3">== </span><span class="s5">0</span><span class="s3">:</span>
+            <span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">(</span><span class="s5">0</span><span class="s3">)</span>
+
+        <span class="s0"># process the main query body</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_process</span><span class="s3">(</span><span class="s1">sql</span><span class="s3">.</span><span class="s1">TokenList</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">tokens</span><span class="s3">))</span>
+
+    <span class="s2">def </span><span class="s1">_process_parenthesis</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">tlist</span><span class="s3">):</span>
+        <span class="s0"># if this isn't a subquery, don't re-indent</span>
+        <span class="s1">_</span><span class="s3">, </span><span class="s1">token </span><span class="s3">= </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">token_next_by</span><span class="s3">(</span><span class="s1">m</span><span class="s3">=(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">DML</span><span class="s3">, </span><span class="s4">'SELECT'</span><span class="s3">))</span>
+        <span class="s2">if </span><span class="s1">token </span><span class="s2">is not None</span><span class="s3">:</span>
+            <span class="s2">with </span><span class="s1">indent</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+                <span class="s1">tlist</span><span class="s3">.</span><span class="s1">insert_after</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">[</span><span class="s5">0</span><span class="s3">], </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nl</span><span class="s3">(</span><span class="s4">'SELECT'</span><span class="s3">))</span>
+                <span class="s0"># process the inside of the parenthesis</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">_process_default</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">)</span>
+
+            <span class="s0"># de-indent last parenthesis</span>
+            <span class="s1">tlist</span><span class="s3">.</span><span class="s1">insert_before</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">[-</span><span class="s5">1</span><span class="s3">], </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nl</span><span class="s3">())</span>
+
+    <span class="s2">def </span><span class="s1">_process_identifierlist</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">tlist</span><span class="s3">):</span>
+        <span class="s0"># columns being selected</span>
+        <span class="s1">identifiers </span><span class="s3">= </span><span class="s1">list</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">get_identifiers</span><span class="s3">())</span>
+        <span class="s1">identifiers</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">(</span><span class="s5">0</span><span class="s3">)</span>
+        <span class="s3">[</span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">insert_before</span><span class="s3">(</span><span class="s1">token</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nl</span><span class="s3">()) </span><span class="s2">for </span><span class="s1">token </span><span class="s2">in </span><span class="s1">identifiers</span><span class="s3">]</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_process_default</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_process_case</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">tlist</span><span class="s3">):</span>
+        <span class="s1">offset_ </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span><span class="s4">'case '</span><span class="s3">) + </span><span class="s1">len</span><span class="s3">(</span><span class="s4">'when '</span><span class="s3">)</span>
+        <span class="s1">cases </span><span class="s3">= </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">get_cases</span><span class="s3">(</span><span class="s1">skip_ws</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s0"># align the end as well</span>
+        <span class="s1">end_token </span><span class="s3">= </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">token_next_by</span><span class="s3">(</span><span class="s1">m</span><span class="s3">=(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">, </span><span class="s4">'END'</span><span class="s3">))[</span><span class="s5">1</span><span class="s3">]</span>
+        <span class="s1">cases</span><span class="s3">.</span><span class="s1">append</span><span class="s3">((</span><span class="s2">None</span><span class="s3">, [</span><span class="s1">end_token</span><span class="s3">]))</span>
+
+        <span class="s1">condition_width </span><span class="s3">= [</span><span class="s1">len</span><span class="s3">(</span><span class="s4">' '</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">map</span><span class="s3">(</span><span class="s1">str</span><span class="s3">, </span><span class="s1">cond</span><span class="s3">))) </span><span class="s2">if </span><span class="s1">cond </span><span class="s2">else </span><span class="s5">0</span>
+                           <span class="s2">for </span><span class="s1">cond</span><span class="s3">, </span><span class="s1">_ </span><span class="s2">in </span><span class="s1">cases</span><span class="s3">]</span>
+        <span class="s1">max_cond_width </span><span class="s3">= </span><span class="s1">max</span><span class="s3">(</span><span class="s1">condition_width</span><span class="s3">)</span>
+
+        <span class="s2">for </span><span class="s1">i</span><span class="s3">, (</span><span class="s1">cond</span><span class="s3">, </span><span class="s1">value</span><span class="s3">) </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">cases</span><span class="s3">):</span>
+            <span class="s0"># cond is None when 'else or end'</span>
+            <span class="s1">stmt </span><span class="s3">= </span><span class="s1">cond</span><span class="s3">[</span><span class="s5">0</span><span class="s3">] </span><span class="s2">if </span><span class="s1">cond </span><span class="s2">else </span><span class="s1">value</span><span class="s3">[</span><span class="s5">0</span><span class="s3">]</span>
+
+            <span class="s2">if </span><span class="s1">i </span><span class="s3">&gt; </span><span class="s5">0</span><span class="s3">:</span>
+                <span class="s1">tlist</span><span class="s3">.</span><span class="s1">insert_before</span><span class="s3">(</span><span class="s1">stmt</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nl</span><span class="s3">(</span><span class="s1">offset_ </span><span class="s3">- </span><span class="s1">len</span><span class="s3">(</span><span class="s1">str</span><span class="s3">(</span><span class="s1">stmt</span><span class="s3">))))</span>
+            <span class="s2">if </span><span class="s1">cond</span><span class="s3">:</span>
+                <span class="s1">ws </span><span class="s3">= </span><span class="s1">sql</span><span class="s3">.</span><span class="s1">Token</span><span class="s3">(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Whitespace</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">char </span><span class="s3">* (</span>
+                    <span class="s1">max_cond_width </span><span class="s3">- </span><span class="s1">condition_width</span><span class="s3">[</span><span class="s1">i</span><span class="s3">]))</span>
+                <span class="s1">tlist</span><span class="s3">.</span><span class="s1">insert_after</span><span class="s3">(</span><span class="s1">cond</span><span class="s3">[-</span><span class="s5">1</span><span class="s3">], </span><span class="s1">ws</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_next_token</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">tlist</span><span class="s3">, </span><span class="s1">idx</span><span class="s3">=-</span><span class="s5">1</span><span class="s3">):</span>
+        <span class="s1">split_words </span><span class="s3">= </span><span class="s1">T</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">split_words</span><span class="s3">, </span><span class="s2">True</span>
+        <span class="s1">tidx</span><span class="s3">, </span><span class="s1">token </span><span class="s3">= </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">token_next_by</span><span class="s3">(</span><span class="s1">m</span><span class="s3">=</span><span class="s1">split_words</span><span class="s3">, </span><span class="s1">idx</span><span class="s3">=</span><span class="s1">idx</span><span class="s3">)</span>
+        <span class="s0"># treat &quot;BETWEEN x and y&quot; as a single statement</span>
+        <span class="s2">if </span><span class="s1">token </span><span class="s2">and </span><span class="s1">token</span><span class="s3">.</span><span class="s1">normalized </span><span class="s3">== </span><span class="s4">'BETWEEN'</span><span class="s3">:</span>
+            <span class="s1">tidx</span><span class="s3">, </span><span class="s1">token </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_next_token</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">, </span><span class="s1">tidx</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">token </span><span class="s2">and </span><span class="s1">token</span><span class="s3">.</span><span class="s1">normalized </span><span class="s3">== </span><span class="s4">'AND'</span><span class="s3">:</span>
+                <span class="s1">tidx</span><span class="s3">, </span><span class="s1">token </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_next_token</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">, </span><span class="s1">tidx</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">tidx</span><span class="s3">, </span><span class="s1">token</span>
+
+    <span class="s2">def </span><span class="s1">_split_kwds</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">tlist</span><span class="s3">):</span>
+        <span class="s1">tidx</span><span class="s3">, </span><span class="s1">token </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_next_token</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">)</span>
+        <span class="s2">while </span><span class="s1">token</span><span class="s3">:</span>
+            <span class="s0"># joins, group/order by are special case. only consider the first</span>
+            <span class="s0"># word as aligner</span>
+            <span class="s2">if </span><span class="s3">(</span>
+                <span class="s1">token</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">join_words</span><span class="s3">, </span><span class="s1">regex</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+                <span class="s2">or </span><span class="s1">token</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">by_words</span><span class="s3">, </span><span class="s1">regex</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+            <span class="s3">):</span>
+                <span class="s1">token_indent </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">value</span><span class="s3">.</span><span class="s1">split</span><span class="s3">()[</span><span class="s5">0</span><span class="s3">]</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s1">token_indent </span><span class="s3">= </span><span class="s1">str</span><span class="s3">(</span><span class="s1">token</span><span class="s3">)</span>
+            <span class="s1">tlist</span><span class="s3">.</span><span class="s1">insert_before</span><span class="s3">(</span><span class="s1">token</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nl</span><span class="s3">(</span><span class="s1">token_indent</span><span class="s3">))</span>
+            <span class="s1">tidx </span><span class="s3">+= </span><span class="s5">1</span>
+            <span class="s1">tidx</span><span class="s3">, </span><span class="s1">token </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_next_token</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">, </span><span class="s1">tidx</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_process_default</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">tlist</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_split_kwds</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">)</span>
+        <span class="s0"># process any sub-sub statements</span>
+        <span class="s2">for </span><span class="s1">sgroup </span><span class="s2">in </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">get_sublists</span><span class="s3">():</span>
+            <span class="s1">idx </span><span class="s3">= </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">token_index</span><span class="s3">(</span><span class="s1">sgroup</span><span class="s3">)</span>
+            <span class="s1">pidx</span><span class="s3">, </span><span class="s1">prev_ </span><span class="s3">= </span><span class="s1">tlist</span><span class="s3">.</span><span class="s1">token_prev</span><span class="s3">(</span><span class="s1">idx</span><span class="s3">)</span>
+            <span class="s0"># HACK: make &quot;group/order by&quot; work. Longer than max_len.</span>
+            <span class="s1">offset_ </span><span class="s3">= </span><span class="s5">3 </span><span class="s2">if </span><span class="s3">(</span>
+                <span class="s1">prev_ </span><span class="s2">and </span><span class="s1">prev_</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(</span><span class="s1">T</span><span class="s3">.</span><span class="s1">Keyword</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">by_words</span><span class="s3">, </span><span class="s1">regex</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+            <span class="s3">) </span><span class="s2">else </span><span class="s5">0</span>
+            <span class="s2">with </span><span class="s1">offset</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">offset_</span><span class="s3">):</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">_process</span><span class="s3">(</span><span class="s1">sgroup</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">_process</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">tlist</span><span class="s3">):</span>
+        <span class="s1">func_name </span><span class="s3">= </span><span class="s4">'_process_{cls}'</span><span class="s3">.</span><span class="s1">format</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">=</span><span class="s1">type</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">).</span><span class="s1">__name__</span><span class="s3">)</span>
+        <span class="s1">func </span><span class="s3">= </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">func_name</span><span class="s3">.</span><span class="s1">lower</span><span class="s3">(), </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_process_default</span><span class="s3">)</span>
+        <span class="s1">func</span><span class="s3">(</span><span class="s1">tlist</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">process</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">stmt</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_process</span><span class="s3">(</span><span class="s1">stmt</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">stmt</span>
+</pre>
+</body>
+</html>

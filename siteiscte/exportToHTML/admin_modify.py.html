@@ -1,0 +1,173 @@
+<html>
+<head>
+<title>admin_modify.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+admin_modify.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">json</span>
+
+<span class="s0">from </span><span class="s1">django </span><span class="s0">import </span><span class="s1">template</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template</span><span class="s2">.</span><span class="s1">context </span><span class="s0">import </span><span class="s1">Context</span>
+
+<span class="s0">from </span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">InclusionAdminNode</span>
+
+<span class="s1">register </span><span class="s2">= </span><span class="s1">template</span><span class="s2">.</span><span class="s1">Library</span><span class="s2">()</span>
+
+
+<span class="s0">def </span><span class="s1">prepopulated_fields_js</span><span class="s2">(</span><span class="s1">context</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Create a list of prepopulated_fields that should render JavaScript for 
+    the prepopulated fields for both the admin form and inlines. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">prepopulated_fields </span><span class="s2">= []</span>
+    <span class="s0">if </span><span class="s4">&quot;adminform&quot; </span><span class="s0">in </span><span class="s1">context</span><span class="s2">:</span>
+        <span class="s1">prepopulated_fields</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">context</span><span class="s2">[</span><span class="s4">&quot;adminform&quot;</span><span class="s2">].</span><span class="s1">prepopulated_fields</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s4">&quot;inline_admin_formsets&quot; </span><span class="s0">in </span><span class="s1">context</span><span class="s2">:</span>
+        <span class="s0">for </span><span class="s1">inline_admin_formset </span><span class="s0">in </span><span class="s1">context</span><span class="s2">[</span><span class="s4">&quot;inline_admin_formsets&quot;</span><span class="s2">]:</span>
+            <span class="s0">for </span><span class="s1">inline_admin_form </span><span class="s0">in </span><span class="s1">inline_admin_formset</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">inline_admin_form</span><span class="s2">.</span><span class="s1">original </span><span class="s0">is None</span><span class="s2">:</span>
+                    <span class="s1">prepopulated_fields</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">inline_admin_form</span><span class="s2">.</span><span class="s1">prepopulated_fields</span><span class="s2">)</span>
+
+    <span class="s1">prepopulated_fields_json </span><span class="s2">= []</span>
+    <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">prepopulated_fields</span><span class="s2">:</span>
+        <span class="s1">prepopulated_fields_json</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+            <span class="s2">{</span>
+                <span class="s4">&quot;id&quot;</span><span class="s2">: </span><span class="s4">&quot;#%s&quot; </span><span class="s2">% </span><span class="s1">field</span><span class="s2">[</span><span class="s4">&quot;field&quot;</span><span class="s2">].</span><span class="s1">auto_id</span><span class="s2">,</span>
+                <span class="s4">&quot;name&quot;</span><span class="s2">: </span><span class="s1">field</span><span class="s2">[</span><span class="s4">&quot;field&quot;</span><span class="s2">].</span><span class="s1">name</span><span class="s2">,</span>
+                <span class="s4">&quot;dependency_ids&quot;</span><span class="s2">: [</span>
+                    <span class="s4">&quot;#%s&quot; </span><span class="s2">% </span><span class="s1">dependency</span><span class="s2">.</span><span class="s1">auto_id </span><span class="s0">for </span><span class="s1">dependency </span><span class="s0">in </span><span class="s1">field</span><span class="s2">[</span><span class="s4">&quot;dependencies&quot;</span><span class="s2">]</span>
+                <span class="s2">],</span>
+                <span class="s4">&quot;dependency_list&quot;</span><span class="s2">: [</span>
+                    <span class="s1">dependency</span><span class="s2">.</span><span class="s1">name </span><span class="s0">for </span><span class="s1">dependency </span><span class="s0">in </span><span class="s1">field</span><span class="s2">[</span><span class="s4">&quot;dependencies&quot;</span><span class="s2">]</span>
+                <span class="s2">],</span>
+                <span class="s4">&quot;maxLength&quot;</span><span class="s2">: </span><span class="s1">field</span><span class="s2">[</span><span class="s4">&quot;field&quot;</span><span class="s2">].</span><span class="s1">field</span><span class="s2">.</span><span class="s1">max_length </span><span class="s0">or </span><span class="s5">50</span><span class="s2">,</span>
+                <span class="s4">&quot;allowUnicode&quot;</span><span class="s2">: </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">field</span><span class="s2">[</span><span class="s4">&quot;field&quot;</span><span class="s2">].</span><span class="s1">field</span><span class="s2">, </span><span class="s4">&quot;allow_unicode&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">),</span>
+            <span class="s2">}</span>
+        <span class="s2">)</span>
+
+    <span class="s1">context</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span>
+        <span class="s2">{</span>
+            <span class="s4">&quot;prepopulated_fields&quot;</span><span class="s2">: </span><span class="s1">prepopulated_fields</span><span class="s2">,</span>
+            <span class="s4">&quot;prepopulated_fields_json&quot;</span><span class="s2">: </span><span class="s1">json</span><span class="s2">.</span><span class="s1">dumps</span><span class="s2">(</span><span class="s1">prepopulated_fields_json</span><span class="s2">),</span>
+        <span class="s2">}</span>
+    <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">context</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s1">name</span><span class="s2">=</span><span class="s4">&quot;prepopulated_fields_js&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">prepopulated_fields_js_tag</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">InclusionAdminNode</span><span class="s2">(</span>
+        <span class="s1">parser</span><span class="s2">,</span>
+        <span class="s1">token</span><span class="s2">,</span>
+        <span class="s1">func</span><span class="s2">=</span><span class="s1">prepopulated_fields_js</span><span class="s2">,</span>
+        <span class="s1">template_name</span><span class="s2">=</span><span class="s4">&quot;prepopulated_fields_js.html&quot;</span><span class="s2">,</span>
+    <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">submit_row</span><span class="s2">(</span><span class="s1">context</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Display the row of buttons for delete and save. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">add </span><span class="s2">= </span><span class="s1">context</span><span class="s2">[</span><span class="s4">&quot;add&quot;</span><span class="s2">]</span>
+    <span class="s1">change </span><span class="s2">= </span><span class="s1">context</span><span class="s2">[</span><span class="s4">&quot;change&quot;</span><span class="s2">]</span>
+    <span class="s1">is_popup </span><span class="s2">= </span><span class="s1">context</span><span class="s2">[</span><span class="s4">&quot;is_popup&quot;</span><span class="s2">]</span>
+    <span class="s1">save_as </span><span class="s2">= </span><span class="s1">context</span><span class="s2">[</span><span class="s4">&quot;save_as&quot;</span><span class="s2">]</span>
+    <span class="s1">show_save </span><span class="s2">= </span><span class="s1">context</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s4">&quot;show_save&quot;</span><span class="s2">, </span><span class="s0">True</span><span class="s2">)</span>
+    <span class="s1">show_save_and_add_another </span><span class="s2">= </span><span class="s1">context</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s4">&quot;show_save_and_add_another&quot;</span><span class="s2">, </span><span class="s0">True</span><span class="s2">)</span>
+    <span class="s1">show_save_and_continue </span><span class="s2">= </span><span class="s1">context</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s4">&quot;show_save_and_continue&quot;</span><span class="s2">, </span><span class="s0">True</span><span class="s2">)</span>
+    <span class="s1">has_add_permission </span><span class="s2">= </span><span class="s1">context</span><span class="s2">[</span><span class="s4">&quot;has_add_permission&quot;</span><span class="s2">]</span>
+    <span class="s1">has_change_permission </span><span class="s2">= </span><span class="s1">context</span><span class="s2">[</span><span class="s4">&quot;has_change_permission&quot;</span><span class="s2">]</span>
+    <span class="s1">has_view_permission </span><span class="s2">= </span><span class="s1">context</span><span class="s2">[</span><span class="s4">&quot;has_view_permission&quot;</span><span class="s2">]</span>
+    <span class="s1">has_editable_inline_admin_formsets </span><span class="s2">= </span><span class="s1">context</span><span class="s2">[</span><span class="s4">&quot;has_editable_inline_admin_formsets&quot;</span><span class="s2">]</span>
+    <span class="s1">can_save </span><span class="s2">= (</span>
+        <span class="s2">(</span><span class="s1">has_change_permission </span><span class="s0">and </span><span class="s1">change</span><span class="s2">)</span>
+        <span class="s0">or </span><span class="s2">(</span><span class="s1">has_add_permission </span><span class="s0">and </span><span class="s1">add</span><span class="s2">)</span>
+        <span class="s0">or </span><span class="s1">has_editable_inline_admin_formsets</span>
+    <span class="s2">)</span>
+    <span class="s1">can_save_and_add_another </span><span class="s2">= (</span>
+        <span class="s1">has_add_permission</span>
+        <span class="s0">and not </span><span class="s1">is_popup</span>
+        <span class="s0">and </span><span class="s2">(</span><span class="s0">not </span><span class="s1">save_as </span><span class="s0">or </span><span class="s1">add</span><span class="s2">)</span>
+        <span class="s0">and </span><span class="s1">can_save</span>
+        <span class="s0">and </span><span class="s1">show_save_and_add_another</span>
+    <span class="s2">)</span>
+    <span class="s1">can_save_and_continue </span><span class="s2">= (</span>
+        <span class="s0">not </span><span class="s1">is_popup </span><span class="s0">and </span><span class="s1">can_save </span><span class="s0">and </span><span class="s1">has_view_permission </span><span class="s0">and </span><span class="s1">show_save_and_continue</span>
+    <span class="s2">)</span>
+    <span class="s1">can_change </span><span class="s2">= </span><span class="s1">has_change_permission </span><span class="s0">or </span><span class="s1">has_editable_inline_admin_formsets</span>
+    <span class="s1">ctx </span><span class="s2">= </span><span class="s1">Context</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+    <span class="s1">ctx</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span>
+        <span class="s2">{</span>
+            <span class="s4">&quot;can_change&quot;</span><span class="s2">: </span><span class="s1">can_change</span><span class="s2">,</span>
+            <span class="s4">&quot;show_delete_link&quot;</span><span class="s2">: (</span>
+                <span class="s0">not </span><span class="s1">is_popup</span>
+                <span class="s0">and </span><span class="s1">context</span><span class="s2">[</span><span class="s4">&quot;has_delete_permission&quot;</span><span class="s2">]</span>
+                <span class="s0">and </span><span class="s1">change</span>
+                <span class="s0">and </span><span class="s1">context</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s4">&quot;show_delete&quot;</span><span class="s2">, </span><span class="s0">True</span><span class="s2">)</span>
+            <span class="s2">),</span>
+            <span class="s4">&quot;show_save_as_new&quot;</span><span class="s2">: </span><span class="s0">not </span><span class="s1">is_popup</span>
+            <span class="s0">and </span><span class="s1">has_add_permission</span>
+            <span class="s0">and </span><span class="s1">change</span>
+            <span class="s0">and </span><span class="s1">save_as</span><span class="s2">,</span>
+            <span class="s4">&quot;show_save_and_add_another&quot;</span><span class="s2">: </span><span class="s1">can_save_and_add_another</span><span class="s2">,</span>
+            <span class="s4">&quot;show_save_and_continue&quot;</span><span class="s2">: </span><span class="s1">can_save_and_continue</span><span class="s2">,</span>
+            <span class="s4">&quot;show_save&quot;</span><span class="s2">: </span><span class="s1">show_save </span><span class="s0">and </span><span class="s1">can_save</span><span class="s2">,</span>
+            <span class="s4">&quot;show_close&quot;</span><span class="s2">: </span><span class="s0">not </span><span class="s2">(</span><span class="s1">show_save </span><span class="s0">and </span><span class="s1">can_save</span><span class="s2">),</span>
+        <span class="s2">}</span>
+    <span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">ctx</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s1">name</span><span class="s2">=</span><span class="s4">&quot;submit_row&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">submit_row_tag</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">InclusionAdminNode</span><span class="s2">(</span>
+        <span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">, </span><span class="s1">func</span><span class="s2">=</span><span class="s1">submit_row</span><span class="s2">, </span><span class="s1">template_name</span><span class="s2">=</span><span class="s4">&quot;submit_line.html&quot;</span>
+    <span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">tag</span><span class="s2">(</span><span class="s1">name</span><span class="s2">=</span><span class="s4">&quot;change_form_object_tools&quot;</span><span class="s2">)</span>
+<span class="s0">def </span><span class="s1">change_form_object_tools_tag</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">, </span><span class="s1">token</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;Display the row of change form object tools.&quot;&quot;&quot;</span>
+    <span class="s0">return </span><span class="s1">InclusionAdminNode</span><span class="s2">(</span>
+        <span class="s1">parser</span><span class="s2">,</span>
+        <span class="s1">token</span><span class="s2">,</span>
+        <span class="s1">func</span><span class="s2">=</span><span class="s0">lambda </span><span class="s1">context</span><span class="s2">: </span><span class="s1">context</span><span class="s2">,</span>
+        <span class="s1">template_name</span><span class="s2">=</span><span class="s4">&quot;change_form_object_tools.html&quot;</span><span class="s2">,</span>
+    <span class="s2">)</span>
+
+
+<span class="s2">@</span><span class="s1">register</span><span class="s2">.</span><span class="s1">filter</span>
+<span class="s0">def </span><span class="s1">cell_count</span><span class="s2">(</span><span class="s1">inline_admin_form</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot;Return the number of cells used in a tabular inline.&quot;&quot;&quot;</span>
+    <span class="s1">count </span><span class="s2">= </span><span class="s5">1  </span><span class="s6"># Hidden cell with hidden 'id' field</span>
+    <span class="s0">for </span><span class="s1">fieldset </span><span class="s0">in </span><span class="s1">inline_admin_form</span><span class="s2">:</span>
+        <span class="s6"># Count all visible fields.</span>
+        <span class="s0">for </span><span class="s1">line </span><span class="s0">in </span><span class="s1">fieldset</span><span class="s2">:</span>
+            <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">line</span><span class="s2">:</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">is_hidden </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">field</span><span class="s2">.</span><span class="s1">is_hidden</span>
+                <span class="s0">except </span><span class="s1">AttributeError</span><span class="s2">:</span>
+                    <span class="s1">is_hidden </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">field</span><span class="s2">[</span><span class="s4">&quot;is_hidden&quot;</span><span class="s2">]</span>
+                <span class="s0">if not </span><span class="s1">is_hidden</span><span class="s2">:</span>
+                    <span class="s1">count </span><span class="s2">+= </span><span class="s5">1</span>
+    <span class="s0">if </span><span class="s1">inline_admin_form</span><span class="s2">.</span><span class="s1">formset</span><span class="s2">.</span><span class="s1">can_delete</span><span class="s2">:</span>
+        <span class="s6"># Delete checkbox</span>
+        <span class="s1">count </span><span class="s2">+= </span><span class="s5">1</span>
+    <span class="s0">return </span><span class="s1">count</span>
+</pre>
+</body>
+</html>

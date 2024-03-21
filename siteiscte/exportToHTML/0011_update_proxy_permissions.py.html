@@ -1,0 +1,97 @@
+<html>
+<head>
+<title>0011_update_proxy_permissions.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+0011_update_proxy_permissions.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">sys</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">color </span><span class="s0">import </span><span class="s1">color_style</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">IntegrityError</span><span class="s2">, </span><span class="s1">migrations</span><span class="s2">, </span><span class="s1">transaction</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">Q</span>
+
+<span class="s1">WARNING </span><span class="s2">= </span><span class="s3">&quot;&quot;&quot; 
+    A problem arose migrating proxy model permissions for {old} to {new}. 
+ 
+      Permission(s) for {new} already existed. 
+      Codenames Q: {query} 
+ 
+    Ensure to audit ALL permissions for {old} and {new}. 
+&quot;&quot;&quot;</span>
+
+
+<span class="s0">def </span><span class="s1">update_proxy_model_permissions</span><span class="s2">(</span><span class="s1">apps</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">reverse</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Update the content_type of proxy model permissions to use the ContentType 
+    of the proxy model. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">style </span><span class="s2">= </span><span class="s1">color_style</span><span class="s2">()</span>
+    <span class="s1">Permission </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s3">&quot;auth&quot;</span><span class="s2">, </span><span class="s3">&quot;Permission&quot;</span><span class="s2">)</span>
+    <span class="s1">ContentType </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_model</span><span class="s2">(</span><span class="s3">&quot;contenttypes&quot;</span><span class="s2">, </span><span class="s3">&quot;ContentType&quot;</span><span class="s2">)</span>
+    <span class="s1">alias </span><span class="s2">= </span><span class="s1">schema_editor</span><span class="s2">.</span><span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span>
+    <span class="s0">for </span><span class="s1">Model </span><span class="s0">in </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_models</span><span class="s2">():</span>
+        <span class="s1">opts </span><span class="s2">= </span><span class="s1">Model</span><span class="s2">.</span><span class="s1">_meta</span>
+        <span class="s0">if not </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">proxy</span><span class="s2">:</span>
+            <span class="s0">continue</span>
+        <span class="s1">proxy_default_permissions_codenames </span><span class="s2">= [</span>
+            <span class="s3">&quot;%s_%s&quot; </span><span class="s2">% (</span><span class="s1">action</span><span class="s2">, </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">) </span><span class="s0">for </span><span class="s1">action </span><span class="s0">in </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">default_permissions</span>
+        <span class="s2">]</span>
+        <span class="s1">permissions_query </span><span class="s2">= </span><span class="s1">Q</span><span class="s2">(</span><span class="s1">codename__in</span><span class="s2">=</span><span class="s1">proxy_default_permissions_codenames</span><span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">codename</span><span class="s2">, </span><span class="s1">name </span><span class="s0">in </span><span class="s1">opts</span><span class="s2">.</span><span class="s1">permissions</span><span class="s2">:</span>
+            <span class="s1">permissions_query </span><span class="s2">|= </span><span class="s1">Q</span><span class="s2">(</span><span class="s1">codename</span><span class="s2">=</span><span class="s1">codename</span><span class="s2">, </span><span class="s1">name</span><span class="s2">=</span><span class="s1">name</span><span class="s2">)</span>
+        <span class="s1">content_type_manager </span><span class="s2">= </span><span class="s1">ContentType</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">db_manager</span><span class="s2">(</span><span class="s1">alias</span><span class="s2">)</span>
+        <span class="s1">concrete_content_type </span><span class="s2">= </span><span class="s1">content_type_manager</span><span class="s2">.</span><span class="s1">get_for_model</span><span class="s2">(</span>
+            <span class="s1">Model</span><span class="s2">, </span><span class="s1">for_concrete_model</span><span class="s2">=</span><span class="s0">True</span>
+        <span class="s2">)</span>
+        <span class="s1">proxy_content_type </span><span class="s2">= </span><span class="s1">content_type_manager</span><span class="s2">.</span><span class="s1">get_for_model</span><span class="s2">(</span>
+            <span class="s1">Model</span><span class="s2">, </span><span class="s1">for_concrete_model</span><span class="s2">=</span><span class="s0">False</span>
+        <span class="s2">)</span>
+        <span class="s1">old_content_type </span><span class="s2">= </span><span class="s1">proxy_content_type </span><span class="s0">if </span><span class="s1">reverse </span><span class="s0">else </span><span class="s1">concrete_content_type</span>
+        <span class="s1">new_content_type </span><span class="s2">= </span><span class="s1">concrete_content_type </span><span class="s0">if </span><span class="s1">reverse </span><span class="s0">else </span><span class="s1">proxy_content_type</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">with </span><span class="s1">transaction</span><span class="s2">.</span><span class="s1">atomic</span><span class="s2">(</span><span class="s1">using</span><span class="s2">=</span><span class="s1">alias</span><span class="s2">):</span>
+                <span class="s1">Permission</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">using</span><span class="s2">(</span><span class="s1">alias</span><span class="s2">).</span><span class="s1">filter</span><span class="s2">(</span>
+                    <span class="s1">permissions_query</span><span class="s2">,</span>
+                    <span class="s1">content_type</span><span class="s2">=</span><span class="s1">old_content_type</span><span class="s2">,</span>
+                <span class="s2">).</span><span class="s1">update</span><span class="s2">(</span><span class="s1">content_type</span><span class="s2">=</span><span class="s1">new_content_type</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">IntegrityError</span><span class="s2">:</span>
+            <span class="s1">old </span><span class="s2">= </span><span class="s3">&quot;{}_{}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">old_content_type</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">old_content_type</span><span class="s2">.</span><span class="s1">model</span><span class="s2">)</span>
+            <span class="s1">new </span><span class="s2">= </span><span class="s3">&quot;{}_{}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">new_content_type</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">new_content_type</span><span class="s2">.</span><span class="s1">model</span><span class="s2">)</span>
+            <span class="s1">sys</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                <span class="s1">style</span><span class="s2">.</span><span class="s1">WARNING</span><span class="s2">(</span><span class="s1">WARNING</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">old</span><span class="s2">=</span><span class="s1">old</span><span class="s2">, </span><span class="s1">new</span><span class="s2">=</span><span class="s1">new</span><span class="s2">, </span><span class="s1">query</span><span class="s2">=</span><span class="s1">permissions_query</span><span class="s2">))</span>
+            <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">revert_proxy_model_permissions</span><span class="s2">(</span><span class="s1">apps</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot; 
+    Update the content_type of proxy model permissions to use the ContentType 
+    of the concrete model. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">update_proxy_model_permissions</span><span class="s2">(</span><span class="s1">apps</span><span class="s2">, </span><span class="s1">schema_editor</span><span class="s2">, </span><span class="s1">reverse</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">Migration</span><span class="s2">(</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">Migration</span><span class="s2">):</span>
+    <span class="s1">dependencies </span><span class="s2">= [</span>
+        <span class="s2">(</span><span class="s3">&quot;auth&quot;</span><span class="s2">, </span><span class="s3">&quot;0010_alter_group_name_max_length&quot;</span><span class="s2">),</span>
+        <span class="s2">(</span><span class="s3">&quot;contenttypes&quot;</span><span class="s2">, </span><span class="s3">&quot;0002_remove_content_type_name&quot;</span><span class="s2">),</span>
+    <span class="s2">]</span>
+    <span class="s1">operations </span><span class="s2">= [</span>
+        <span class="s1">migrations</span><span class="s2">.</span><span class="s1">RunPython</span><span class="s2">(</span>
+            <span class="s1">update_proxy_model_permissions</span><span class="s2">, </span><span class="s1">revert_proxy_model_permissions</span>
+        <span class="s2">),</span>
+    <span class="s2">]</span>
+</pre>
+</body>
+</html>

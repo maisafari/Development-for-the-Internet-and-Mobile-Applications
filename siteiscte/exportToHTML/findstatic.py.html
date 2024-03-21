@@ -1,0 +1,69 @@
+<html>
+<head>
+<title>findstatic.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+findstatic.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">os</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">staticfiles </span><span class="s0">import </span><span class="s1">finders</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">LabelCommand</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">LabelCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= </span><span class="s3">&quot;Finds the absolute paths for the given static file(s).&quot;</span>
+    <span class="s1">label </span><span class="s2">= </span><span class="s3">&quot;staticfile&quot;</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--first&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_false&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;all&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Only return the first match for each static file.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle_label</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">verbosity </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;verbosity&quot;</span><span class="s2">]</span>
+        <span class="s1">result </span><span class="s2">= </span><span class="s1">finders</span><span class="s2">.</span><span class="s1">find</span><span class="s2">(</span><span class="s1">path</span><span class="s2">, </span><span class="s1">all</span><span class="s2">=</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;all&quot;</span><span class="s2">])</span>
+        <span class="s0">if </span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s4">2</span><span class="s2">:</span>
+            <span class="s1">searched_locations </span><span class="s2">= (</span>
+                <span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">Looking in the following locations:</span><span class="s0">\n  </span><span class="s3">%s&quot;</span>
+                <span class="s2">% </span><span class="s3">&quot;</span><span class="s0">\n  </span><span class="s3">&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">([</span><span class="s1">str</span><span class="s2">(</span><span class="s1">loc</span><span class="s2">) </span><span class="s0">for </span><span class="s1">loc </span><span class="s0">in </span><span class="s1">finders</span><span class="s2">.</span><span class="s1">searched_locations</span><span class="s2">])</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">searched_locations </span><span class="s2">= </span><span class="s3">&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">result</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">result</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+                <span class="s1">result </span><span class="s2">= [</span><span class="s1">result</span><span class="s2">]</span>
+            <span class="s1">result </span><span class="s2">= (</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">realpath</span><span class="s2">(</span><span class="s1">path</span><span class="s2">) </span><span class="s0">for </span><span class="s1">path </span><span class="s0">in </span><span class="s1">result</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s4">1</span><span class="s2">:</span>
+                <span class="s1">file_list </span><span class="s2">= </span><span class="s3">&quot;</span><span class="s0">\n  </span><span class="s3">&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">result</span><span class="s2">)</span>
+                <span class="s0">return </span><span class="s3">&quot;Found '%s' here:</span><span class="s0">\n  </span><span class="s3">%s%s&quot; </span><span class="s2">% (</span>
+                    <span class="s1">path</span><span class="s2">,</span>
+                    <span class="s1">file_list</span><span class="s2">,</span>
+                    <span class="s1">searched_locations</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">result</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">message </span><span class="s2">= [</span><span class="s3">&quot;No matching file found for '%s'.&quot; </span><span class="s2">% </span><span class="s1">path</span><span class="s2">]</span>
+            <span class="s0">if </span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s4">2</span><span class="s2">:</span>
+                <span class="s1">message</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">searched_locations</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s4">1</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stderr</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">message</span><span class="s2">))</span>
+</pre>
+</body>
+</html>

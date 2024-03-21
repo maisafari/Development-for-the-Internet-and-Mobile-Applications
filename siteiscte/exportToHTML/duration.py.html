@@ -1,0 +1,68 @@
+<html>
+<head>
+<title>duration.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #2aacb8;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+duration.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">datetime</span>
+
+
+<span class="s0">def </span><span class="s1">_get_duration_components</span><span class="s2">(</span><span class="s1">duration</span><span class="s2">):</span>
+    <span class="s1">days </span><span class="s2">= </span><span class="s1">duration</span><span class="s2">.</span><span class="s1">days</span>
+    <span class="s1">seconds </span><span class="s2">= </span><span class="s1">duration</span><span class="s2">.</span><span class="s1">seconds</span>
+    <span class="s1">microseconds </span><span class="s2">= </span><span class="s1">duration</span><span class="s2">.</span><span class="s1">microseconds</span>
+
+    <span class="s1">minutes </span><span class="s2">= </span><span class="s1">seconds </span><span class="s2">// </span><span class="s3">60</span>
+    <span class="s1">seconds </span><span class="s2">%= </span><span class="s3">60</span>
+
+    <span class="s1">hours </span><span class="s2">= </span><span class="s1">minutes </span><span class="s2">// </span><span class="s3">60</span>
+    <span class="s1">minutes </span><span class="s2">%= </span><span class="s3">60</span>
+
+    <span class="s0">return </span><span class="s1">days</span><span class="s2">, </span><span class="s1">hours</span><span class="s2">, </span><span class="s1">minutes</span><span class="s2">, </span><span class="s1">seconds</span><span class="s2">, </span><span class="s1">microseconds</span>
+
+
+<span class="s0">def </span><span class="s1">duration_string</span><span class="s2">(</span><span class="s1">duration</span><span class="s2">):</span>
+    <span class="s4">&quot;&quot;&quot;Version of str(timedelta) which is not English specific.&quot;&quot;&quot;</span>
+    <span class="s1">days</span><span class="s2">, </span><span class="s1">hours</span><span class="s2">, </span><span class="s1">minutes</span><span class="s2">, </span><span class="s1">seconds</span><span class="s2">, </span><span class="s1">microseconds </span><span class="s2">= </span><span class="s1">_get_duration_components</span><span class="s2">(</span><span class="s1">duration</span><span class="s2">)</span>
+
+    <span class="s1">string </span><span class="s2">= </span><span class="s5">&quot;{:02d}:{:02d}:{:02d}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">hours</span><span class="s2">, </span><span class="s1">minutes</span><span class="s2">, </span><span class="s1">seconds</span><span class="s2">)</span>
+    <span class="s0">if </span><span class="s1">days</span><span class="s2">:</span>
+        <span class="s1">string </span><span class="s2">= </span><span class="s5">&quot;{} &quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">days</span><span class="s2">) + </span><span class="s1">string</span>
+    <span class="s0">if </span><span class="s1">microseconds</span><span class="s2">:</span>
+        <span class="s1">string </span><span class="s2">+= </span><span class="s5">&quot;.{:06d}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">microseconds</span><span class="s2">)</span>
+
+    <span class="s0">return </span><span class="s1">string</span>
+
+
+<span class="s0">def </span><span class="s1">duration_iso_string</span><span class="s2">(</span><span class="s1">duration</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">duration </span><span class="s2">&lt; </span><span class="s1">datetime</span><span class="s2">.</span><span class="s1">timedelta</span><span class="s2">(</span><span class="s3">0</span><span class="s2">):</span>
+        <span class="s1">sign </span><span class="s2">= </span><span class="s5">&quot;-&quot;</span>
+        <span class="s1">duration </span><span class="s2">*= -</span><span class="s3">1</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">sign </span><span class="s2">= </span><span class="s5">&quot;&quot;</span>
+
+    <span class="s1">days</span><span class="s2">, </span><span class="s1">hours</span><span class="s2">, </span><span class="s1">minutes</span><span class="s2">, </span><span class="s1">seconds</span><span class="s2">, </span><span class="s1">microseconds </span><span class="s2">= </span><span class="s1">_get_duration_components</span><span class="s2">(</span><span class="s1">duration</span><span class="s2">)</span>
+    <span class="s1">ms </span><span class="s2">= </span><span class="s5">&quot;.{:06d}&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">microseconds</span><span class="s2">) </span><span class="s0">if </span><span class="s1">microseconds </span><span class="s0">else </span><span class="s5">&quot;&quot;</span>
+    <span class="s0">return </span><span class="s5">&quot;{}P{}DT{:02d}H{:02d}M{:02d}{}S&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span>
+        <span class="s1">sign</span><span class="s2">, </span><span class="s1">days</span><span class="s2">, </span><span class="s1">hours</span><span class="s2">, </span><span class="s1">minutes</span><span class="s2">, </span><span class="s1">seconds</span><span class="s2">, </span><span class="s1">ms</span>
+    <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">duration_microseconds</span><span class="s2">(</span><span class="s1">delta</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s2">(</span><span class="s3">24 </span><span class="s2">* </span><span class="s3">60 </span><span class="s2">* </span><span class="s3">60 </span><span class="s2">* </span><span class="s1">delta</span><span class="s2">.</span><span class="s1">days </span><span class="s2">+ </span><span class="s1">delta</span><span class="s2">.</span><span class="s1">seconds</span><span class="s2">) * </span><span class="s3">1000000 </span><span class="s2">+ </span><span class="s1">delta</span><span class="s2">.</span><span class="s1">microseconds</span>
+</pre>
+</body>
+</html>

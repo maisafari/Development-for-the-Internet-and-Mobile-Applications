@@ -1,0 +1,57 @@
+<html>
+<head>
+<title>runserver.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+runserver.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">staticfiles</span><span class="s2">.</span><span class="s1">handlers </span><span class="s0">import </span><span class="s1">StaticFilesHandler</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">commands</span><span class="s2">.</span><span class="s1">runserver </span><span class="s0">import </span><span class="s1">Command </span><span class="s0">as </span><span class="s1">RunserverCommand</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">RunserverCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= (</span>
+        <span class="s3">&quot;Starts a lightweight web server for development and also serves static files.&quot;</span>
+    <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">parser</span><span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--nostatic&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_false&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;use_static_handler&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Tells Django to NOT automatically serve static files at STATIC_URL.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--insecure&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;insecure_serving&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Allows serving static files even if DEBUG is False.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_handler</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Return the static files serving handler wrapping the default handler, 
+        if static files should be served. Otherwise return the default handler. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">handler </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_handler</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">)</span>
+        <span class="s1">use_static_handler </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;use_static_handler&quot;</span><span class="s2">]</span>
+        <span class="s1">insecure_serving </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;insecure_serving&quot;</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">use_static_handler </span><span class="s0">and </span><span class="s2">(</span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DEBUG </span><span class="s0">or </span><span class="s1">insecure_serving</span><span class="s2">):</span>
+            <span class="s0">return </span><span class="s1">StaticFilesHandler</span><span class="s2">(</span><span class="s1">handler</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">handler</span>
+</pre>
+</body>
+</html>

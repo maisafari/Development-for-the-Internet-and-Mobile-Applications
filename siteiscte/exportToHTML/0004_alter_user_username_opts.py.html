@@ -1,0 +1,49 @@
+<html>
+<head>
+<title>0004_alter_user_username_opts.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+0004_alter_user_username_opts.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">auth </span><span class="s0">import </span><span class="s1">validators</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">migrations</span><span class="s2">, </span><span class="s1">models</span>
+
+
+<span class="s0">class </span><span class="s1">Migration</span><span class="s2">(</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">Migration</span><span class="s2">):</span>
+    <span class="s1">dependencies </span><span class="s2">= [</span>
+        <span class="s2">(</span><span class="s3">&quot;auth&quot;</span><span class="s2">, </span><span class="s3">&quot;0003_alter_user_email_max_length&quot;</span><span class="s2">),</span>
+    <span class="s2">]</span>
+
+    <span class="s4"># No database changes; modifies validators and error_messages (#13147).</span>
+    <span class="s1">operations </span><span class="s2">= [</span>
+        <span class="s1">migrations</span><span class="s2">.</span><span class="s1">AlterField</span><span class="s2">(</span>
+            <span class="s1">model_name</span><span class="s2">=</span><span class="s3">&quot;user&quot;</span><span class="s2">,</span>
+            <span class="s1">name</span><span class="s2">=</span><span class="s3">&quot;username&quot;</span><span class="s2">,</span>
+            <span class="s1">field</span><span class="s2">=</span><span class="s1">models</span><span class="s2">.</span><span class="s1">CharField</span><span class="s2">(</span>
+                <span class="s1">error_messages</span><span class="s2">={</span><span class="s3">&quot;unique&quot;</span><span class="s2">: </span><span class="s3">&quot;A user with that username already exists.&quot;</span><span class="s2">},</span>
+                <span class="s1">max_length</span><span class="s2">=</span><span class="s5">30</span><span class="s2">,</span>
+                <span class="s1">validators</span><span class="s2">=[</span><span class="s1">validators</span><span class="s2">.</span><span class="s1">UnicodeUsernameValidator</span><span class="s2">()],</span>
+                <span class="s1">help_text</span><span class="s2">=(</span>
+                    <span class="s3">&quot;Required. 30 characters or fewer. Letters, digits and @/./+/-/_ &quot;</span>
+                    <span class="s3">&quot;only.&quot;</span>
+                <span class="s2">),</span>
+                <span class="s1">unique</span><span class="s2">=</span><span class="s0">True</span><span class="s2">,</span>
+                <span class="s1">verbose_name</span><span class="s2">=</span><span class="s3">&quot;username&quot;</span><span class="s2">,</span>
+            <span class="s2">),</span>
+        <span class="s2">),</span>
+    <span class="s2">]</span>
+</pre>
+</body>
+</html>

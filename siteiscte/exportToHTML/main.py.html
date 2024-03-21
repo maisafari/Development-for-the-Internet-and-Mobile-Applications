@@ -1,0 +1,648 @@
+<html>
+<head>
+<title>main.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #7a7e85;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+.s6 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+main.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">warnings</span>
+<span class="s0">from </span><span class="s1">datetime </span><span class="s0">import </span><span class="s1">datetime</span><span class="s2">, </span><span class="s1">timedelta</span>
+
+<span class="s0">from </span><span class="s1">django </span><span class="s0">import </span><span class="s1">forms</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib </span><span class="s0">import </span><span class="s1">messages</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin </span><span class="s0">import </span><span class="s1">FieldListFilter</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">DisallowedModelAdminLookup</span><span class="s2">,</span>
+    <span class="s1">DisallowedModelAdminToField</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin</span><span class="s2">.</span><span class="s1">options </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">IS_FACETS_VAR</span><span class="s2">,</span>
+    <span class="s1">IS_POPUP_VAR</span><span class="s2">,</span>
+    <span class="s1">TO_FIELD_VAR</span><span class="s2">,</span>
+    <span class="s1">IncorrectLookupParameters</span><span class="s2">,</span>
+    <span class="s1">ShowFacets</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">build_q_object_from_lookup_parameters</span><span class="s2">,</span>
+    <span class="s1">get_fields_from_path</span><span class="s2">,</span>
+    <span class="s1">lookup_spawns_duplicates</span><span class="s2">,</span>
+    <span class="s1">prepare_lookup_value</span><span class="s2">,</span>
+    <span class="s1">quote</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">FieldDoesNotExist</span><span class="s2">,</span>
+    <span class="s1">ImproperlyConfigured</span><span class="s2">,</span>
+    <span class="s1">SuspiciousOperation</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">paginator </span><span class="s0">import </span><span class="s1">InvalidPage</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">F</span><span class="s2">, </span><span class="s1">Field</span><span class="s2">, </span><span class="s1">ManyToOneRel</span><span class="s2">, </span><span class="s1">OrderBy</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">expressions </span><span class="s0">import </span><span class="s1">Combinable</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">urls </span><span class="s0">import </span><span class="s1">reverse</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">deprecation </span><span class="s0">import </span><span class="s1">RemovedInDjango60Warning</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">urlencode</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">inspect </span><span class="s0">import </span><span class="s1">func_supports_parameter</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">timezone </span><span class="s0">import </span><span class="s1">make_aware</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">translation </span><span class="s0">import </span><span class="s1">gettext</span>
+
+<span class="s3"># Changelist settings</span>
+<span class="s1">ALL_VAR </span><span class="s2">= </span><span class="s4">&quot;all&quot;</span>
+<span class="s1">ORDER_VAR </span><span class="s2">= </span><span class="s4">&quot;o&quot;</span>
+<span class="s1">PAGE_VAR </span><span class="s2">= </span><span class="s4">&quot;p&quot;</span>
+<span class="s1">SEARCH_VAR </span><span class="s2">= </span><span class="s4">&quot;q&quot;</span>
+<span class="s1">ERROR_FLAG </span><span class="s2">= </span><span class="s4">&quot;e&quot;</span>
+
+<span class="s1">IGNORED_PARAMS </span><span class="s2">= (</span>
+    <span class="s1">ALL_VAR</span><span class="s2">,</span>
+    <span class="s1">ORDER_VAR</span><span class="s2">,</span>
+    <span class="s1">SEARCH_VAR</span><span class="s2">,</span>
+    <span class="s1">IS_FACETS_VAR</span><span class="s2">,</span>
+    <span class="s1">IS_POPUP_VAR</span><span class="s2">,</span>
+    <span class="s1">TO_FIELD_VAR</span><span class="s2">,</span>
+<span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">ChangeListSearchForm</span><span class="s2">(</span><span class="s1">forms</span><span class="s2">.</span><span class="s1">Form</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">super</span><span class="s2">().</span><span class="s1">__init__</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+        <span class="s3"># Populate &quot;fields&quot; dynamically because SEARCH_VAR is a variable:</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">fields </span><span class="s2">= {</span>
+            <span class="s1">SEARCH_VAR</span><span class="s2">: </span><span class="s1">forms</span><span class="s2">.</span><span class="s1">CharField</span><span class="s2">(</span><span class="s1">required</span><span class="s2">=</span><span class="s0">False</span><span class="s2">, </span><span class="s1">strip</span><span class="s2">=</span><span class="s0">False</span><span class="s2">),</span>
+        <span class="s2">}</span>
+
+
+<span class="s0">class </span><span class="s1">ChangeList</span><span class="s2">:</span>
+    <span class="s1">search_form_class </span><span class="s2">= </span><span class="s1">ChangeListSearchForm</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span>
+        <span class="s1">self</span><span class="s2">,</span>
+        <span class="s1">request</span><span class="s2">,</span>
+        <span class="s1">model</span><span class="s2">,</span>
+        <span class="s1">list_display</span><span class="s2">,</span>
+        <span class="s1">list_display_links</span><span class="s2">,</span>
+        <span class="s1">list_filter</span><span class="s2">,</span>
+        <span class="s1">date_hierarchy</span><span class="s2">,</span>
+        <span class="s1">search_fields</span><span class="s2">,</span>
+        <span class="s1">list_select_related</span><span class="s2">,</span>
+        <span class="s1">list_per_page</span><span class="s2">,</span>
+        <span class="s1">list_max_show_all</span><span class="s2">,</span>
+        <span class="s1">list_editable</span><span class="s2">,</span>
+        <span class="s1">model_admin</span><span class="s2">,</span>
+        <span class="s1">sortable_by</span><span class="s2">,</span>
+        <span class="s1">search_help_text</span><span class="s2">,</span>
+    <span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">model </span><span class="s2">= </span><span class="s1">model</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">opts </span><span class="s2">= </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_opts </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">opts</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">root_queryset </span><span class="s2">= </span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">get_queryset</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">list_display </span><span class="s2">= </span><span class="s1">list_display</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">list_display_links </span><span class="s2">= </span><span class="s1">list_display_links</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">list_filter </span><span class="s2">= </span><span class="s1">list_filter</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">has_filters </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">has_active_filters </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">clear_all_filters_qs </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">date_hierarchy </span><span class="s2">= </span><span class="s1">date_hierarchy</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">search_fields </span><span class="s2">= </span><span class="s1">search_fields</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">list_select_related </span><span class="s2">= </span><span class="s1">list_select_related</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">list_per_page </span><span class="s2">= </span><span class="s1">list_per_page</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">list_max_show_all </span><span class="s2">= </span><span class="s1">list_max_show_all</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin </span><span class="s2">= </span><span class="s1">model_admin</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">preserved_filters </span><span class="s2">= </span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">get_preserved_filters</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">sortable_by </span><span class="s2">= </span><span class="s1">sortable_by</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">search_help_text </span><span class="s2">= </span><span class="s1">search_help_text</span>
+
+        <span class="s3"># Get search parameters from the query string.</span>
+        <span class="s1">_search_form </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">search_form_class</span><span class="s2">(</span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span><span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">_search_form</span><span class="s2">.</span><span class="s1">is_valid</span><span class="s2">():</span>
+            <span class="s0">for </span><span class="s1">error </span><span class="s0">in </span><span class="s1">_search_form</span><span class="s2">.</span><span class="s1">errors</span><span class="s2">.</span><span class="s1">values</span><span class="s2">():</span>
+                <span class="s1">messages</span><span class="s2">.</span><span class="s1">error</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s4">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">error</span><span class="s2">))</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">query </span><span class="s2">= </span><span class="s1">_search_form</span><span class="s2">.</span><span class="s1">cleaned_data</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">SEARCH_VAR</span><span class="s2">) </span><span class="s0">or </span><span class="s4">&quot;&quot;</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">page_num </span><span class="s2">= </span><span class="s1">int</span><span class="s2">(</span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">PAGE_VAR</span><span class="s2">, </span><span class="s5">1</span><span class="s2">))</span>
+        <span class="s0">except </span><span class="s1">ValueError</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">page_num </span><span class="s2">= </span><span class="s5">1</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">show_all </span><span class="s2">= </span><span class="s1">ALL_VAR </span><span class="s0">in </span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">is_popup </span><span class="s2">= </span><span class="s1">IS_POPUP_VAR </span><span class="s0">in </span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">add_facets </span><span class="s2">= </span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">show_facets </span><span class="s0">is </span><span class="s1">ShowFacets</span><span class="s2">.</span><span class="s1">ALWAYS </span><span class="s0">or </span><span class="s2">(</span>
+            <span class="s1">model_admin</span><span class="s2">.</span><span class="s1">show_facets </span><span class="s0">is </span><span class="s1">ShowFacets</span><span class="s2">.</span><span class="s1">ALLOW </span><span class="s0">and </span><span class="s1">IS_FACETS_VAR </span><span class="s0">in </span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span>
+        <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">is_facets_optional </span><span class="s2">= </span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">show_facets </span><span class="s0">is </span><span class="s1">ShowFacets</span><span class="s2">.</span><span class="s1">ALLOW</span>
+        <span class="s1">to_field </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">TO_FIELD_VAR</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">to_field </span><span class="s0">and not </span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">to_field_allowed</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">to_field</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">DisallowedModelAdminToField</span><span class="s2">(</span>
+                <span class="s4">&quot;The field %s cannot be referenced.&quot; </span><span class="s2">% </span><span class="s1">to_field</span>
+            <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">to_field </span><span class="s2">= </span><span class="s1">to_field</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">params </span><span class="s2">= </span><span class="s1">dict</span><span class="s2">(</span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span><span class="s2">.</span><span class="s1">items</span><span class="s2">())</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">filter_params </span><span class="s2">= </span><span class="s1">dict</span><span class="s2">(</span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span><span class="s2">.</span><span class="s1">lists</span><span class="s2">())</span>
+        <span class="s0">if </span><span class="s1">PAGE_VAR </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">params</span><span class="s2">:</span>
+            <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">params</span><span class="s2">[</span><span class="s1">PAGE_VAR</span><span class="s2">]</span>
+            <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">filter_params</span><span class="s2">[</span><span class="s1">PAGE_VAR</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">ERROR_FLAG </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">params</span><span class="s2">:</span>
+            <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">params</span><span class="s2">[</span><span class="s1">ERROR_FLAG</span><span class="s2">]</span>
+            <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">filter_params</span><span class="s2">[</span><span class="s1">ERROR_FLAG</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">remove_facet_link </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_query_string</span><span class="s2">(</span><span class="s1">remove</span><span class="s2">=[</span><span class="s1">IS_FACETS_VAR</span><span class="s2">])</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">add_facet_link </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_query_string</span><span class="s2">({</span><span class="s1">IS_FACETS_VAR</span><span class="s2">: </span><span class="s0">True</span><span class="s2">})</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_popup</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">list_editable </span><span class="s2">= ()</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">list_editable </span><span class="s2">= </span><span class="s1">list_editable</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">queryset </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_queryset</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">get_results</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_popup</span><span class="s2">:</span>
+            <span class="s1">title </span><span class="s2">= </span><span class="s1">gettext</span><span class="s2">(</span><span class="s4">&quot;Select %s&quot;</span><span class="s2">)</span>
+        <span class="s0">elif </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">has_change_permission</span><span class="s2">(</span><span class="s1">request</span><span class="s2">):</span>
+            <span class="s1">title </span><span class="s2">= </span><span class="s1">gettext</span><span class="s2">(</span><span class="s4">&quot;Select %s to change&quot;</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">title </span><span class="s2">= </span><span class="s1">gettext</span><span class="s2">(</span><span class="s4">&quot;Select %s to view&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">title </span><span class="s2">= </span><span class="s1">title </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">opts</span><span class="s2">.</span><span class="s1">verbose_name</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">pk_attname </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_opts</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">.</span><span class="s1">attname</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s4">&quot;&lt;%s: model=%s model_admin=%s&gt;&quot; </span><span class="s2">% (</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_filters_params</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">params</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Return all params except IGNORED_PARAMS. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">params </span><span class="s2">= </span><span class="s1">params </span><span class="s0">or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">filter_params</span>
+        <span class="s1">lookup_params </span><span class="s2">= </span><span class="s1">params</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()  </span><span class="s3"># a dictionary of the query string</span>
+        <span class="s3"># Remove all the parameters that are globally and systematically</span>
+        <span class="s3"># ignored.</span>
+        <span class="s0">for </span><span class="s1">ignored </span><span class="s0">in </span><span class="s1">IGNORED_PARAMS</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">ignored </span><span class="s0">in </span><span class="s1">lookup_params</span><span class="s2">:</span>
+                <span class="s0">del </span><span class="s1">lookup_params</span><span class="s2">[</span><span class="s1">ignored</span><span class="s2">]</span>
+        <span class="s0">return </span><span class="s1">lookup_params</span>
+
+    <span class="s0">def </span><span class="s1">get_filters</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s1">lookup_params </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_filters_params</span><span class="s2">()</span>
+        <span class="s1">may_have_duplicates </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s1">has_active_filters </span><span class="s2">= </span><span class="s0">False</span>
+
+        <span class="s1">supports_request </span><span class="s2">= </span><span class="s1">func_supports_parameter</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">lookup_allowed</span><span class="s2">, </span><span class="s4">&quot;request&quot;</span>
+        <span class="s2">)</span>
+        <span class="s0">if not </span><span class="s1">supports_request</span><span class="s2">:</span>
+            <span class="s1">warnings</span><span class="s2">.</span><span class="s1">warn</span><span class="s2">(</span>
+                <span class="s4">f&quot;`request` must be added to the signature of &quot;</span>
+                <span class="s4">f&quot;</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__qualname__</span><span class="s0">}</span><span class="s4">.lookup_allowed().&quot;</span><span class="s2">,</span>
+                <span class="s1">RemovedInDjango60Warning</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value_list </span><span class="s0">in </span><span class="s1">lookup_params</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s0">for </span><span class="s1">value </span><span class="s0">in </span><span class="s1">value_list</span><span class="s2">:</span>
+                <span class="s1">params </span><span class="s2">= (</span><span class="s1">key</span><span class="s2">, </span><span class="s1">value</span><span class="s2">, </span><span class="s1">request</span><span class="s2">) </span><span class="s0">if </span><span class="s1">supports_request </span><span class="s0">else </span><span class="s2">(</span><span class="s1">key</span><span class="s2">, </span><span class="s1">value</span><span class="s2">)</span>
+                <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">lookup_allowed</span><span class="s2">(*</span><span class="s1">params</span><span class="s2">):</span>
+                    <span class="s0">raise </span><span class="s1">DisallowedModelAdminLookup</span><span class="s2">(</span><span class="s4">f&quot;Filtering by </span><span class="s0">{</span><span class="s1">key</span><span class="s0">} </span><span class="s4">not allowed&quot;</span><span class="s2">)</span>
+
+        <span class="s1">filter_specs </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">list_filter </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">list_filter</span><span class="s2">:</span>
+            <span class="s1">lookup_params_count </span><span class="s2">= </span><span class="s1">len</span><span class="s2">(</span><span class="s1">lookup_params</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">callable</span><span class="s2">(</span><span class="s1">list_filter</span><span class="s2">):</span>
+                <span class="s3"># This is simply a custom list filter class.</span>
+                <span class="s1">spec </span><span class="s2">= </span><span class="s1">list_filter</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">lookup_params</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">field_path </span><span class="s2">= </span><span class="s0">None</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">list_filter</span><span class="s2">, (</span><span class="s1">tuple</span><span class="s2">, </span><span class="s1">list</span><span class="s2">)):</span>
+                    <span class="s3"># This is a custom FieldListFilter class for a given field.</span>
+                    <span class="s1">field</span><span class="s2">, </span><span class="s1">field_list_filter_class </span><span class="s2">= </span><span class="s1">list_filter</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s3"># This is simply a field name, so use the default</span>
+                    <span class="s3"># FieldListFilter class that has been registered for the</span>
+                    <span class="s3"># type of the given field.</span>
+                    <span class="s1">field</span><span class="s2">, </span><span class="s1">field_list_filter_class </span><span class="s2">= </span><span class="s1">list_filter</span><span class="s2">, </span><span class="s1">FieldListFilter</span><span class="s2">.</span><span class="s1">create</span>
+                <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">Field</span><span class="s2">):</span>
+                    <span class="s1">field_path </span><span class="s2">= </span><span class="s1">field</span>
+                    <span class="s1">field </span><span class="s2">= </span><span class="s1">get_fields_from_path</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">field_path</span><span class="s2">)[-</span><span class="s5">1</span><span class="s2">]</span>
+
+                <span class="s1">spec </span><span class="s2">= </span><span class="s1">field_list_filter_class</span><span class="s2">(</span>
+                    <span class="s1">field</span><span class="s2">,</span>
+                    <span class="s1">request</span><span class="s2">,</span>
+                    <span class="s1">lookup_params</span><span class="s2">,</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">,</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">,</span>
+                    <span class="s1">field_path</span><span class="s2">=</span><span class="s1">field_path</span><span class="s2">,</span>
+                <span class="s2">)</span>
+                <span class="s3"># field_list_filter_class removes any lookup_params it</span>
+                <span class="s3"># processes. If that happened, check if duplicates should be</span>
+                <span class="s3"># removed.</span>
+                <span class="s0">if </span><span class="s1">lookup_params_count </span><span class="s2">&gt; </span><span class="s1">len</span><span class="s2">(</span><span class="s1">lookup_params</span><span class="s2">):</span>
+                    <span class="s1">may_have_duplicates </span><span class="s2">|= </span><span class="s1">lookup_spawns_duplicates</span><span class="s2">(</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_opts</span><span class="s2">,</span>
+                        <span class="s1">field_path</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">spec </span><span class="s0">and </span><span class="s1">spec</span><span class="s2">.</span><span class="s1">has_output</span><span class="s2">():</span>
+                <span class="s1">filter_specs</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">spec</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">lookup_params_count </span><span class="s2">&gt; </span><span class="s1">len</span><span class="s2">(</span><span class="s1">lookup_params</span><span class="s2">):</span>
+                    <span class="s1">has_active_filters </span><span class="s2">= </span><span class="s0">True</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">date_hierarchy</span><span class="s2">:</span>
+            <span class="s3"># Create bounded lookup parameters so that the query is more</span>
+            <span class="s3"># efficient.</span>
+            <span class="s1">year </span><span class="s2">= </span><span class="s1">lookup_params</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s4">&quot;%s__year&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">date_hierarchy</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">year </span><span class="s0">is not None</span><span class="s2">:</span>
+                <span class="s1">month </span><span class="s2">= </span><span class="s1">lookup_params</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s4">&quot;%s__month&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">date_hierarchy</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+                <span class="s1">day </span><span class="s2">= </span><span class="s1">lookup_params</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">(</span><span class="s4">&quot;%s__day&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">date_hierarchy</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">from_date </span><span class="s2">= </span><span class="s1">datetime</span><span class="s2">(</span>
+                        <span class="s1">int</span><span class="s2">(</span><span class="s1">year</span><span class="s2">[-</span><span class="s5">1</span><span class="s2">]),</span>
+                        <span class="s1">int</span><span class="s2">(</span><span class="s1">month</span><span class="s2">[-</span><span class="s5">1</span><span class="s2">] </span><span class="s0">if </span><span class="s1">month </span><span class="s0">is not None else </span><span class="s5">1</span><span class="s2">),</span>
+                        <span class="s1">int</span><span class="s2">(</span><span class="s1">day</span><span class="s2">[-</span><span class="s5">1</span><span class="s2">] </span><span class="s0">if </span><span class="s1">day </span><span class="s0">is not None else </span><span class="s5">1</span><span class="s2">),</span>
+                    <span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">ValueError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+                    <span class="s0">raise </span><span class="s1">IncorrectLookupParameters</span><span class="s2">(</span><span class="s1">e</span><span class="s2">) </span><span class="s0">from </span><span class="s1">e</span>
+                <span class="s0">if </span><span class="s1">day</span><span class="s2">:</span>
+                    <span class="s1">to_date </span><span class="s2">= </span><span class="s1">from_date </span><span class="s2">+ </span><span class="s1">timedelta</span><span class="s2">(</span><span class="s1">days</span><span class="s2">=</span><span class="s5">1</span><span class="s2">)</span>
+                <span class="s0">elif </span><span class="s1">month</span><span class="s2">:</span>
+                    <span class="s3"># In this branch, from_date will always be the first of a</span>
+                    <span class="s3"># month, so advancing 32 days gives the next month.</span>
+                    <span class="s1">to_date </span><span class="s2">= (</span><span class="s1">from_date </span><span class="s2">+ </span><span class="s1">timedelta</span><span class="s2">(</span><span class="s1">days</span><span class="s2">=</span><span class="s5">32</span><span class="s2">)).</span><span class="s1">replace</span><span class="s2">(</span><span class="s1">day</span><span class="s2">=</span><span class="s5">1</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">to_date </span><span class="s2">= </span><span class="s1">from_date</span><span class="s2">.</span><span class="s1">replace</span><span class="s2">(</span><span class="s1">year</span><span class="s2">=</span><span class="s1">from_date</span><span class="s2">.</span><span class="s1">year </span><span class="s2">+ </span><span class="s5">1</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">USE_TZ</span><span class="s2">:</span>
+                    <span class="s1">from_date </span><span class="s2">= </span><span class="s1">make_aware</span><span class="s2">(</span><span class="s1">from_date</span><span class="s2">)</span>
+                    <span class="s1">to_date </span><span class="s2">= </span><span class="s1">make_aware</span><span class="s2">(</span><span class="s1">to_date</span><span class="s2">)</span>
+                <span class="s1">lookup_params</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span>
+                    <span class="s2">{</span>
+                        <span class="s4">&quot;%s__gte&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">date_hierarchy</span><span class="s2">: [</span><span class="s1">from_date</span><span class="s2">],</span>
+                        <span class="s4">&quot;%s__lt&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">date_hierarchy</span><span class="s2">: [</span><span class="s1">to_date</span><span class="s2">],</span>
+                    <span class="s2">}</span>
+                <span class="s2">)</span>
+
+        <span class="s3"># At this point, all the parameters used by the various ListFilters</span>
+        <span class="s3"># have been removed from lookup_params, which now only contains other</span>
+        <span class="s3"># parameters passed via the query string. We now loop through the</span>
+        <span class="s3"># remaining parameters both to ensure that all the parameters are valid</span>
+        <span class="s3"># fields and to determine if at least one of them spawns duplicates. If</span>
+        <span class="s3"># the lookup parameters aren't real fields, then bail out.</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">for </span><span class="s1">key</span><span class="s2">, </span><span class="s1">value </span><span class="s0">in </span><span class="s1">lookup_params</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+                <span class="s1">lookup_params</span><span class="s2">[</span><span class="s1">key</span><span class="s2">] = </span><span class="s1">prepare_lookup_value</span><span class="s2">(</span><span class="s1">key</span><span class="s2">, </span><span class="s1">value</span><span class="s2">)</span>
+                <span class="s1">may_have_duplicates </span><span class="s2">|= </span><span class="s1">lookup_spawns_duplicates</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_opts</span><span class="s2">, </span><span class="s1">key</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s2">(</span>
+                <span class="s1">filter_specs</span><span class="s2">,</span>
+                <span class="s1">bool</span><span class="s2">(</span><span class="s1">filter_specs</span><span class="s2">),</span>
+                <span class="s1">lookup_params</span><span class="s2">,</span>
+                <span class="s1">may_have_duplicates</span><span class="s2">,</span>
+                <span class="s1">has_active_filters</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">FieldDoesNotExist </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">IncorrectLookupParameters</span><span class="s2">(</span><span class="s1">e</span><span class="s2">) </span><span class="s0">from </span><span class="s1">e</span>
+
+    <span class="s0">def </span><span class="s1">get_query_string</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">new_params</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">remove</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">new_params </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">new_params </span><span class="s2">= {}</span>
+        <span class="s0">if </span><span class="s1">remove </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">remove </span><span class="s2">= []</span>
+        <span class="s1">p </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">filter_params</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s0">for </span><span class="s1">r </span><span class="s0">in </span><span class="s1">remove</span><span class="s2">:</span>
+            <span class="s0">for </span><span class="s1">k </span><span class="s0">in </span><span class="s1">list</span><span class="s2">(</span><span class="s1">p</span><span class="s2">):</span>
+                <span class="s0">if </span><span class="s1">k</span><span class="s2">.</span><span class="s1">startswith</span><span class="s2">(</span><span class="s1">r</span><span class="s2">):</span>
+                    <span class="s0">del </span><span class="s1">p</span><span class="s2">[</span><span class="s1">k</span><span class="s2">]</span>
+        <span class="s0">for </span><span class="s1">k</span><span class="s2">, </span><span class="s1">v </span><span class="s0">in </span><span class="s1">new_params</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s0">if </span><span class="s1">v </span><span class="s0">is None</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">k </span><span class="s0">in </span><span class="s1">p</span><span class="s2">:</span>
+                    <span class="s0">del </span><span class="s1">p</span><span class="s2">[</span><span class="s1">k</span><span class="s2">]</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">p</span><span class="s2">[</span><span class="s1">k</span><span class="s2">] = </span><span class="s1">v</span>
+        <span class="s0">return </span><span class="s4">&quot;?%s&quot; </span><span class="s2">% </span><span class="s1">urlencode</span><span class="s2">(</span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">p</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()), </span><span class="s1">doseq</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_results</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s1">paginator </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">get_paginator</span><span class="s2">(</span>
+            <span class="s1">request</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">queryset</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">list_per_page</span>
+        <span class="s2">)</span>
+        <span class="s3"># Get the number of objects, with admin filters applied.</span>
+        <span class="s1">result_count </span><span class="s2">= </span><span class="s1">paginator</span><span class="s2">.</span><span class="s1">count</span>
+
+        <span class="s3"># Get the total number of objects, with no admin filters applied.</span>
+        <span class="s3"># Note this isn't necessarily the same as result_count in the case of</span>
+        <span class="s3"># no filtering. Filters defined in list_filters may still apply some</span>
+        <span class="s3"># default filtering which may be removed with query parameters.</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">show_full_result_count</span><span class="s2">:</span>
+            <span class="s1">full_result_count </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">root_queryset</span><span class="s2">.</span><span class="s1">count</span><span class="s2">()</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">full_result_count </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">can_show_all </span><span class="s2">= </span><span class="s1">result_count </span><span class="s2">&lt;= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">list_max_show_all</span>
+        <span class="s1">multi_page </span><span class="s2">= </span><span class="s1">result_count </span><span class="s2">&gt; </span><span class="s1">self</span><span class="s2">.</span><span class="s1">list_per_page</span>
+
+        <span class="s3"># Get the list of objects to display on this page.</span>
+        <span class="s0">if </span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">show_all </span><span class="s0">and </span><span class="s1">can_show_all</span><span class="s2">) </span><span class="s0">or not </span><span class="s1">multi_page</span><span class="s2">:</span>
+            <span class="s1">result_list </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">_clone</span><span class="s2">()</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">result_list </span><span class="s2">= </span><span class="s1">paginator</span><span class="s2">.</span><span class="s1">page</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">page_num</span><span class="s2">).</span><span class="s1">object_list</span>
+            <span class="s0">except </span><span class="s1">InvalidPage</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">IncorrectLookupParameters</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">result_count </span><span class="s2">= </span><span class="s1">result_count</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">show_full_result_count </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">show_full_result_count</span>
+        <span class="s3"># Admin actions are shown if there is at least one entry</span>
+        <span class="s3"># or if entries are not counted because show_full_result_count is disabled</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">show_admin_actions </span><span class="s2">= </span><span class="s0">not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">show_full_result_count </span><span class="s0">or </span><span class="s1">bool</span><span class="s2">(</span>
+            <span class="s1">full_result_count</span>
+        <span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">full_result_count </span><span class="s2">= </span><span class="s1">full_result_count</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">result_list </span><span class="s2">= </span><span class="s1">result_list</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">can_show_all </span><span class="s2">= </span><span class="s1">can_show_all</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">multi_page </span><span class="s2">= </span><span class="s1">multi_page</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">paginator </span><span class="s2">= </span><span class="s1">paginator</span>
+
+    <span class="s0">def </span><span class="s1">_get_default_ordering</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">ordering </span><span class="s2">= []</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">ordering</span><span class="s2">:</span>
+            <span class="s1">ordering </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">ordering</span>
+        <span class="s0">elif </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_opts</span><span class="s2">.</span><span class="s1">ordering</span><span class="s2">:</span>
+            <span class="s1">ordering </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_opts</span><span class="s2">.</span><span class="s1">ordering</span>
+        <span class="s0">return </span><span class="s1">ordering</span>
+
+    <span class="s0">def </span><span class="s1">get_ordering_field</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">field_name</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Return the proper model field name corresponding to the given 
+        field_name to use for ordering. field_name may either be the name of a 
+        proper model field or the name of a method (on the admin or model) or a 
+        callable with the 'admin_order_field' attribute. Return None if no 
+        proper model field name can be matched. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">field </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_opts</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">field</span><span class="s2">.</span><span class="s1">name</span>
+        <span class="s0">except </span><span class="s1">FieldDoesNotExist</span><span class="s2">:</span>
+            <span class="s3"># See whether field_name is a name of a non-field</span>
+            <span class="s3"># that allows sorting.</span>
+            <span class="s0">if </span><span class="s1">callable</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">):</span>
+                <span class="s1">attr </span><span class="s2">= </span><span class="s1">field_name</span>
+            <span class="s0">elif </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">, </span><span class="s1">field_name</span><span class="s2">):</span>
+                <span class="s1">attr </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">, </span><span class="s1">field_name</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">attr </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model</span><span class="s2">, </span><span class="s1">field_name</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">attr</span><span class="s2">, </span><span class="s1">property</span><span class="s2">) </span><span class="s0">and </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">attr</span><span class="s2">, </span><span class="s4">&quot;fget&quot;</span><span class="s2">):</span>
+                <span class="s1">attr </span><span class="s2">= </span><span class="s1">attr</span><span class="s2">.</span><span class="s1">fget</span>
+            <span class="s0">return </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">attr</span><span class="s2">, </span><span class="s4">&quot;admin_order_field&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_ordering</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">queryset</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Return the list of ordering fields for the change list. 
+        First check the get_ordering() method in model admin, then check 
+        the object's default ordering. Then, any manually-specified ordering 
+        from the query string overrides anything. Finally, a deterministic 
+        order is guaranteed by calling _get_deterministic_ordering() with the 
+        constructed ordering. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">params </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">params</span>
+        <span class="s1">ordering </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">get_ordering</span><span class="s2">(</span><span class="s1">request</span><span class="s2">) </span><span class="s0">or </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_default_ordering</span><span class="s2">()</span>
+        <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">ORDER_VAR </span><span class="s0">in </span><span class="s1">params</span><span class="s2">:</span>
+            <span class="s3"># Clear ordering and used params</span>
+            <span class="s1">ordering </span><span class="s2">= []</span>
+            <span class="s1">order_params </span><span class="s2">= </span><span class="s1">params</span><span class="s2">[</span><span class="s1">ORDER_VAR</span><span class="s2">].</span><span class="s1">split</span><span class="s2">(</span><span class="s4">&quot;.&quot;</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">order_params</span><span class="s2">:</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">none</span><span class="s2">, </span><span class="s1">pfx</span><span class="s2">, </span><span class="s1">idx </span><span class="s2">= </span><span class="s1">p</span><span class="s2">.</span><span class="s1">rpartition</span><span class="s2">(</span><span class="s4">&quot;-&quot;</span><span class="s2">)</span>
+                    <span class="s1">field_name </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">list_display</span><span class="s2">[</span><span class="s1">int</span><span class="s2">(</span><span class="s1">idx</span><span class="s2">)]</span>
+                    <span class="s1">order_field </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_ordering_field</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">)</span>
+                    <span class="s0">if not </span><span class="s1">order_field</span><span class="s2">:</span>
+                        <span class="s0">continue  </span><span class="s3"># No 'admin_order_field', skip it</span>
+                    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">order_field</span><span class="s2">, </span><span class="s1">OrderBy</span><span class="s2">):</span>
+                        <span class="s0">if </span><span class="s1">pfx </span><span class="s2">== </span><span class="s4">&quot;-&quot;</span><span class="s2">:</span>
+                            <span class="s1">order_field </span><span class="s2">= </span><span class="s1">order_field</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+                            <span class="s1">order_field</span><span class="s2">.</span><span class="s1">reverse_ordering</span><span class="s2">()</span>
+                        <span class="s1">ordering</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">order_field</span><span class="s2">)</span>
+                    <span class="s0">elif </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">order_field</span><span class="s2">, </span><span class="s4">&quot;resolve_expression&quot;</span><span class="s2">):</span>
+                        <span class="s3"># order_field is an expression.</span>
+                        <span class="s1">ordering</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                            <span class="s1">order_field</span><span class="s2">.</span><span class="s1">desc</span><span class="s2">() </span><span class="s0">if </span><span class="s1">pfx </span><span class="s2">== </span><span class="s4">&quot;-&quot; </span><span class="s0">else </span><span class="s1">order_field</span><span class="s2">.</span><span class="s1">asc</span><span class="s2">()</span>
+                        <span class="s2">)</span>
+                    <span class="s3"># reverse order if order_field has already &quot;-&quot; as prefix</span>
+                    <span class="s0">elif </span><span class="s1">pfx </span><span class="s2">== </span><span class="s4">&quot;-&quot; </span><span class="s0">and </span><span class="s1">order_field</span><span class="s2">.</span><span class="s1">startswith</span><span class="s2">(</span><span class="s1">pfx</span><span class="s2">):</span>
+                        <span class="s1">ordering</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">order_field</span><span class="s2">.</span><span class="s1">removeprefix</span><span class="s2">(</span><span class="s1">pfx</span><span class="s2">))</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s1">ordering</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">pfx </span><span class="s2">+ </span><span class="s1">order_field</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s2">(</span><span class="s1">IndexError</span><span class="s2">, </span><span class="s1">ValueError</span><span class="s2">):</span>
+                    <span class="s0">continue  </span><span class="s3"># Invalid ordering specified, skip it.</span>
+
+        <span class="s3"># Add the given query's ordering fields, if any.</span>
+        <span class="s1">ordering</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">queryset</span><span class="s2">.</span><span class="s1">query</span><span class="s2">.</span><span class="s1">order_by</span><span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_deterministic_ordering</span><span class="s2">(</span><span class="s1">ordering</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_get_deterministic_ordering</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">ordering</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Ensure a deterministic order across all database backends. Search for a 
+        single field or unique together set of fields providing a total 
+        ordering. If these are missing, augment the ordering with a descendant 
+        primary key. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">ordering </span><span class="s2">= </span><span class="s1">list</span><span class="s2">(</span><span class="s1">ordering</span><span class="s2">)</span>
+        <span class="s1">ordering_fields </span><span class="s2">= </span><span class="s1">set</span><span class="s2">()</span>
+        <span class="s1">total_ordering_fields </span><span class="s2">= {</span><span class="s4">&quot;pk&quot;</span><span class="s2">} | {</span>
+            <span class="s1">field</span><span class="s2">.</span><span class="s1">attname</span>
+            <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_opts</span><span class="s2">.</span><span class="s1">fields</span>
+            <span class="s0">if </span><span class="s1">field</span><span class="s2">.</span><span class="s1">unique </span><span class="s0">and not </span><span class="s1">field</span><span class="s2">.</span><span class="s1">null</span>
+        <span class="s2">}</span>
+        <span class="s0">for </span><span class="s1">part </span><span class="s0">in </span><span class="s1">ordering</span><span class="s2">:</span>
+            <span class="s3"># Search for single field providing a total ordering.</span>
+            <span class="s1">field_name </span><span class="s2">= </span><span class="s0">None</span>
+            <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">part</span><span class="s2">, </span><span class="s1">str</span><span class="s2">):</span>
+                <span class="s1">field_name </span><span class="s2">= </span><span class="s1">part</span><span class="s2">.</span><span class="s1">lstrip</span><span class="s2">(</span><span class="s4">&quot;-&quot;</span><span class="s2">)</span>
+            <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">part</span><span class="s2">, </span><span class="s1">F</span><span class="s2">):</span>
+                <span class="s1">field_name </span><span class="s2">= </span><span class="s1">part</span><span class="s2">.</span><span class="s1">name</span>
+            <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">part</span><span class="s2">, </span><span class="s1">OrderBy</span><span class="s2">) </span><span class="s0">and </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">part</span><span class="s2">.</span><span class="s1">expression</span><span class="s2">, </span><span class="s1">F</span><span class="s2">):</span>
+                <span class="s1">field_name </span><span class="s2">= </span><span class="s1">part</span><span class="s2">.</span><span class="s1">expression</span><span class="s2">.</span><span class="s1">name</span>
+            <span class="s0">if </span><span class="s1">field_name</span><span class="s2">:</span>
+                <span class="s3"># Normalize attname references by using get_field().</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">field </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_opts</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">FieldDoesNotExist</span><span class="s2">:</span>
+                    <span class="s3"># Could be &quot;?&quot; for random ordering or a related field</span>
+                    <span class="s3"># lookup. Skip this part of introspection for now.</span>
+                    <span class="s0">continue</span>
+                <span class="s3"># Ordering by a related field name orders by the referenced</span>
+                <span class="s3"># model's ordering. Skip this part of introspection for now.</span>
+                <span class="s0">if </span><span class="s1">field</span><span class="s2">.</span><span class="s1">remote_field </span><span class="s0">and </span><span class="s1">field_name </span><span class="s2">== </span><span class="s1">field</span><span class="s2">.</span><span class="s1">name</span><span class="s2">:</span>
+                    <span class="s0">continue</span>
+                <span class="s0">if </span><span class="s1">field</span><span class="s2">.</span><span class="s1">attname </span><span class="s0">in </span><span class="s1">total_ordering_fields</span><span class="s2">:</span>
+                    <span class="s0">break</span>
+                <span class="s1">ordering_fields</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">attname</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s3"># No single total ordering field, try unique_together and total</span>
+            <span class="s3"># unique constraints.</span>
+            <span class="s1">constraint_field_names </span><span class="s2">= (</span>
+                <span class="s2">*</span><span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_opts</span><span class="s2">.</span><span class="s1">unique_together</span><span class="s2">,</span>
+                <span class="s2">*(</span>
+                    <span class="s1">constraint</span><span class="s2">.</span><span class="s1">fields</span>
+                    <span class="s0">for </span><span class="s1">constraint </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_opts</span><span class="s2">.</span><span class="s1">total_unique_constraints</span>
+                <span class="s2">),</span>
+            <span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">field_names </span><span class="s0">in </span><span class="s1">constraint_field_names</span><span class="s2">:</span>
+                <span class="s3"># Normalize attname references by using get_field().</span>
+                <span class="s1">fields </span><span class="s2">= [</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_opts</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">) </span><span class="s0">for </span><span class="s1">field_name </span><span class="s0">in </span><span class="s1">field_names</span>
+                <span class="s2">]</span>
+                <span class="s3"># Composite unique constraints containing a nullable column</span>
+                <span class="s3"># cannot ensure total ordering.</span>
+                <span class="s0">if </span><span class="s1">any</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">null </span><span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">fields</span><span class="s2">):</span>
+                    <span class="s0">continue</span>
+                <span class="s0">if </span><span class="s1">ordering_fields</span><span class="s2">.</span><span class="s1">issuperset</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">attname </span><span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">fields</span><span class="s2">):</span>
+                    <span class="s0">break</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s3"># If no set of unique fields is present in the ordering, rely</span>
+                <span class="s3"># on the primary key to provide total ordering.</span>
+                <span class="s1">ordering</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s4">&quot;-pk&quot;</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">ordering</span>
+
+    <span class="s0">def </span><span class="s1">get_ordering_field_columns</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Return a dictionary of ordering field column numbers and asc/desc. 
+        &quot;&quot;&quot;</span>
+        <span class="s3"># We must cope with more than one column having the same underlying sort</span>
+        <span class="s3"># field, so we base things on column numbers.</span>
+        <span class="s1">ordering </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_default_ordering</span><span class="s2">()</span>
+        <span class="s1">ordering_fields </span><span class="s2">= {}</span>
+        <span class="s0">if </span><span class="s1">ORDER_VAR </span><span class="s0">not in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">params</span><span class="s2">:</span>
+            <span class="s3"># for ordering specified on ModelAdmin or model Meta, we don't know</span>
+            <span class="s3"># the right column numbers absolutely, because there might be more</span>
+            <span class="s3"># than one column associated with that ordering, so we guess.</span>
+            <span class="s0">for </span><span class="s1">field </span><span class="s0">in </span><span class="s1">ordering</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, (</span><span class="s1">Combinable</span><span class="s2">, </span><span class="s1">OrderBy</span><span class="s2">)):</span>
+                    <span class="s0">if not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">, </span><span class="s1">OrderBy</span><span class="s2">):</span>
+                        <span class="s1">field </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">asc</span><span class="s2">()</span>
+                    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">expression</span><span class="s2">, </span><span class="s1">F</span><span class="s2">):</span>
+                        <span class="s1">order_type </span><span class="s2">= </span><span class="s4">&quot;desc&quot; </span><span class="s0">if </span><span class="s1">field</span><span class="s2">.</span><span class="s1">descending </span><span class="s0">else </span><span class="s4">&quot;asc&quot;</span>
+                        <span class="s1">field </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">expression</span><span class="s2">.</span><span class="s1">name</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s0">continue</span>
+                <span class="s0">elif </span><span class="s1">field</span><span class="s2">.</span><span class="s1">startswith</span><span class="s2">(</span><span class="s4">&quot;-&quot;</span><span class="s2">):</span>
+                    <span class="s1">field </span><span class="s2">= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">removeprefix</span><span class="s2">(</span><span class="s4">&quot;-&quot;</span><span class="s2">)</span>
+                    <span class="s1">order_type </span><span class="s2">= </span><span class="s4">&quot;desc&quot;</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">order_type </span><span class="s2">= </span><span class="s4">&quot;asc&quot;</span>
+                <span class="s0">for </span><span class="s1">index</span><span class="s2">, </span><span class="s1">attr </span><span class="s0">in </span><span class="s1">enumerate</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">list_display</span><span class="s2">):</span>
+                    <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_ordering_field</span><span class="s2">(</span><span class="s1">attr</span><span class="s2">) == </span><span class="s1">field</span><span class="s2">:</span>
+                        <span class="s1">ordering_fields</span><span class="s2">[</span><span class="s1">index</span><span class="s2">] = </span><span class="s1">order_type</span>
+                        <span class="s0">break</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">for </span><span class="s1">p </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">params</span><span class="s2">[</span><span class="s1">ORDER_VAR</span><span class="s2">].</span><span class="s1">split</span><span class="s2">(</span><span class="s4">&quot;.&quot;</span><span class="s2">):</span>
+                <span class="s1">none</span><span class="s2">, </span><span class="s1">pfx</span><span class="s2">, </span><span class="s1">idx </span><span class="s2">= </span><span class="s1">p</span><span class="s2">.</span><span class="s1">rpartition</span><span class="s2">(</span><span class="s4">&quot;-&quot;</span><span class="s2">)</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">idx </span><span class="s2">= </span><span class="s1">int</span><span class="s2">(</span><span class="s1">idx</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">ValueError</span><span class="s2">:</span>
+                    <span class="s0">continue  </span><span class="s3"># skip it</span>
+                <span class="s1">ordering_fields</span><span class="s2">[</span><span class="s1">idx</span><span class="s2">] = </span><span class="s4">&quot;desc&quot; </span><span class="s0">if </span><span class="s1">pfx </span><span class="s2">== </span><span class="s4">&quot;-&quot; </span><span class="s0">else </span><span class="s4">&quot;asc&quot;</span>
+        <span class="s0">return </span><span class="s1">ordering_fields</span>
+
+    <span class="s0">def </span><span class="s1">get_queryset</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">exclude_parameters</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3"># First, we collect all the declared list filters.</span>
+        <span class="s2">(</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">filter_specs</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">has_filters</span><span class="s2">,</span>
+            <span class="s1">remaining_lookup_params</span><span class="s2">,</span>
+            <span class="s1">filters_may_have_duplicates</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">has_active_filters</span><span class="s2">,</span>
+        <span class="s2">) = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_filters</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s3"># Then, we let every list filter modify the queryset to its liking.</span>
+        <span class="s1">qs </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">root_queryset</span>
+        <span class="s0">for </span><span class="s1">filter_spec </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">filter_specs</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s2">(</span>
+                <span class="s1">exclude_parameters </span><span class="s0">is None</span>
+                <span class="s0">or </span><span class="s1">filter_spec</span><span class="s2">.</span><span class="s1">expected_parameters</span><span class="s2">() != </span><span class="s1">exclude_parameters</span>
+            <span class="s2">):</span>
+                <span class="s1">new_qs </span><span class="s2">= </span><span class="s1">filter_spec</span><span class="s2">.</span><span class="s1">queryset</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">qs</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">new_qs </span><span class="s0">is not None</span><span class="s2">:</span>
+                    <span class="s1">qs </span><span class="s2">= </span><span class="s1">new_qs</span>
+
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s3"># Finally, we apply the remaining lookup parameters from the query</span>
+            <span class="s3"># string (i.e. those that haven't already been processed by the</span>
+            <span class="s3"># filters).</span>
+            <span class="s1">q_object </span><span class="s2">= </span><span class="s1">build_q_object_from_lookup_parameters</span><span class="s2">(</span><span class="s1">remaining_lookup_params</span><span class="s2">)</span>
+            <span class="s1">qs </span><span class="s2">= </span><span class="s1">qs</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">q_object</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s2">(</span><span class="s1">SuspiciousOperation</span><span class="s2">, </span><span class="s1">ImproperlyConfigured</span><span class="s2">):</span>
+            <span class="s3"># Allow certain types of errors to be re-raised as-is so that the</span>
+            <span class="s3"># caller can treat them in a special way.</span>
+            <span class="s0">raise</span>
+        <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s3"># Every other error is caught with a naked except, because we don't</span>
+            <span class="s3"># have any other way of validating lookup parameters. They might be</span>
+            <span class="s3"># invalid if the keyword arguments are incorrect, or if the values</span>
+            <span class="s3"># are not in the correct type, so we might get FieldError,</span>
+            <span class="s3"># ValueError, ValidationError, or ?.</span>
+            <span class="s0">raise </span><span class="s1">IncorrectLookupParameters</span><span class="s2">(</span><span class="s1">e</span><span class="s2">)</span>
+
+        <span class="s0">if not </span><span class="s1">qs</span><span class="s2">.</span><span class="s1">query</span><span class="s2">.</span><span class="s1">select_related</span><span class="s2">:</span>
+            <span class="s1">qs </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">apply_select_related</span><span class="s2">(</span><span class="s1">qs</span><span class="s2">)</span>
+
+        <span class="s3"># Set ordering.</span>
+        <span class="s1">ordering </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_ordering</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">qs</span><span class="s2">)</span>
+        <span class="s1">qs </span><span class="s2">= </span><span class="s1">qs</span><span class="s2">.</span><span class="s1">order_by</span><span class="s2">(*</span><span class="s1">ordering</span><span class="s2">)</span>
+
+        <span class="s3"># Apply search results</span>
+        <span class="s1">qs</span><span class="s2">, </span><span class="s1">search_may_have_duplicates </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">get_search_results</span><span class="s2">(</span>
+            <span class="s1">request</span><span class="s2">,</span>
+            <span class="s1">qs</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">query</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+        <span class="s3"># Set query string for clearing all filters.</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">clear_all_filters_qs </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_query_string</span><span class="s2">(</span>
+            <span class="s1">new_params</span><span class="s2">=</span><span class="s1">remaining_lookup_params</span><span class="s2">,</span>
+            <span class="s1">remove</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_filters_params</span><span class="s2">(),</span>
+        <span class="s2">)</span>
+        <span class="s3"># Remove duplicates from results, if necessary</span>
+        <span class="s0">if </span><span class="s1">filters_may_have_duplicates </span><span class="s2">| </span><span class="s1">search_may_have_duplicates</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">qs</span><span class="s2">.</span><span class="s1">distinct</span><span class="s2">()</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">qs</span>
+
+    <span class="s0">def </span><span class="s1">apply_select_related</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">qs</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">list_select_related </span><span class="s0">is True</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">qs</span><span class="s2">.</span><span class="s1">select_related</span><span class="s2">()</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">list_select_related </span><span class="s0">is False</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">has_related_field_in_list_display</span><span class="s2">():</span>
+                <span class="s0">return </span><span class="s1">qs</span><span class="s2">.</span><span class="s1">select_related</span><span class="s2">()</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">list_select_related</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">qs</span><span class="s2">.</span><span class="s1">select_related</span><span class="s2">(*</span><span class="s1">self</span><span class="s2">.</span><span class="s1">list_select_related</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">qs</span>
+
+    <span class="s0">def </span><span class="s1">has_related_field_in_list_display</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">for </span><span class="s1">field_name </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">list_display</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">field </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">lookup_opts</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s1">field_name</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">FieldDoesNotExist</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">field</span><span class="s2">.</span><span class="s1">remote_field</span><span class="s2">, </span><span class="s1">ManyToOneRel</span><span class="s2">):</span>
+                    <span class="s3"># &lt;FK&gt;_id field names don't require a join.</span>
+                    <span class="s0">if </span><span class="s1">field_name </span><span class="s2">!= </span><span class="s1">field</span><span class="s2">.</span><span class="s1">get_attname</span><span class="s2">():</span>
+                        <span class="s0">return True</span>
+        <span class="s0">return False</span>
+
+    <span class="s0">def </span><span class="s1">url_for_result</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">result</span><span class="s2">):</span>
+        <span class="s1">pk </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">result</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">pk_attname</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">reverse</span><span class="s2">(</span>
+            <span class="s4">&quot;admin:%s_%s_change&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">opts</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">opts</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">),</span>
+            <span class="s1">args</span><span class="s2">=(</span><span class="s1">quote</span><span class="s2">(</span><span class="s1">pk</span><span class="s2">),),</span>
+            <span class="s1">current_app</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">admin_site</span><span class="s2">.</span><span class="s1">name</span><span class="s2">,</span>
+        <span class="s2">)</span>
+</pre>
+</body>
+</html>

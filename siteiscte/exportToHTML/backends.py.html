@@ -1,0 +1,255 @@
+<html>
+<head>
+<title>backends.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+backends.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">auth </span><span class="s0">import </span><span class="s1">get_user_model</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">auth</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">Permission</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">Exists</span><span class="s2">, </span><span class="s1">OuterRef</span><span class="s2">, </span><span class="s1">Q</span>
+
+<span class="s1">UserModel </span><span class="s2">= </span><span class="s1">get_user_model</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">BaseBackend</span><span class="s2">:</span>
+    <span class="s0">def </span><span class="s1">authenticate</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">return None</span>
+
+    <span class="s0">def </span><span class="s1">get_user</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_id</span><span class="s2">):</span>
+        <span class="s0">return None</span>
+
+    <span class="s0">def </span><span class="s1">get_user_permissions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">set</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">get_group_permissions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">set</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">get_all_permissions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s2">{</span>
+            <span class="s2">*</span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_user_permissions</span><span class="s2">(</span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s1">obj</span><span class="s2">),</span>
+            <span class="s2">*</span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_group_permissions</span><span class="s2">(</span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s1">obj</span><span class="s2">),</span>
+        <span class="s2">}</span>
+
+    <span class="s0">def </span><span class="s1">has_perm</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">perm</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">perm </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_all_permissions</span><span class="s2">(</span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s1">obj</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">ModelBackend</span><span class="s2">(</span><span class="s1">BaseBackend</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Authenticates against settings.AUTH_USER_MODEL. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">authenticate</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">username</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">password</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">username </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">username </span><span class="s2">= </span><span class="s1">kwargs</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">USERNAME_FIELD</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">username </span><span class="s0">is None or </span><span class="s1">password </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">return</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">user </span><span class="s2">= </span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">.</span><span class="s1">get_by_natural_key</span><span class="s2">(</span><span class="s1">username</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">DoesNotExist</span><span class="s2">:</span>
+            <span class="s4"># Run the default password hasher once to reduce the timing</span>
+            <span class="s4"># difference between an existing and a nonexistent user (#20760).</span>
+            <span class="s1">UserModel</span><span class="s2">().</span><span class="s1">set_password</span><span class="s2">(</span><span class="s1">password</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">user</span><span class="s2">.</span><span class="s1">check_password</span><span class="s2">(</span><span class="s1">password</span><span class="s2">) </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">user_can_authenticate</span><span class="s2">(</span><span class="s1">user</span><span class="s2">):</span>
+                <span class="s0">return </span><span class="s1">user</span>
+
+    <span class="s0">def </span><span class="s1">user_can_authenticate</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Reject users with is_active=False. Custom user models that don't have 
+        that attribute are allowed. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">user</span><span class="s2">, </span><span class="s5">&quot;is_active&quot;</span><span class="s2">, </span><span class="s0">True</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">_get_user_permissions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_obj</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">user_obj</span><span class="s2">.</span><span class="s1">user_permissions</span><span class="s2">.</span><span class="s1">all</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">_get_group_permissions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_obj</span><span class="s2">):</span>
+        <span class="s1">user_groups_field </span><span class="s2">= </span><span class="s1">get_user_model</span><span class="s2">().</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">get_field</span><span class="s2">(</span><span class="s5">&quot;groups&quot;</span><span class="s2">)</span>
+        <span class="s1">user_groups_query </span><span class="s2">= </span><span class="s5">&quot;group__%s&quot; </span><span class="s2">% </span><span class="s1">user_groups_field</span><span class="s2">.</span><span class="s1">related_query_name</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">Permission</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(**{</span><span class="s1">user_groups_query</span><span class="s2">: </span><span class="s1">user_obj</span><span class="s2">})</span>
+
+    <span class="s0">def </span><span class="s1">_get_permissions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">, </span><span class="s1">from_name</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return the permissions of `user_obj` from `from_name`. `from_name` can 
+        be either &quot;group&quot; or &quot;user&quot; to return permissions from 
+        `_get_group_permissions` or `_get_user_permissions` respectively. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if not </span><span class="s1">user_obj</span><span class="s2">.</span><span class="s1">is_active </span><span class="s0">or </span><span class="s1">user_obj</span><span class="s2">.</span><span class="s1">is_anonymous </span><span class="s0">or </span><span class="s1">obj </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">set</span><span class="s2">()</span>
+
+        <span class="s1">perm_cache_name </span><span class="s2">= </span><span class="s5">&quot;_%s_perm_cache&quot; </span><span class="s2">% </span><span class="s1">from_name</span>
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">perm_cache_name</span><span class="s2">):</span>
+            <span class="s0">if </span><span class="s1">user_obj</span><span class="s2">.</span><span class="s1">is_superuser</span><span class="s2">:</span>
+                <span class="s1">perms </span><span class="s2">= </span><span class="s1">Permission</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">all</span><span class="s2">()</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">perms </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s5">&quot;_get_%s_permissions&quot; </span><span class="s2">% </span><span class="s1">from_name</span><span class="s2">)(</span><span class="s1">user_obj</span><span class="s2">)</span>
+            <span class="s1">perms </span><span class="s2">= </span><span class="s1">perms</span><span class="s2">.</span><span class="s1">values_list</span><span class="s2">(</span><span class="s5">&quot;content_type__app_label&quot;</span><span class="s2">, </span><span class="s5">&quot;codename&quot;</span><span class="s2">).</span><span class="s1">order_by</span><span class="s2">()</span>
+            <span class="s1">setattr</span><span class="s2">(</span>
+                <span class="s1">user_obj</span><span class="s2">, </span><span class="s1">perm_cache_name</span><span class="s2">, {</span><span class="s5">&quot;%s.%s&quot; </span><span class="s2">% (</span><span class="s1">ct</span><span class="s2">, </span><span class="s1">name</span><span class="s2">) </span><span class="s0">for </span><span class="s1">ct</span><span class="s2">, </span><span class="s1">name </span><span class="s0">in </span><span class="s1">perms</span><span class="s2">}</span>
+            <span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">perm_cache_name</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_user_permissions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return a set of permission strings the user `user_obj` has from their 
+        `user_permissions`. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_permissions</span><span class="s2">(</span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">, </span><span class="s5">&quot;user&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_group_permissions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return a set of permission strings the user `user_obj` has from the 
+        groups they belong. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_get_permissions</span><span class="s2">(</span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">, </span><span class="s5">&quot;group&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_all_permissions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">if not </span><span class="s1">user_obj</span><span class="s2">.</span><span class="s1">is_active </span><span class="s0">or </span><span class="s1">user_obj</span><span class="s2">.</span><span class="s1">is_anonymous </span><span class="s0">or </span><span class="s1">obj </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">set</span><span class="s2">()</span>
+        <span class="s0">if not </span><span class="s1">hasattr</span><span class="s2">(</span><span class="s1">user_obj</span><span class="s2">, </span><span class="s5">&quot;_perm_cache&quot;</span><span class="s2">):</span>
+            <span class="s1">user_obj</span><span class="s2">.</span><span class="s1">_perm_cache </span><span class="s2">= </span><span class="s1">super</span><span class="s2">().</span><span class="s1">get_all_permissions</span><span class="s2">(</span><span class="s1">user_obj</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">user_obj</span><span class="s2">.</span><span class="s1">_perm_cache</span>
+
+    <span class="s0">def </span><span class="s1">has_perm</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">perm</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">user_obj</span><span class="s2">.</span><span class="s1">is_active </span><span class="s0">and </span><span class="s1">super</span><span class="s2">().</span><span class="s1">has_perm</span><span class="s2">(</span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">perm</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s1">obj</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">has_module_perms</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_obj</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return True if user_obj has any permissions in the given app_label. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">user_obj</span><span class="s2">.</span><span class="s1">is_active </span><span class="s0">and </span><span class="s1">any</span><span class="s2">(</span>
+            <span class="s1">perm</span><span class="s2">[: </span><span class="s1">perm</span><span class="s2">.</span><span class="s1">index</span><span class="s2">(</span><span class="s5">&quot;.&quot;</span><span class="s2">)] == </span><span class="s1">app_label</span>
+            <span class="s0">for </span><span class="s1">perm </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_all_permissions</span><span class="s2">(</span><span class="s1">user_obj</span><span class="s2">)</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">with_perm</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">perm</span><span class="s2">, </span><span class="s1">is_active</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">include_superusers</span><span class="s2">=</span><span class="s0">True</span><span class="s2">, </span><span class="s1">obj</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return users that have permission &quot;perm&quot;. By default, filter out 
+        inactive users and include superusers. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">perm</span><span class="s2">, </span><span class="s1">str</span><span class="s2">):</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">app_label</span><span class="s2">, </span><span class="s1">codename </span><span class="s2">= </span><span class="s1">perm</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s5">&quot;.&quot;</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">ValueError</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s5">&quot;Permission name should be in the form &quot;</span>
+                    <span class="s5">&quot;app_label.permission_codename.&quot;</span>
+                <span class="s2">)</span>
+        <span class="s0">elif not </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">perm</span><span class="s2">, </span><span class="s1">Permission</span><span class="s2">):</span>
+            <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+                <span class="s5">&quot;The `perm` argument must be a string or a permission instance.&quot;</span>
+            <span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">obj </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">.</span><span class="s1">none</span><span class="s2">()</span>
+
+        <span class="s1">permission_q </span><span class="s2">= </span><span class="s1">Q</span><span class="s2">(</span><span class="s1">group__user</span><span class="s2">=</span><span class="s1">OuterRef</span><span class="s2">(</span><span class="s5">&quot;pk&quot;</span><span class="s2">)) | </span><span class="s1">Q</span><span class="s2">(</span><span class="s1">user</span><span class="s2">=</span><span class="s1">OuterRef</span><span class="s2">(</span><span class="s5">&quot;pk&quot;</span><span class="s2">))</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">perm</span><span class="s2">, </span><span class="s1">Permission</span><span class="s2">):</span>
+            <span class="s1">permission_q </span><span class="s2">&amp;= </span><span class="s1">Q</span><span class="s2">(</span><span class="s1">pk</span><span class="s2">=</span><span class="s1">perm</span><span class="s2">.</span><span class="s1">pk</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">permission_q </span><span class="s2">&amp;= </span><span class="s1">Q</span><span class="s2">(</span><span class="s1">codename</span><span class="s2">=</span><span class="s1">codename</span><span class="s2">, </span><span class="s1">content_type__app_label</span><span class="s2">=</span><span class="s1">app_label</span><span class="s2">)</span>
+
+        <span class="s1">user_q </span><span class="s2">= </span><span class="s1">Exists</span><span class="s2">(</span><span class="s1">Permission</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">permission_q</span><span class="s2">))</span>
+        <span class="s0">if </span><span class="s1">include_superusers</span><span class="s2">:</span>
+            <span class="s1">user_q </span><span class="s2">|= </span><span class="s1">Q</span><span class="s2">(</span><span class="s1">is_superuser</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">is_active </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">user_q </span><span class="s2">&amp;= </span><span class="s1">Q</span><span class="s2">(</span><span class="s1">is_active</span><span class="s2">=</span><span class="s1">is_active</span><span class="s2">)</span>
+
+        <span class="s0">return </span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">.</span><span class="s1">filter</span><span class="s2">(</span><span class="s1">user_q</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_user</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user_id</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">user </span><span class="s2">= </span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">pk</span><span class="s2">=</span><span class="s1">user_id</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">DoesNotExist</span><span class="s2">:</span>
+            <span class="s0">return None</span>
+        <span class="s0">return </span><span class="s1">user </span><span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">user_can_authenticate</span><span class="s2">(</span><span class="s1">user</span><span class="s2">) </span><span class="s0">else None</span>
+
+
+<span class="s0">class </span><span class="s1">AllowAllUsersModelBackend</span><span class="s2">(</span><span class="s1">ModelBackend</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">user_can_authenticate</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user</span><span class="s2">):</span>
+        <span class="s0">return True</span>
+
+
+<span class="s0">class </span><span class="s1">RemoteUserBackend</span><span class="s2">(</span><span class="s1">ModelBackend</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    This backend is to be used in conjunction with the ``RemoteUserMiddleware`` 
+    found in the middleware module of this package, and is used when the server 
+    is handling authentication outside of Django. 
+ 
+    By default, the ``authenticate`` method creates ``User`` objects for 
+    usernames that don't already exist in the database.  Subclasses can disable 
+    this behavior by setting the ``create_unknown_user`` attribute to 
+    ``False``. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s4"># Create a User object if not already in the database?</span>
+    <span class="s1">create_unknown_user </span><span class="s2">= </span><span class="s0">True</span>
+
+    <span class="s0">def </span><span class="s1">authenticate</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">remote_user</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        The username passed as ``remote_user`` is considered trusted. Return 
+        the ``User`` object with the given username. Create a new ``User`` 
+        object if ``create_unknown_user`` is ``True``. 
+ 
+        Return None if ``create_unknown_user`` is ``False`` and a ``User`` 
+        object with the given username is not found in the database. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if not </span><span class="s1">remote_user</span><span class="s2">:</span>
+            <span class="s0">return</span>
+        <span class="s1">created </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s1">user </span><span class="s2">= </span><span class="s0">None</span>
+        <span class="s1">username </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">clean_username</span><span class="s2">(</span><span class="s1">remote_user</span><span class="s2">)</span>
+
+        <span class="s4"># Note that this could be accomplished in one try-except clause, but</span>
+        <span class="s4"># instead we use get_or_create when creating unknown users since it has</span>
+        <span class="s4"># built-in safeguards for multiple threads.</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">create_unknown_user</span><span class="s2">:</span>
+            <span class="s1">user</span><span class="s2">, </span><span class="s1">created </span><span class="s2">= </span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">.</span><span class="s1">get_or_create</span><span class="s2">(</span>
+                <span class="s2">**{</span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">USERNAME_FIELD</span><span class="s2">: </span><span class="s1">username</span><span class="s2">}</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">user </span><span class="s2">= </span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">_default_manager</span><span class="s2">.</span><span class="s1">get_by_natural_key</span><span class="s2">(</span><span class="s1">username</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">UserModel</span><span class="s2">.</span><span class="s1">DoesNotExist</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+        <span class="s1">user </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">configure_user</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">user</span><span class="s2">, </span><span class="s1">created</span><span class="s2">=</span><span class="s1">created</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">user </span><span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">user_can_authenticate</span><span class="s2">(</span><span class="s1">user</span><span class="s2">) </span><span class="s0">else None</span>
+
+    <span class="s0">def </span><span class="s1">clean_username</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">username</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Perform any cleaning on the &quot;username&quot; prior to using it to get or 
+        create the user object.  Return the cleaned username. 
+ 
+        By default, return the username unchanged. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">username</span>
+
+    <span class="s0">def </span><span class="s1">configure_user</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">user</span><span class="s2">, </span><span class="s1">created</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Configure a user and return the updated user. 
+ 
+        By default, return the user unmodified. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">user</span>
+
+
+<span class="s0">class </span><span class="s1">AllowAllUsersRemoteUserBackend</span><span class="s2">(</span><span class="s1">RemoteUserBackend</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">user_can_authenticate</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">user</span><span class="s2">):</span>
+        <span class="s0">return True</span>
+</pre>
+</body>
+</html>

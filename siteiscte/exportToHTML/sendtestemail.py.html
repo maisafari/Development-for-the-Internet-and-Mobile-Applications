@@ -1,0 +1,66 @@
+<html>
+<head>
+<title>sendtestemail.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+sendtestemail.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">socket</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">mail </span><span class="s0">import </span><span class="s1">mail_admins</span><span class="s2">, </span><span class="s1">mail_managers</span><span class="s2">, </span><span class="s1">send_mail</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">timezone</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= </span><span class="s3">&quot;Sends a test email to the email addresses specified as arguments.&quot;</span>
+    <span class="s1">missing_args_message </span><span class="s2">= (</span>
+        <span class="s3">&quot;You must specify some email recipients, or pass the --managers or --admin &quot;</span>
+        <span class="s3">&quot;options.&quot;</span>
+    <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;email&quot;</span><span class="s2">,</span>
+            <span class="s1">nargs</span><span class="s2">=</span><span class="s3">&quot;*&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;One or more email addresses to send a test email to.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--managers&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Send a test email to the addresses specified in settings.MANAGERS.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--admins&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Send a test email to the addresses specified in settings.ADMINS.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+        <span class="s1">subject </span><span class="s2">= </span><span class="s3">&quot;Test email from %s on %s&quot; </span><span class="s2">% (</span><span class="s1">socket</span><span class="s2">.</span><span class="s1">gethostname</span><span class="s2">(), </span><span class="s1">timezone</span><span class="s2">.</span><span class="s1">now</span><span class="s2">())</span>
+
+        <span class="s1">send_mail</span><span class="s2">(</span>
+            <span class="s1">subject</span><span class="s2">=</span><span class="s1">subject</span><span class="s2">,</span>
+            <span class="s1">message</span><span class="s2">=</span><span class="s3">&quot;If you're reading this, it was successful.&quot;</span><span class="s2">,</span>
+            <span class="s1">from_email</span><span class="s2">=</span><span class="s0">None</span><span class="s2">,</span>
+            <span class="s1">recipient_list</span><span class="s2">=</span><span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;email&quot;</span><span class="s2">],</span>
+        <span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;managers&quot;</span><span class="s2">]:</span>
+            <span class="s1">mail_managers</span><span class="s2">(</span><span class="s1">subject</span><span class="s2">, </span><span class="s3">&quot;This email was sent to the site managers.&quot;</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">kwargs</span><span class="s2">[</span><span class="s3">&quot;admins&quot;</span><span class="s2">]:</span>
+            <span class="s1">mail_admins</span><span class="s2">(</span><span class="s1">subject</span><span class="s2">, </span><span class="s3">&quot;This email was sent to the site admins.&quot;</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

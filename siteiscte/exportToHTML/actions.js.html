@@ -1,0 +1,226 @@
+<html>
+<head>
+<title>actions.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #6aab73;}
+.s3 { color: #bcbec4;}
+.s4 { color: #cf8e6d;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+actions.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/*global gettext, interpolate, ngettext*/</span>
+<span class="s2">'use strict'</span><span class="s3">;</span>
+<span class="s3">{</span>
+    <span class="s4">function </span><span class="s1">show</span><span class="s3">(</span><span class="s1">selector</span><span class="s3">) {</span>
+        <span class="s1">document</span><span class="s3">.</span><span class="s1">querySelectorAll</span><span class="s3">(</span><span class="s1">selector</span><span class="s3">).</span><span class="s1">forEach</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">el</span><span class="s3">) {</span>
+            <span class="s1">el</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">remove</span><span class="s3">(</span><span class="s2">'hidden'</span><span class="s3">);</span>
+        <span class="s3">});</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">hide</span><span class="s3">(</span><span class="s1">selector</span><span class="s3">) {</span>
+        <span class="s1">document</span><span class="s3">.</span><span class="s1">querySelectorAll</span><span class="s3">(</span><span class="s1">selector</span><span class="s3">).</span><span class="s1">forEach</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">el</span><span class="s3">) {</span>
+            <span class="s1">el</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">add</span><span class="s3">(</span><span class="s2">'hidden'</span><span class="s3">);</span>
+        <span class="s3">});</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">showQuestion</span><span class="s3">(</span><span class="s1">options</span><span class="s3">) {</span>
+        <span class="s1">hide</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">acrossClears</span><span class="s3">);</span>
+        <span class="s1">show</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">acrossQuestions</span><span class="s3">);</span>
+        <span class="s1">hide</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">allContainer</span><span class="s3">);</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">showClear</span><span class="s3">(</span><span class="s1">options</span><span class="s3">) {</span>
+        <span class="s1">show</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">acrossClears</span><span class="s3">);</span>
+        <span class="s1">hide</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">acrossQuestions</span><span class="s3">);</span>
+        <span class="s1">document</span><span class="s3">.</span><span class="s1">querySelector</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">actionContainer</span><span class="s3">).</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">remove</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">selectedClass</span><span class="s3">);</span>
+        <span class="s1">show</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">allContainer</span><span class="s3">);</span>
+        <span class="s1">hide</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">counterContainer</span><span class="s3">);</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">reset</span><span class="s3">(</span><span class="s1">options</span><span class="s3">) {</span>
+        <span class="s1">hide</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">acrossClears</span><span class="s3">);</span>
+        <span class="s1">hide</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">acrossQuestions</span><span class="s3">);</span>
+        <span class="s1">hide</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">allContainer</span><span class="s3">);</span>
+        <span class="s1">show</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">counterContainer</span><span class="s3">);</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">clearAcross</span><span class="s3">(</span><span class="s1">options</span><span class="s3">) {</span>
+        <span class="s1">reset</span><span class="s3">(</span><span class="s1">options</span><span class="s3">);</span>
+        <span class="s4">const </span><span class="s1">acrossInputs </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">querySelectorAll</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">acrossInput</span><span class="s3">);</span>
+        <span class="s1">acrossInputs</span><span class="s3">.</span><span class="s1">forEach</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">acrossInput</span><span class="s3">) {</span>
+            <span class="s1">acrossInput</span><span class="s3">.</span><span class="s1">value </span><span class="s3">= </span><span class="s5">0</span><span class="s3">;</span>
+        <span class="s3">});</span>
+        <span class="s1">document</span><span class="s3">.</span><span class="s1">querySelector</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">actionContainer</span><span class="s3">).</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">remove</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">selectedClass</span><span class="s3">);</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">checker</span><span class="s3">(</span><span class="s1">actionCheckboxes</span><span class="s3">, </span><span class="s1">options</span><span class="s3">, </span><span class="s1">checked</span><span class="s3">) {</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">checked</span><span class="s3">) {</span>
+            <span class="s1">showQuestion</span><span class="s3">(</span><span class="s1">options</span><span class="s3">);</span>
+        <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+            <span class="s1">reset</span><span class="s3">(</span><span class="s1">options</span><span class="s3">);</span>
+        <span class="s3">}</span>
+        <span class="s1">actionCheckboxes</span><span class="s3">.</span><span class="s1">forEach</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">el</span><span class="s3">) {</span>
+            <span class="s1">el</span><span class="s3">.</span><span class="s1">checked </span><span class="s3">= </span><span class="s1">checked</span><span class="s3">;</span>
+            <span class="s1">el</span><span class="s3">.</span><span class="s1">closest</span><span class="s3">(</span><span class="s2">'tr'</span><span class="s3">).</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">toggle</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">selectedClass</span><span class="s3">, </span><span class="s1">checked</span><span class="s3">);</span>
+        <span class="s3">});</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">updateCounter</span><span class="s3">(</span><span class="s1">actionCheckboxes</span><span class="s3">, </span><span class="s1">options</span><span class="s3">) {</span>
+        <span class="s4">const </span><span class="s1">sel </span><span class="s3">= </span><span class="s1">Array</span><span class="s3">.</span><span class="s1">from</span><span class="s3">(</span><span class="s1">actionCheckboxes</span><span class="s3">).</span><span class="s1">filter</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">el</span><span class="s3">) {</span>
+            <span class="s4">return </span><span class="s1">el</span><span class="s3">.</span><span class="s1">checked</span><span class="s3">;</span>
+        <span class="s3">}).</span><span class="s1">length</span><span class="s3">;</span>
+        <span class="s4">const </span><span class="s1">counter </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">querySelector</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">counterContainer</span><span class="s3">);</span>
+        <span class="s0">// data-actions-icnt is defined in the generated HTML</span>
+        <span class="s0">// and contains the total amount of objects in the queryset</span>
+        <span class="s4">const </span><span class="s1">actions_icnt </span><span class="s3">= </span><span class="s1">Number</span><span class="s3">(</span><span class="s1">counter</span><span class="s3">.</span><span class="s1">dataset</span><span class="s3">.</span><span class="s1">actionsIcnt</span><span class="s3">);</span>
+        <span class="s1">counter</span><span class="s3">.</span><span class="s1">textContent </span><span class="s3">= </span><span class="s1">interpolate</span><span class="s3">(</span>
+            <span class="s1">ngettext</span><span class="s3">(</span><span class="s2">'%(sel)s of %(cnt)s selected'</span><span class="s3">, </span><span class="s2">'%(sel)s of %(cnt)s selected'</span><span class="s3">, </span><span class="s1">sel</span><span class="s3">), {</span>
+                <span class="s1">sel</span><span class="s3">: </span><span class="s1">sel</span><span class="s3">,</span>
+                <span class="s1">cnt</span><span class="s3">: </span><span class="s1">actions_icnt</span>
+            <span class="s3">}, </span><span class="s4">true</span><span class="s3">);</span>
+        <span class="s4">const </span><span class="s1">allToggle </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">allToggleId</span><span class="s3">);</span>
+        <span class="s1">allToggle</span><span class="s3">.</span><span class="s1">checked </span><span class="s3">= </span><span class="s1">sel </span><span class="s3">=== </span><span class="s1">actionCheckboxes</span><span class="s3">.</span><span class="s1">length</span><span class="s3">;</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">allToggle</span><span class="s3">.</span><span class="s1">checked</span><span class="s3">) {</span>
+            <span class="s1">showQuestion</span><span class="s3">(</span><span class="s1">options</span><span class="s3">);</span>
+        <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+            <span class="s1">clearAcross</span><span class="s3">(</span><span class="s1">options</span><span class="s3">);</span>
+        <span class="s3">}</span>
+    <span class="s3">}</span>
+
+    <span class="s4">const </span><span class="s1">defaults </span><span class="s3">= {</span>
+        <span class="s1">actionContainer</span><span class="s3">: </span><span class="s2">&quot;div.actions&quot;</span><span class="s3">,</span>
+        <span class="s1">counterContainer</span><span class="s3">: </span><span class="s2">&quot;span.action-counter&quot;</span><span class="s3">,</span>
+        <span class="s1">allContainer</span><span class="s3">: </span><span class="s2">&quot;div.actions span.all&quot;</span><span class="s3">,</span>
+        <span class="s1">acrossInput</span><span class="s3">: </span><span class="s2">&quot;div.actions input.select-across&quot;</span><span class="s3">,</span>
+        <span class="s1">acrossQuestions</span><span class="s3">: </span><span class="s2">&quot;div.actions span.question&quot;</span><span class="s3">,</span>
+        <span class="s1">acrossClears</span><span class="s3">: </span><span class="s2">&quot;div.actions span.clear&quot;</span><span class="s3">,</span>
+        <span class="s1">allToggleId</span><span class="s3">: </span><span class="s2">&quot;action-toggle&quot;</span><span class="s3">,</span>
+        <span class="s1">selectedClass</span><span class="s3">: </span><span class="s2">&quot;selected&quot;</span>
+    <span class="s3">};</span>
+
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">Actions </span><span class="s3">= </span><span class="s4">function</span><span class="s3">(</span><span class="s1">actionCheckboxes</span><span class="s3">, </span><span class="s1">options</span><span class="s3">) {</span>
+        <span class="s1">options </span><span class="s3">= </span><span class="s1">Object</span><span class="s3">.</span><span class="s1">assign</span><span class="s3">({}, </span><span class="s1">defaults</span><span class="s3">, </span><span class="s1">options</span><span class="s3">);</span>
+        <span class="s4">let </span><span class="s1">list_editable_changed </span><span class="s3">= </span><span class="s4">false</span><span class="s3">;</span>
+        <span class="s4">let </span><span class="s1">lastChecked </span><span class="s3">= </span><span class="s4">null</span><span class="s3">;</span>
+        <span class="s4">let </span><span class="s1">shiftPressed </span><span class="s3">= </span><span class="s4">false</span><span class="s3">;</span>
+
+        <span class="s1">document</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'keydown'</span><span class="s3">, (</span><span class="s1">event</span><span class="s3">) =&gt; {</span>
+            <span class="s1">shiftPressed </span><span class="s3">= </span><span class="s1">event</span><span class="s3">.</span><span class="s1">shiftKey</span><span class="s3">;</span>
+        <span class="s3">});</span>
+
+        <span class="s1">document</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'keyup'</span><span class="s3">, (</span><span class="s1">event</span><span class="s3">) =&gt; {</span>
+            <span class="s1">shiftPressed </span><span class="s3">= </span><span class="s1">event</span><span class="s3">.</span><span class="s1">shiftKey</span><span class="s3">;</span>
+        <span class="s3">});</span>
+
+        <span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">allToggleId</span><span class="s3">).</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">event</span><span class="s3">) {</span>
+            <span class="s1">checker</span><span class="s3">(</span><span class="s1">actionCheckboxes</span><span class="s3">, </span><span class="s1">options</span><span class="s3">, </span><span class="s4">this</span><span class="s3">.</span><span class="s1">checked</span><span class="s3">);</span>
+            <span class="s1">updateCounter</span><span class="s3">(</span><span class="s1">actionCheckboxes</span><span class="s3">, </span><span class="s1">options</span><span class="s3">);</span>
+        <span class="s3">});</span>
+
+        <span class="s1">document</span><span class="s3">.</span><span class="s1">querySelectorAll</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">acrossQuestions </span><span class="s3">+ </span><span class="s2">&quot; a&quot;</span><span class="s3">).</span><span class="s1">forEach</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">el</span><span class="s3">) {</span>
+            <span class="s1">el</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">event</span><span class="s3">) {</span>
+                <span class="s1">event</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s4">const </span><span class="s1">acrossInputs </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">querySelectorAll</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">acrossInput</span><span class="s3">);</span>
+                <span class="s1">acrossInputs</span><span class="s3">.</span><span class="s1">forEach</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">acrossInput</span><span class="s3">) {</span>
+                    <span class="s1">acrossInput</span><span class="s3">.</span><span class="s1">value </span><span class="s3">= </span><span class="s5">1</span><span class="s3">;</span>
+                <span class="s3">});</span>
+                <span class="s1">showClear</span><span class="s3">(</span><span class="s1">options</span><span class="s3">);</span>
+            <span class="s3">});</span>
+        <span class="s3">});</span>
+
+        <span class="s1">document</span><span class="s3">.</span><span class="s1">querySelectorAll</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">acrossClears </span><span class="s3">+ </span><span class="s2">&quot; a&quot;</span><span class="s3">).</span><span class="s1">forEach</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">el</span><span class="s3">) {</span>
+            <span class="s1">el</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">event</span><span class="s3">) {</span>
+                <span class="s1">event</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">options</span><span class="s3">.</span><span class="s1">allToggleId</span><span class="s3">).</span><span class="s1">checked </span><span class="s3">= </span><span class="s4">false</span><span class="s3">;</span>
+                <span class="s1">clearAcross</span><span class="s3">(</span><span class="s1">options</span><span class="s3">);</span>
+                <span class="s1">checker</span><span class="s3">(</span><span class="s1">actionCheckboxes</span><span class="s3">, </span><span class="s1">options</span><span class="s3">, </span><span class="s4">false</span><span class="s3">);</span>
+                <span class="s1">updateCounter</span><span class="s3">(</span><span class="s1">actionCheckboxes</span><span class="s3">, </span><span class="s1">options</span><span class="s3">);</span>
+            <span class="s3">});</span>
+        <span class="s3">});</span>
+
+        <span class="s4">function </span><span class="s1">affectedCheckboxes</span><span class="s3">(</span><span class="s1">target</span><span class="s3">, </span><span class="s1">withModifier</span><span class="s3">) {</span>
+            <span class="s4">const </span><span class="s1">multiSelect </span><span class="s3">= (</span><span class="s1">lastChecked </span><span class="s3">&amp;&amp; </span><span class="s1">withModifier </span><span class="s3">&amp;&amp; </span><span class="s1">lastChecked </span><span class="s3">!== </span><span class="s1">target</span><span class="s3">);</span>
+            <span class="s4">if </span><span class="s3">(!</span><span class="s1">multiSelect</span><span class="s3">) {</span>
+                <span class="s4">return </span><span class="s3">[</span><span class="s1">target</span><span class="s3">];</span>
+            <span class="s3">}</span>
+            <span class="s4">const </span><span class="s1">checkboxes </span><span class="s3">= </span><span class="s1">Array</span><span class="s3">.</span><span class="s1">from</span><span class="s3">(</span><span class="s1">actionCheckboxes</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">targetIndex </span><span class="s3">= </span><span class="s1">checkboxes</span><span class="s3">.</span><span class="s1">findIndex</span><span class="s3">(</span><span class="s1">el </span><span class="s3">=&gt; </span><span class="s1">el </span><span class="s3">=== </span><span class="s1">target</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">lastCheckedIndex </span><span class="s3">= </span><span class="s1">checkboxes</span><span class="s3">.</span><span class="s1">findIndex</span><span class="s3">(</span><span class="s1">el </span><span class="s3">=&gt; </span><span class="s1">el </span><span class="s3">=== </span><span class="s1">lastChecked</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">startIndex </span><span class="s3">= </span><span class="s1">Math</span><span class="s3">.</span><span class="s1">min</span><span class="s3">(</span><span class="s1">targetIndex</span><span class="s3">, </span><span class="s1">lastCheckedIndex</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">endIndex </span><span class="s3">= </span><span class="s1">Math</span><span class="s3">.</span><span class="s1">max</span><span class="s3">(</span><span class="s1">targetIndex</span><span class="s3">, </span><span class="s1">lastCheckedIndex</span><span class="s3">);</span>
+            <span class="s4">const </span><span class="s1">filtered </span><span class="s3">= </span><span class="s1">checkboxes</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">((</span><span class="s1">el</span><span class="s3">, </span><span class="s1">index</span><span class="s3">) =&gt; (</span><span class="s1">startIndex </span><span class="s3">&lt;= </span><span class="s1">index</span><span class="s3">) &amp;&amp; (</span><span class="s1">index </span><span class="s3">&lt;= </span><span class="s1">endIndex</span><span class="s3">));</span>
+            <span class="s4">return </span><span class="s1">filtered</span><span class="s3">;</span>
+        <span class="s3">};</span>
+
+        <span class="s1">Array</span><span class="s3">.</span><span class="s1">from</span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s2">'result_list'</span><span class="s3">).</span><span class="s1">tBodies</span><span class="s3">).</span><span class="s1">forEach</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">el</span><span class="s3">) {</span>
+            <span class="s1">el</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'change'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">event</span><span class="s3">) {</span>
+                <span class="s4">const </span><span class="s1">target </span><span class="s3">= </span><span class="s1">event</span><span class="s3">.</span><span class="s1">target</span><span class="s3">;</span>
+                <span class="s4">if </span><span class="s3">(</span><span class="s1">target</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">contains</span><span class="s3">(</span><span class="s2">'action-select'</span><span class="s3">)) {</span>
+                    <span class="s4">const </span><span class="s1">checkboxes </span><span class="s3">= </span><span class="s1">affectedCheckboxes</span><span class="s3">(</span><span class="s1">target</span><span class="s3">, </span><span class="s1">shiftPressed</span><span class="s3">);</span>
+                    <span class="s1">checker</span><span class="s3">(</span><span class="s1">checkboxes</span><span class="s3">, </span><span class="s1">options</span><span class="s3">, </span><span class="s1">target</span><span class="s3">.</span><span class="s1">checked</span><span class="s3">);</span>
+                    <span class="s1">updateCounter</span><span class="s3">(</span><span class="s1">actionCheckboxes</span><span class="s3">, </span><span class="s1">options</span><span class="s3">);</span>
+                    <span class="s1">lastChecked </span><span class="s3">= </span><span class="s1">target</span><span class="s3">;</span>
+                <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+                    <span class="s1">list_editable_changed </span><span class="s3">= </span><span class="s4">true</span><span class="s3">;</span>
+                <span class="s3">}</span>
+            <span class="s3">});</span>
+        <span class="s3">});</span>
+
+        <span class="s1">document</span><span class="s3">.</span><span class="s1">querySelector</span><span class="s3">(</span><span class="s2">'#changelist-form button[name=index]'</span><span class="s3">).</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">event</span><span class="s3">) {</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">list_editable_changed</span><span class="s3">) {</span>
+                <span class="s4">const </span><span class="s1">confirmed </span><span class="s3">= </span><span class="s1">confirm</span><span class="s3">(</span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">&quot;You have unsaved changes on individual editable fields. If you run an action, your unsaved changes will be lost.&quot;</span><span class="s3">));</span>
+                <span class="s4">if </span><span class="s3">(!</span><span class="s1">confirmed</span><span class="s3">) {</span>
+                    <span class="s1">event</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s3">}</span>
+            <span class="s3">}</span>
+        <span class="s3">});</span>
+
+        <span class="s4">const </span><span class="s1">el </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">querySelector</span><span class="s3">(</span><span class="s2">'#changelist-form input[name=_save]'</span><span class="s3">);</span>
+        <span class="s0">// The button does not exist if no fields are editable.</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">el</span><span class="s3">) {</span>
+            <span class="s1">el</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">event</span><span class="s3">) {</span>
+                <span class="s4">if </span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">querySelector</span><span class="s3">(</span><span class="s2">'[name=action]'</span><span class="s3">).</span><span class="s1">value</span><span class="s3">) {</span>
+                    <span class="s4">const </span><span class="s1">text </span><span class="s3">= </span><span class="s1">list_editable_changed</span>
+                        <span class="s3">? </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">&quot;You have selected an action, but you haven’t saved your changes to individual fields yet. Please click OK to save. You’ll need to re-run the action.&quot;</span><span class="s3">)</span>
+                        <span class="s3">: </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">&quot;You have selected an action, and you haven’t made any changes on individual fields. You’re probably looking for the Go button rather than the Save button.&quot;</span><span class="s3">);</span>
+                    <span class="s4">if </span><span class="s3">(!</span><span class="s1">confirm</span><span class="s3">(</span><span class="s1">text</span><span class="s3">)) {</span>
+                        <span class="s1">event</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                    <span class="s3">}</span>
+                <span class="s3">}</span>
+            <span class="s3">});</span>
+        <span class="s3">}</span>
+        <span class="s0">// Sync counter when navigating to the page, such as through the back</span>
+        <span class="s0">// button.</span>
+        <span class="s1">window</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'pageshow'</span><span class="s3">, (</span><span class="s1">event</span><span class="s3">) =&gt; </span><span class="s1">updateCounter</span><span class="s3">(</span><span class="s1">actionCheckboxes</span><span class="s3">, </span><span class="s1">options</span><span class="s3">));</span>
+    <span class="s3">};</span>
+
+    <span class="s0">// Call function fn when the DOM is loaded and ready. If it is already</span>
+    <span class="s0">// loaded, call the function now.</span>
+    <span class="s0">// http://youmightnotneedjquery.com/#ready</span>
+    <span class="s4">function </span><span class="s1">ready</span><span class="s3">(</span><span class="s1">fn</span><span class="s3">) {</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">readyState </span><span class="s3">!== </span><span class="s2">'loading'</span><span class="s3">) {</span>
+            <span class="s1">fn</span><span class="s3">();</span>
+        <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+            <span class="s1">document</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'DOMContentLoaded'</span><span class="s3">, </span><span class="s1">fn</span><span class="s3">);</span>
+        <span class="s3">}</span>
+    <span class="s3">}</span>
+
+    <span class="s1">ready</span><span class="s3">(</span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s4">const </span><span class="s1">actionsEls </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">querySelectorAll</span><span class="s3">(</span><span class="s2">'tr input.action-select'</span><span class="s3">);</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">actionsEls</span><span class="s3">.</span><span class="s1">length </span><span class="s3">&gt; </span><span class="s5">0</span><span class="s3">) {</span>
+            <span class="s1">Actions</span><span class="s3">(</span><span class="s1">actionsEls</span><span class="s3">);</span>
+        <span class="s3">}</span>
+    <span class="s3">});</span>
+<span class="s3">}</span>
+</pre>
+</body>
+</html>

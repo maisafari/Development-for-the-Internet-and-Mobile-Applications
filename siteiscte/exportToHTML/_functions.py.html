@@ -1,0 +1,535 @@
+<html>
+<head>
+<title>_functions.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+_functions.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Implementations of SQL functions for SQLite. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">functools</span>
+<span class="s2">import </span><span class="s1">random</span>
+<span class="s2">import </span><span class="s1">statistics</span>
+<span class="s2">import </span><span class="s1">zoneinfo</span>
+<span class="s2">from </span><span class="s1">datetime </span><span class="s2">import </span><span class="s1">timedelta</span>
+<span class="s2">from </span><span class="s1">hashlib </span><span class="s2">import </span><span class="s1">md5</span><span class="s3">, </span><span class="s1">sha1</span><span class="s3">, </span><span class="s1">sha224</span><span class="s3">, </span><span class="s1">sha256</span><span class="s3">, </span><span class="s1">sha384</span><span class="s3">, </span><span class="s1">sha512</span>
+<span class="s2">from </span><span class="s1">math </span><span class="s2">import </span><span class="s3">(</span>
+    <span class="s1">acos</span><span class="s3">,</span>
+    <span class="s1">asin</span><span class="s3">,</span>
+    <span class="s1">atan</span><span class="s3">,</span>
+    <span class="s1">atan2</span><span class="s3">,</span>
+    <span class="s1">ceil</span><span class="s3">,</span>
+    <span class="s1">cos</span><span class="s3">,</span>
+    <span class="s1">degrees</span><span class="s3">,</span>
+    <span class="s1">exp</span><span class="s3">,</span>
+    <span class="s1">floor</span><span class="s3">,</span>
+    <span class="s1">fmod</span><span class="s3">,</span>
+    <span class="s1">log</span><span class="s3">,</span>
+    <span class="s1">pi</span><span class="s3">,</span>
+    <span class="s1">radians</span><span class="s3">,</span>
+    <span class="s1">sin</span><span class="s3">,</span>
+    <span class="s1">sqrt</span><span class="s3">,</span>
+    <span class="s1">tan</span><span class="s3">,</span>
+<span class="s3">)</span>
+<span class="s2">from </span><span class="s1">re </span><span class="s2">import </span><span class="s1">search </span><span class="s2">as </span><span class="s1">re_search</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db</span><span class="s3">.</span><span class="s1">backends</span><span class="s3">.</span><span class="s1">utils </span><span class="s2">import </span><span class="s3">(</span>
+    <span class="s1">split_tzname_delta</span><span class="s3">,</span>
+    <span class="s1">typecast_time</span><span class="s3">,</span>
+    <span class="s1">typecast_timestamp</span><span class="s3">,</span>
+<span class="s3">)</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils </span><span class="s2">import </span><span class="s1">timezone</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">duration </span><span class="s2">import </span><span class="s1">duration_microseconds</span>
+
+
+<span class="s2">def </span><span class="s1">register</span><span class="s3">(</span><span class="s1">connection</span><span class="s3">):</span>
+    <span class="s1">create_deterministic_function </span><span class="s3">= </span><span class="s1">functools</span><span class="s3">.</span><span class="s1">partial</span><span class="s3">(</span>
+        <span class="s1">connection</span><span class="s3">.</span><span class="s1">create_function</span><span class="s3">,</span>
+        <span class="s1">deterministic</span><span class="s3">=</span><span class="s2">True</span><span class="s3">,</span>
+    <span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;django_date_extract&quot;</span><span class="s3">, </span><span class="s5">2</span><span class="s3">, </span><span class="s1">_sqlite_datetime_extract</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;django_date_trunc&quot;</span><span class="s3">, </span><span class="s5">4</span><span class="s3">, </span><span class="s1">_sqlite_date_trunc</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span>
+        <span class="s4">&quot;django_datetime_cast_date&quot;</span><span class="s3">, </span><span class="s5">3</span><span class="s3">, </span><span class="s1">_sqlite_datetime_cast_date</span>
+    <span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span>
+        <span class="s4">&quot;django_datetime_cast_time&quot;</span><span class="s3">, </span><span class="s5">3</span><span class="s3">, </span><span class="s1">_sqlite_datetime_cast_time</span>
+    <span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span>
+        <span class="s4">&quot;django_datetime_extract&quot;</span><span class="s3">, </span><span class="s5">4</span><span class="s3">, </span><span class="s1">_sqlite_datetime_extract</span>
+    <span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;django_datetime_trunc&quot;</span><span class="s3">, </span><span class="s5">4</span><span class="s3">, </span><span class="s1">_sqlite_datetime_trunc</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;django_time_extract&quot;</span><span class="s3">, </span><span class="s5">2</span><span class="s3">, </span><span class="s1">_sqlite_time_extract</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;django_time_trunc&quot;</span><span class="s3">, </span><span class="s5">4</span><span class="s3">, </span><span class="s1">_sqlite_time_trunc</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;django_time_diff&quot;</span><span class="s3">, </span><span class="s5">2</span><span class="s3">, </span><span class="s1">_sqlite_time_diff</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;django_timestamp_diff&quot;</span><span class="s3">, </span><span class="s5">2</span><span class="s3">, </span><span class="s1">_sqlite_timestamp_diff</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;django_format_dtdelta&quot;</span><span class="s3">, </span><span class="s5">3</span><span class="s3">, </span><span class="s1">_sqlite_format_dtdelta</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;regexp&quot;</span><span class="s3">, </span><span class="s5">2</span><span class="s3">, </span><span class="s1">_sqlite_regexp</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;BITXOR&quot;</span><span class="s3">, </span><span class="s5">2</span><span class="s3">, </span><span class="s1">_sqlite_bitxor</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;COT&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_cot</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;LPAD&quot;</span><span class="s3">, </span><span class="s5">3</span><span class="s3">, </span><span class="s1">_sqlite_lpad</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;MD5&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_md5</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;REPEAT&quot;</span><span class="s3">, </span><span class="s5">2</span><span class="s3">, </span><span class="s1">_sqlite_repeat</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;REVERSE&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_reverse</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;RPAD&quot;</span><span class="s3">, </span><span class="s5">3</span><span class="s3">, </span><span class="s1">_sqlite_rpad</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;SHA1&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_sha1</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;SHA224&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_sha224</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;SHA256&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_sha256</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;SHA384&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_sha384</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;SHA512&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_sha512</span><span class="s3">)</span>
+    <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;SIGN&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_sign</span><span class="s3">)</span>
+    <span class="s6"># Don't use the built-in RANDOM() function because it returns a value</span>
+    <span class="s6"># in the range [-1 * 2^63, 2^63 - 1] instead of [0, 1).</span>
+    <span class="s1">connection</span><span class="s3">.</span><span class="s1">create_function</span><span class="s3">(</span><span class="s4">&quot;RAND&quot;</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s1">random</span><span class="s3">.</span><span class="s1">random</span><span class="s3">)</span>
+    <span class="s1">connection</span><span class="s3">.</span><span class="s1">create_aggregate</span><span class="s3">(</span><span class="s4">&quot;STDDEV_POP&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">StdDevPop</span><span class="s3">)</span>
+    <span class="s1">connection</span><span class="s3">.</span><span class="s1">create_aggregate</span><span class="s3">(</span><span class="s4">&quot;STDDEV_SAMP&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">StdDevSamp</span><span class="s3">)</span>
+    <span class="s1">connection</span><span class="s3">.</span><span class="s1">create_aggregate</span><span class="s3">(</span><span class="s4">&quot;VAR_POP&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">VarPop</span><span class="s3">)</span>
+    <span class="s1">connection</span><span class="s3">.</span><span class="s1">create_aggregate</span><span class="s3">(</span><span class="s4">&quot;VAR_SAMP&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">VarSamp</span><span class="s3">)</span>
+    <span class="s6"># Some math functions are enabled by default in SQLite 3.35+.</span>
+    <span class="s1">sql </span><span class="s3">= </span><span class="s4">&quot;select sqlite_compileoption_used('ENABLE_MATH_FUNCTIONS')&quot;</span>
+    <span class="s2">if not </span><span class="s1">connection</span><span class="s3">.</span><span class="s1">execute</span><span class="s3">(</span><span class="s1">sql</span><span class="s3">).</span><span class="s1">fetchone</span><span class="s3">()[</span><span class="s5">0</span><span class="s3">]:</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;ACOS&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_acos</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;ASIN&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_asin</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;ATAN&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_atan</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;ATAN2&quot;</span><span class="s3">, </span><span class="s5">2</span><span class="s3">, </span><span class="s1">_sqlite_atan2</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;CEILING&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_ceiling</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;COS&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_cos</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;DEGREES&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_degrees</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;EXP&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_exp</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;FLOOR&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_floor</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;LN&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_ln</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;LOG&quot;</span><span class="s3">, </span><span class="s5">2</span><span class="s3">, </span><span class="s1">_sqlite_log</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;MOD&quot;</span><span class="s3">, </span><span class="s5">2</span><span class="s3">, </span><span class="s1">_sqlite_mod</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;PI&quot;</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s1">_sqlite_pi</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;POWER&quot;</span><span class="s3">, </span><span class="s5">2</span><span class="s3">, </span><span class="s1">_sqlite_power</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;RADIANS&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_radians</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;SIN&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_sin</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;SQRT&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_sqrt</span><span class="s3">)</span>
+        <span class="s1">create_deterministic_function</span><span class="s3">(</span><span class="s4">&quot;TAN&quot;</span><span class="s3">, </span><span class="s5">1</span><span class="s3">, </span><span class="s1">_sqlite_tan</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_datetime_parse</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">, </span><span class="s1">tzname</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">conn_tzname</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">dt </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">dt </span><span class="s3">= </span><span class="s1">typecast_timestamp</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">TypeError</span><span class="s3">, </span><span class="s1">ValueError</span><span class="s3">):</span>
+        <span class="s2">return None</span>
+    <span class="s2">if </span><span class="s1">conn_tzname</span><span class="s3">:</span>
+        <span class="s1">dt </span><span class="s3">= </span><span class="s1">dt</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s1">tzinfo</span><span class="s3">=</span><span class="s1">zoneinfo</span><span class="s3">.</span><span class="s1">ZoneInfo</span><span class="s3">(</span><span class="s1">conn_tzname</span><span class="s3">))</span>
+    <span class="s2">if </span><span class="s1">tzname </span><span class="s2">is not None and </span><span class="s1">tzname </span><span class="s3">!= </span><span class="s1">conn_tzname</span><span class="s3">:</span>
+        <span class="s1">tzname</span><span class="s3">, </span><span class="s1">sign</span><span class="s3">, </span><span class="s1">offset </span><span class="s3">= </span><span class="s1">split_tzname_delta</span><span class="s3">(</span><span class="s1">tzname</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">offset</span><span class="s3">:</span>
+            <span class="s1">hours</span><span class="s3">, </span><span class="s1">minutes </span><span class="s3">= </span><span class="s1">offset</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s4">&quot;:&quot;</span><span class="s3">)</span>
+            <span class="s1">offset_delta </span><span class="s3">= </span><span class="s1">timedelta</span><span class="s3">(</span><span class="s1">hours</span><span class="s3">=</span><span class="s1">int</span><span class="s3">(</span><span class="s1">hours</span><span class="s3">), </span><span class="s1">minutes</span><span class="s3">=</span><span class="s1">int</span><span class="s3">(</span><span class="s1">minutes</span><span class="s3">))</span>
+            <span class="s1">dt </span><span class="s3">+= </span><span class="s1">offset_delta </span><span class="s2">if </span><span class="s1">sign </span><span class="s3">== </span><span class="s4">&quot;+&quot; </span><span class="s2">else </span><span class="s3">-</span><span class="s1">offset_delta</span>
+        <span class="s1">dt </span><span class="s3">= </span><span class="s1">timezone</span><span class="s3">.</span><span class="s1">localtime</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">, </span><span class="s1">zoneinfo</span><span class="s3">.</span><span class="s1">ZoneInfo</span><span class="s3">(</span><span class="s1">tzname</span><span class="s3">))</span>
+    <span class="s2">return </span><span class="s1">dt</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_date_trunc</span><span class="s3">(</span><span class="s1">lookup_type</span><span class="s3">, </span><span class="s1">dt</span><span class="s3">, </span><span class="s1">tzname</span><span class="s3">, </span><span class="s1">conn_tzname</span><span class="s3">):</span>
+    <span class="s1">dt </span><span class="s3">= </span><span class="s1">_sqlite_datetime_parse</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">, </span><span class="s1">tzname</span><span class="s3">, </span><span class="s1">conn_tzname</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">dt </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">if </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;year&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">year</span><span class="s2">:</span><span class="s4">04d</span><span class="s2">}</span><span class="s4">-01-01&quot;</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;quarter&quot;</span><span class="s3">:</span>
+        <span class="s1">month_in_quarter </span><span class="s3">= </span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month </span><span class="s3">- (</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month </span><span class="s3">- </span><span class="s5">1</span><span class="s3">) % </span><span class="s5">3</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">year</span><span class="s2">:</span><span class="s4">04d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">month_in_quarter</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">-01&quot;</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;month&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">year</span><span class="s2">:</span><span class="s4">04d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">-01&quot;</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;week&quot;</span><span class="s3">:</span>
+        <span class="s1">dt </span><span class="s3">-= </span><span class="s1">timedelta</span><span class="s3">(</span><span class="s1">days</span><span class="s3">=</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">weekday</span><span class="s3">())</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">year</span><span class="s2">:</span><span class="s4">04d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">day</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">&quot;</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;day&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">year</span><span class="s2">:</span><span class="s4">04d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">day</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">&quot;</span>
+    <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span><span class="s4">f&quot;Unsupported lookup type: </span><span class="s2">{</span><span class="s1">lookup_type</span><span class="s2">!r}</span><span class="s4">&quot;</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_time_trunc</span><span class="s3">(</span><span class="s1">lookup_type</span><span class="s3">, </span><span class="s1">dt</span><span class="s3">, </span><span class="s1">tzname</span><span class="s3">, </span><span class="s1">conn_tzname</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">dt </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s1">dt_parsed </span><span class="s3">= </span><span class="s1">_sqlite_datetime_parse</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">, </span><span class="s1">tzname</span><span class="s3">, </span><span class="s1">conn_tzname</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">dt_parsed </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">dt </span><span class="s3">= </span><span class="s1">typecast_time</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+            <span class="s2">return None</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">dt </span><span class="s3">= </span><span class="s1">dt_parsed</span>
+    <span class="s2">if </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;hour&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">hour</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">:00:00&quot;</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;minute&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">hour</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">:</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">minute</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">:00&quot;</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;second&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">hour</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">:</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">minute</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">:</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">second</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">&quot;</span>
+    <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span><span class="s4">f&quot;Unsupported lookup type: </span><span class="s2">{</span><span class="s1">lookup_type</span><span class="s2">!r}</span><span class="s4">&quot;</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_datetime_cast_date</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">, </span><span class="s1">tzname</span><span class="s3">, </span><span class="s1">conn_tzname</span><span class="s3">):</span>
+    <span class="s1">dt </span><span class="s3">= </span><span class="s1">_sqlite_datetime_parse</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">, </span><span class="s1">tzname</span><span class="s3">, </span><span class="s1">conn_tzname</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">dt </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">dt</span><span class="s3">.</span><span class="s1">date</span><span class="s3">().</span><span class="s1">isoformat</span><span class="s3">()</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_datetime_cast_time</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">, </span><span class="s1">tzname</span><span class="s3">, </span><span class="s1">conn_tzname</span><span class="s3">):</span>
+    <span class="s1">dt </span><span class="s3">= </span><span class="s1">_sqlite_datetime_parse</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">, </span><span class="s1">tzname</span><span class="s3">, </span><span class="s1">conn_tzname</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">dt </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">dt</span><span class="s3">.</span><span class="s1">time</span><span class="s3">().</span><span class="s1">isoformat</span><span class="s3">()</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_datetime_extract</span><span class="s3">(</span><span class="s1">lookup_type</span><span class="s3">, </span><span class="s1">dt</span><span class="s3">, </span><span class="s1">tzname</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">conn_tzname</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s1">dt </span><span class="s3">= </span><span class="s1">_sqlite_datetime_parse</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">, </span><span class="s1">tzname</span><span class="s3">, </span><span class="s1">conn_tzname</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">dt </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">if </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;week_day&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s3">(</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">isoweekday</span><span class="s3">() % </span><span class="s5">7</span><span class="s3">) + </span><span class="s5">1</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;iso_week_day&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">dt</span><span class="s3">.</span><span class="s1">isoweekday</span><span class="s3">()</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;week&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">dt</span><span class="s3">.</span><span class="s1">isocalendar</span><span class="s3">().</span><span class="s1">week</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;quarter&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">ceil</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month </span><span class="s3">/ </span><span class="s5">3</span><span class="s3">)</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;iso_year&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">dt</span><span class="s3">.</span><span class="s1">isocalendar</span><span class="s3">().</span><span class="s1">year</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">, </span><span class="s1">lookup_type</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_datetime_trunc</span><span class="s3">(</span><span class="s1">lookup_type</span><span class="s3">, </span><span class="s1">dt</span><span class="s3">, </span><span class="s1">tzname</span><span class="s3">, </span><span class="s1">conn_tzname</span><span class="s3">):</span>
+    <span class="s1">dt </span><span class="s3">= </span><span class="s1">_sqlite_datetime_parse</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">, </span><span class="s1">tzname</span><span class="s3">, </span><span class="s1">conn_tzname</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">dt </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">if </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;year&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">year</span><span class="s2">:</span><span class="s4">04d</span><span class="s2">}</span><span class="s4">-01-01 00:00:00&quot;</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;quarter&quot;</span><span class="s3">:</span>
+        <span class="s1">month_in_quarter </span><span class="s3">= </span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month </span><span class="s3">- (</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month </span><span class="s3">- </span><span class="s5">1</span><span class="s3">) % </span><span class="s5">3</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">year</span><span class="s2">:</span><span class="s4">04d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">month_in_quarter</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">-01 00:00:00&quot;</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;month&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">year</span><span class="s2">:</span><span class="s4">04d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">-01 00:00:00&quot;</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;week&quot;</span><span class="s3">:</span>
+        <span class="s1">dt </span><span class="s3">-= </span><span class="s1">timedelta</span><span class="s3">(</span><span class="s1">days</span><span class="s3">=</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">weekday</span><span class="s3">())</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">year</span><span class="s2">:</span><span class="s4">04d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">day</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">} </span><span class="s4">00:00:00&quot;</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;day&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">year</span><span class="s2">:</span><span class="s4">04d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">day</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">} </span><span class="s4">00:00:00&quot;</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;hour&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">year</span><span class="s2">:</span><span class="s4">04d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">day</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">} {</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">hour</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">:00:00&quot;</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;minute&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s3">(</span>
+            <span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">year</span><span class="s2">:</span><span class="s4">04d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">day</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">} </span><span class="s4">&quot;</span>
+            <span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">hour</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">:</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">minute</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">:00&quot;</span>
+        <span class="s3">)</span>
+    <span class="s2">elif </span><span class="s1">lookup_type </span><span class="s3">== </span><span class="s4">&quot;second&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s3">(</span>
+            <span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">year</span><span class="s2">:</span><span class="s4">04d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">month</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">-</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">day</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">} </span><span class="s4">&quot;</span>
+            <span class="s4">f&quot;</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">hour</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">:</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">minute</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">:</span><span class="s2">{</span><span class="s1">dt</span><span class="s3">.</span><span class="s1">second</span><span class="s2">:</span><span class="s4">02d</span><span class="s2">}</span><span class="s4">&quot;</span>
+        <span class="s3">)</span>
+    <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span><span class="s4">f&quot;Unsupported lookup type: </span><span class="s2">{</span><span class="s1">lookup_type</span><span class="s2">!r}</span><span class="s4">&quot;</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_time_extract</span><span class="s3">(</span><span class="s1">lookup_type</span><span class="s3">, </span><span class="s1">dt</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">dt </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">dt </span><span class="s3">= </span><span class="s1">typecast_time</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">dt</span><span class="s3">, </span><span class="s1">lookup_type</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_prepare_dtdelta_param</span><span class="s3">(</span><span class="s1">conn</span><span class="s3">, </span><span class="s1">param</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">conn </span><span class="s2">in </span><span class="s3">[</span><span class="s4">&quot;+&quot;</span><span class="s3">, </span><span class="s4">&quot;-&quot;</span><span class="s3">]:</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">param</span><span class="s3">, </span><span class="s1">int</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">timedelta</span><span class="s3">(</span><span class="s5">0</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s1">param</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">typecast_timestamp</span><span class="s3">(</span><span class="s1">param</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">param</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_format_dtdelta</span><span class="s3">(</span><span class="s1">connector</span><span class="s3">, </span><span class="s1">lhs</span><span class="s3">, </span><span class="s1">rhs</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    LHS and RHS can be either: 
+    - An integer number of microseconds 
+    - A string representing a datetime 
+    - A scalar value, e.g. float 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">connector </span><span class="s2">is None or </span><span class="s1">lhs </span><span class="s2">is None or </span><span class="s1">rhs </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s1">connector </span><span class="s3">= </span><span class="s1">connector</span><span class="s3">.</span><span class="s1">strip</span><span class="s3">()</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">real_lhs </span><span class="s3">= </span><span class="s1">_sqlite_prepare_dtdelta_param</span><span class="s3">(</span><span class="s1">connector</span><span class="s3">, </span><span class="s1">lhs</span><span class="s3">)</span>
+        <span class="s1">real_rhs </span><span class="s3">= </span><span class="s1">_sqlite_prepare_dtdelta_param</span><span class="s3">(</span><span class="s1">connector</span><span class="s3">, </span><span class="s1">rhs</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+        <span class="s2">return None</span>
+    <span class="s2">if </span><span class="s1">connector </span><span class="s3">== </span><span class="s4">&quot;+&quot;</span><span class="s3">:</span>
+        <span class="s6"># typecast_timestamp() returns a date or a datetime without timezone.</span>
+        <span class="s6"># It will be formatted as &quot;%Y-%m-%d&quot; or &quot;%Y-%m-%d %H:%M:%S[.%f]&quot;</span>
+        <span class="s1">out </span><span class="s3">= </span><span class="s1">str</span><span class="s3">(</span><span class="s1">real_lhs </span><span class="s3">+ </span><span class="s1">real_rhs</span><span class="s3">)</span>
+    <span class="s2">elif </span><span class="s1">connector </span><span class="s3">== </span><span class="s4">&quot;-&quot;</span><span class="s3">:</span>
+        <span class="s1">out </span><span class="s3">= </span><span class="s1">str</span><span class="s3">(</span><span class="s1">real_lhs </span><span class="s3">- </span><span class="s1">real_rhs</span><span class="s3">)</span>
+    <span class="s2">elif </span><span class="s1">connector </span><span class="s3">== </span><span class="s4">&quot;*&quot;</span><span class="s3">:</span>
+        <span class="s1">out </span><span class="s3">= </span><span class="s1">real_lhs </span><span class="s3">* </span><span class="s1">real_rhs</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">out </span><span class="s3">= </span><span class="s1">real_lhs </span><span class="s3">/ </span><span class="s1">real_rhs</span>
+    <span class="s2">return </span><span class="s1">out</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_time_diff</span><span class="s3">(</span><span class="s1">lhs</span><span class="s3">, </span><span class="s1">rhs</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">lhs </span><span class="s2">is None or </span><span class="s1">rhs </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s1">left </span><span class="s3">= </span><span class="s1">typecast_time</span><span class="s3">(</span><span class="s1">lhs</span><span class="s3">)</span>
+    <span class="s1">right </span><span class="s3">= </span><span class="s1">typecast_time</span><span class="s3">(</span><span class="s1">rhs</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s3">(</span>
+        <span class="s3">(</span><span class="s1">left</span><span class="s3">.</span><span class="s1">hour </span><span class="s3">* </span><span class="s5">60 </span><span class="s3">* </span><span class="s5">60 </span><span class="s3">* </span><span class="s5">1000000</span><span class="s3">)</span>
+        <span class="s3">+ (</span><span class="s1">left</span><span class="s3">.</span><span class="s1">minute </span><span class="s3">* </span><span class="s5">60 </span><span class="s3">* </span><span class="s5">1000000</span><span class="s3">)</span>
+        <span class="s3">+ (</span><span class="s1">left</span><span class="s3">.</span><span class="s1">second </span><span class="s3">* </span><span class="s5">1000000</span><span class="s3">)</span>
+        <span class="s3">+ (</span><span class="s1">left</span><span class="s3">.</span><span class="s1">microsecond</span><span class="s3">)</span>
+        <span class="s3">- (</span><span class="s1">right</span><span class="s3">.</span><span class="s1">hour </span><span class="s3">* </span><span class="s5">60 </span><span class="s3">* </span><span class="s5">60 </span><span class="s3">* </span><span class="s5">1000000</span><span class="s3">)</span>
+        <span class="s3">- (</span><span class="s1">right</span><span class="s3">.</span><span class="s1">minute </span><span class="s3">* </span><span class="s5">60 </span><span class="s3">* </span><span class="s5">1000000</span><span class="s3">)</span>
+        <span class="s3">- (</span><span class="s1">right</span><span class="s3">.</span><span class="s1">second </span><span class="s3">* </span><span class="s5">1000000</span><span class="s3">)</span>
+        <span class="s3">- (</span><span class="s1">right</span><span class="s3">.</span><span class="s1">microsecond</span><span class="s3">)</span>
+    <span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_timestamp_diff</span><span class="s3">(</span><span class="s1">lhs</span><span class="s3">, </span><span class="s1">rhs</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">lhs </span><span class="s2">is None or </span><span class="s1">rhs </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s1">left </span><span class="s3">= </span><span class="s1">typecast_timestamp</span><span class="s3">(</span><span class="s1">lhs</span><span class="s3">)</span>
+    <span class="s1">right </span><span class="s3">= </span><span class="s1">typecast_timestamp</span><span class="s3">(</span><span class="s1">rhs</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">duration_microseconds</span><span class="s3">(</span><span class="s1">left </span><span class="s3">- </span><span class="s1">right</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_regexp</span><span class="s3">(</span><span class="s1">pattern</span><span class="s3">, </span><span class="s1">string</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">pattern </span><span class="s2">is None or </span><span class="s1">string </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">if not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">string</span><span class="s3">, </span><span class="s1">str</span><span class="s3">):</span>
+        <span class="s1">string </span><span class="s3">= </span><span class="s1">str</span><span class="s3">(</span><span class="s1">string</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">bool</span><span class="s3">(</span><span class="s1">re_search</span><span class="s3">(</span><span class="s1">pattern</span><span class="s3">, </span><span class="s1">string</span><span class="s3">))</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_acos</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">acos</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_asin</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">asin</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_atan</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">atan</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_atan2</span><span class="s3">(</span><span class="s1">y</span><span class="s3">, </span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">y </span><span class="s2">is None or </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">atan2</span><span class="s3">(</span><span class="s1">y</span><span class="s3">, </span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_bitxor</span><span class="s3">(</span><span class="s1">x</span><span class="s3">, </span><span class="s1">y</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None or </span><span class="s1">y </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">x </span><span class="s3">^ </span><span class="s1">y</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_ceiling</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">ceil</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_cos</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">cos</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_cot</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s5">1 </span><span class="s3">/ </span><span class="s1">tan</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_degrees</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">degrees</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_exp</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">exp</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_floor</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">floor</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_ln</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">log</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_log</span><span class="s3">(</span><span class="s1">base</span><span class="s3">, </span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">base </span><span class="s2">is None or </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s6"># Arguments reversed to match SQL standard.</span>
+    <span class="s2">return </span><span class="s1">log</span><span class="s3">(</span><span class="s1">x</span><span class="s3">, </span><span class="s1">base</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_lpad</span><span class="s3">(</span><span class="s1">text</span><span class="s3">, </span><span class="s1">length</span><span class="s3">, </span><span class="s1">fill_text</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">text </span><span class="s2">is None or </span><span class="s1">length </span><span class="s2">is None or </span><span class="s1">fill_text </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s1">delta </span><span class="s3">= </span><span class="s1">length </span><span class="s3">- </span><span class="s1">len</span><span class="s3">(</span><span class="s1">text</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">delta </span><span class="s3">&lt;= </span><span class="s5">0</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">text</span><span class="s3">[:</span><span class="s1">length</span><span class="s3">]</span>
+    <span class="s2">return </span><span class="s3">(</span><span class="s1">fill_text </span><span class="s3">* </span><span class="s1">length</span><span class="s3">)[:</span><span class="s1">delta</span><span class="s3">] + </span><span class="s1">text</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_md5</span><span class="s3">(</span><span class="s1">text</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">text </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">md5</span><span class="s3">(</span><span class="s1">text</span><span class="s3">.</span><span class="s1">encode</span><span class="s3">()).</span><span class="s1">hexdigest</span><span class="s3">()</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_mod</span><span class="s3">(</span><span class="s1">x</span><span class="s3">, </span><span class="s1">y</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None or </span><span class="s1">y </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">fmod</span><span class="s3">(</span><span class="s1">x</span><span class="s3">, </span><span class="s1">y</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_pi</span><span class="s3">():</span>
+    <span class="s2">return </span><span class="s1">pi</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_power</span><span class="s3">(</span><span class="s1">x</span><span class="s3">, </span><span class="s1">y</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None or </span><span class="s1">y </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">x</span><span class="s3">**</span><span class="s1">y</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_radians</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">radians</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_repeat</span><span class="s3">(</span><span class="s1">text</span><span class="s3">, </span><span class="s1">count</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">text </span><span class="s2">is None or </span><span class="s1">count </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">text </span><span class="s3">* </span><span class="s1">count</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_reverse</span><span class="s3">(</span><span class="s1">text</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">text </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">text</span><span class="s3">[::-</span><span class="s5">1</span><span class="s3">]</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_rpad</span><span class="s3">(</span><span class="s1">text</span><span class="s3">, </span><span class="s1">length</span><span class="s3">, </span><span class="s1">fill_text</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">text </span><span class="s2">is None or </span><span class="s1">length </span><span class="s2">is None or </span><span class="s1">fill_text </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s3">(</span><span class="s1">text </span><span class="s3">+ </span><span class="s1">fill_text </span><span class="s3">* </span><span class="s1">length</span><span class="s3">)[:</span><span class="s1">length</span><span class="s3">]</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_sha1</span><span class="s3">(</span><span class="s1">text</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">text </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">sha1</span><span class="s3">(</span><span class="s1">text</span><span class="s3">.</span><span class="s1">encode</span><span class="s3">()).</span><span class="s1">hexdigest</span><span class="s3">()</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_sha224</span><span class="s3">(</span><span class="s1">text</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">text </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">sha224</span><span class="s3">(</span><span class="s1">text</span><span class="s3">.</span><span class="s1">encode</span><span class="s3">()).</span><span class="s1">hexdigest</span><span class="s3">()</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_sha256</span><span class="s3">(</span><span class="s1">text</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">text </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">sha256</span><span class="s3">(</span><span class="s1">text</span><span class="s3">.</span><span class="s1">encode</span><span class="s3">()).</span><span class="s1">hexdigest</span><span class="s3">()</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_sha384</span><span class="s3">(</span><span class="s1">text</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">text </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">sha384</span><span class="s3">(</span><span class="s1">text</span><span class="s3">.</span><span class="s1">encode</span><span class="s3">()).</span><span class="s1">hexdigest</span><span class="s3">()</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_sha512</span><span class="s3">(</span><span class="s1">text</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">text </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">sha512</span><span class="s3">(</span><span class="s1">text</span><span class="s3">.</span><span class="s1">encode</span><span class="s3">()).</span><span class="s1">hexdigest</span><span class="s3">()</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_sign</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s3">(</span><span class="s1">x </span><span class="s3">&gt; </span><span class="s5">0</span><span class="s3">) - (</span><span class="s1">x </span><span class="s3">&lt; </span><span class="s5">0</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_sin</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">sin</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_sqrt</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">sqrt</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">_sqlite_tan</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+    <span class="s2">if </span><span class="s1">x </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return None</span>
+    <span class="s2">return </span><span class="s1">tan</span><span class="s3">(</span><span class="s1">x</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">ListAggregate</span><span class="s3">(</span><span class="s1">list</span><span class="s3">):</span>
+    <span class="s1">step </span><span class="s3">= </span><span class="s1">list</span><span class="s3">.</span><span class="s1">append</span>
+
+
+<span class="s2">class </span><span class="s1">StdDevPop</span><span class="s3">(</span><span class="s1">ListAggregate</span><span class="s3">):</span>
+    <span class="s1">finalize </span><span class="s3">= </span><span class="s1">statistics</span><span class="s3">.</span><span class="s1">pstdev</span>
+
+
+<span class="s2">class </span><span class="s1">StdDevSamp</span><span class="s3">(</span><span class="s1">ListAggregate</span><span class="s3">):</span>
+    <span class="s1">finalize </span><span class="s3">= </span><span class="s1">statistics</span><span class="s3">.</span><span class="s1">stdev</span>
+
+
+<span class="s2">class </span><span class="s1">VarPop</span><span class="s3">(</span><span class="s1">ListAggregate</span><span class="s3">):</span>
+    <span class="s1">finalize </span><span class="s3">= </span><span class="s1">statistics</span><span class="s3">.</span><span class="s1">pvariance</span>
+
+
+<span class="s2">class </span><span class="s1">VarSamp</span><span class="s3">(</span><span class="s1">ListAggregate</span><span class="s3">):</span>
+    <span class="s1">finalize </span><span class="s3">= </span><span class="s1">statistics</span><span class="s3">.</span><span class="s1">variance</span>
+</pre>
+</body>
+</html>

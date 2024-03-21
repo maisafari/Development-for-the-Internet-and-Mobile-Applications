@@ -1,0 +1,1524 @@
+<html>
+<head>
+<title>defaulttags.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+defaulttags.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Default tags used by the template system, available to all templates.&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">re</span>
+<span class="s2">import </span><span class="s1">sys</span>
+<span class="s2">import </span><span class="s1">warnings</span>
+<span class="s2">from </span><span class="s1">collections </span><span class="s2">import </span><span class="s1">namedtuple</span>
+<span class="s2">from </span><span class="s1">datetime </span><span class="s2">import </span><span class="s1">datetime</span>
+<span class="s2">from </span><span class="s1">itertools </span><span class="s2">import </span><span class="s1">cycle </span><span class="s2">as </span><span class="s1">itertools_cycle</span>
+<span class="s2">from </span><span class="s1">itertools </span><span class="s2">import </span><span class="s1">groupby</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf </span><span class="s2">import </span><span class="s1">settings</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils </span><span class="s2">import </span><span class="s1">timezone</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">html </span><span class="s2">import </span><span class="s1">conditional_escape</span><span class="s3">, </span><span class="s1">escape</span><span class="s3">, </span><span class="s1">format_html</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">lorem_ipsum </span><span class="s2">import </span><span class="s1">paragraphs</span><span class="s3">, </span><span class="s1">words</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">safestring </span><span class="s2">import </span><span class="s1">mark_safe</span>
+
+<span class="s2">from </span><span class="s3">.</span><span class="s1">base </span><span class="s2">import </span><span class="s3">(</span>
+    <span class="s1">BLOCK_TAG_END</span><span class="s3">,</span>
+    <span class="s1">BLOCK_TAG_START</span><span class="s3">,</span>
+    <span class="s1">COMMENT_TAG_END</span><span class="s3">,</span>
+    <span class="s1">COMMENT_TAG_START</span><span class="s3">,</span>
+    <span class="s1">FILTER_SEPARATOR</span><span class="s3">,</span>
+    <span class="s1">SINGLE_BRACE_END</span><span class="s3">,</span>
+    <span class="s1">SINGLE_BRACE_START</span><span class="s3">,</span>
+    <span class="s1">VARIABLE_ATTRIBUTE_SEPARATOR</span><span class="s3">,</span>
+    <span class="s1">VARIABLE_TAG_END</span><span class="s3">,</span>
+    <span class="s1">VARIABLE_TAG_START</span><span class="s3">,</span>
+    <span class="s1">Node</span><span class="s3">,</span>
+    <span class="s1">NodeList</span><span class="s3">,</span>
+    <span class="s1">TemplateSyntaxError</span><span class="s3">,</span>
+    <span class="s1">VariableDoesNotExist</span><span class="s3">,</span>
+    <span class="s1">kwarg_re</span><span class="s3">,</span>
+    <span class="s1">render_value_in_context</span><span class="s3">,</span>
+    <span class="s1">token_kwargs</span><span class="s3">,</span>
+<span class="s3">)</span>
+<span class="s2">from </span><span class="s3">.</span><span class="s1">context </span><span class="s2">import </span><span class="s1">Context</span>
+<span class="s2">from </span><span class="s3">.</span><span class="s1">defaultfilters </span><span class="s2">import </span><span class="s1">date</span>
+<span class="s2">from </span><span class="s3">.</span><span class="s1">library </span><span class="s2">import </span><span class="s1">Library</span>
+<span class="s2">from </span><span class="s3">.</span><span class="s1">smartif </span><span class="s2">import </span><span class="s1">IfParser</span><span class="s3">, </span><span class="s1">Literal</span>
+
+<span class="s1">register </span><span class="s3">= </span><span class="s1">Library</span><span class="s3">()</span>
+
+
+<span class="s2">class </span><span class="s1">AutoEscapeControlNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Implement the actions of the autoescape tag.&quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">setting</span><span class="s3">, </span><span class="s1">nodelist</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">setting </span><span class="s3">= </span><span class="s1">setting</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist </span><span class="s3">= </span><span class="s1">nodelist</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s1">old_setting </span><span class="s3">= </span><span class="s1">context</span><span class="s3">.</span><span class="s1">autoescape</span>
+        <span class="s1">context</span><span class="s3">.</span><span class="s1">autoescape </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">setting</span>
+        <span class="s1">output </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist</span><span class="s3">.</span><span class="s1">render</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+        <span class="s1">context</span><span class="s3">.</span><span class="s1">autoescape </span><span class="s3">= </span><span class="s1">old_setting</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">setting</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s1">output</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">output</span>
+
+
+<span class="s2">class </span><span class="s1">CommentNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s1">child_nodelists </span><span class="s3">= ()</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+
+
+<span class="s2">class </span><span class="s1">CsrfTokenNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s1">child_nodelists </span><span class="s3">= ()</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s1">csrf_token </span><span class="s3">= </span><span class="s1">context</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s4">&quot;csrf_token&quot;</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">csrf_token</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">csrf_token </span><span class="s3">== </span><span class="s4">&quot;NOTPROVIDED&quot;</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">format_html</span><span class="s3">(</span><span class="s4">&quot;&quot;</span><span class="s3">)</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">format_html</span><span class="s3">(</span>
+                    <span class="s4">'&lt;input type=&quot;hidden&quot; name=&quot;csrfmiddlewaretoken&quot; value=&quot;{}&quot;&gt;'</span><span class="s3">,</span>
+                    <span class="s1">csrf_token</span><span class="s3">,</span>
+                <span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s5"># It's very probable that the token is missing because of</span>
+            <span class="s5"># misconfiguration, so we raise a warning</span>
+            <span class="s2">if </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">DEBUG</span><span class="s3">:</span>
+                <span class="s1">warnings</span><span class="s3">.</span><span class="s1">warn</span><span class="s3">(</span>
+                    <span class="s4">&quot;A {% csrf_token %} was used in a template, but the context &quot;</span>
+                    <span class="s4">&quot;did not provide the value.  This is usually caused by not &quot;</span>
+                    <span class="s4">&quot;using RequestContext.&quot;</span>
+                <span class="s3">)</span>
+            <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+
+
+<span class="s2">class </span><span class="s1">CycleNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">cyclevars</span><span class="s3">, </span><span class="s1">variable_name</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">silent</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">cyclevars </span><span class="s3">= </span><span class="s1">cyclevars</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">variable_name </span><span class="s3">= </span><span class="s1">variable_name</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">silent </span><span class="s3">= </span><span class="s1">silent</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">self </span><span class="s2">not in </span><span class="s1">context</span><span class="s3">.</span><span class="s1">render_context</span><span class="s3">:</span>
+            <span class="s5"># First time the node is rendered in template</span>
+            <span class="s1">context</span><span class="s3">.</span><span class="s1">render_context</span><span class="s3">[</span><span class="s1">self</span><span class="s3">] = </span><span class="s1">itertools_cycle</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">cyclevars</span><span class="s3">)</span>
+        <span class="s1">cycle_iter </span><span class="s3">= </span><span class="s1">context</span><span class="s3">.</span><span class="s1">render_context</span><span class="s3">[</span><span class="s1">self</span><span class="s3">]</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">next</span><span class="s3">(</span><span class="s1">cycle_iter</span><span class="s3">).</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">variable_name</span><span class="s3">:</span>
+            <span class="s1">context</span><span class="s3">.</span><span class="s1">set_upward</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">variable_name</span><span class="s3">, </span><span class="s1">value</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">silent</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">render_value_in_context</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">context</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">reset</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Reset the cycle iteration back to the beginning. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">context</span><span class="s3">.</span><span class="s1">render_context</span><span class="s3">[</span><span class="s1">self</span><span class="s3">] = </span><span class="s1">itertools_cycle</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">cyclevars</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">DebugNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s2">if not </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">DEBUG</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+
+        <span class="s2">from </span><span class="s1">pprint </span><span class="s2">import </span><span class="s1">pformat</span>
+
+        <span class="s1">output </span><span class="s3">= [</span><span class="s1">escape</span><span class="s3">(</span><span class="s1">pformat</span><span class="s3">(</span><span class="s1">val</span><span class="s3">)) </span><span class="s2">for </span><span class="s1">val </span><span class="s2">in </span><span class="s1">context</span><span class="s3">]</span>
+        <span class="s1">output</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s4">&quot;</span><span class="s2">\n\n</span><span class="s4">&quot;</span><span class="s3">)</span>
+        <span class="s1">output</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">escape</span><span class="s3">(</span><span class="s1">pformat</span><span class="s3">(</span><span class="s1">sys</span><span class="s3">.</span><span class="s1">modules</span><span class="s3">)))</span>
+        <span class="s2">return </span><span class="s4">&quot;&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">output</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">FilterNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">filter_expr</span><span class="s3">, </span><span class="s1">nodelist</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">filter_expr </span><span class="s3">= </span><span class="s1">filter_expr</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist </span><span class="s3">= </span><span class="s1">nodelist</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s1">output </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist</span><span class="s3">.</span><span class="s1">render</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+        <span class="s5"># Apply filters.</span>
+        <span class="s2">with </span><span class="s1">context</span><span class="s3">.</span><span class="s1">push</span><span class="s3">(</span><span class="s1">var</span><span class="s3">=</span><span class="s1">output</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">filter_expr</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">FirstOfNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">variables</span><span class="s3">, </span><span class="s1">asvar</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">vars </span><span class="s3">= </span><span class="s1">variables</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">asvar </span><span class="s3">= </span><span class="s1">asvar</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s1">first </span><span class="s3">= </span><span class="s4">&quot;&quot;</span>
+        <span class="s2">for </span><span class="s1">var </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">vars</span><span class="s3">:</span>
+            <span class="s1">value </span><span class="s3">= </span><span class="s1">var</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">, </span><span class="s1">ignore_failures</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">value</span><span class="s3">:</span>
+                <span class="s1">first </span><span class="s3">= </span><span class="s1">render_value_in_context</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">context</span><span class="s3">)</span>
+                <span class="s2">break</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">asvar</span><span class="s3">:</span>
+            <span class="s1">context</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">asvar</span><span class="s3">] = </span><span class="s1">first</span>
+            <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+        <span class="s2">return </span><span class="s1">first</span>
+
+
+<span class="s2">class </span><span class="s1">ForNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s1">child_nodelists </span><span class="s3">= (</span><span class="s4">&quot;nodelist_loop&quot;</span><span class="s3">, </span><span class="s4">&quot;nodelist_empty&quot;</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">, </span><span class="s1">loopvars</span><span class="s3">, </span><span class="s1">sequence</span><span class="s3">, </span><span class="s1">is_reversed</span><span class="s3">, </span><span class="s1">nodelist_loop</span><span class="s3">, </span><span class="s1">nodelist_empty</span><span class="s3">=</span><span class="s2">None</span>
+    <span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">loopvars </span><span class="s3">= </span><span class="s1">loopvars</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">sequence </span><span class="s3">= </span><span class="s1">sequence</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">is_reversed </span><span class="s3">= </span><span class="s1">is_reversed</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist_loop </span><span class="s3">= </span><span class="s1">nodelist_loop</span>
+        <span class="s2">if </span><span class="s1">nodelist_empty </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist_empty </span><span class="s3">= </span><span class="s1">NodeList</span><span class="s3">()</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist_empty </span><span class="s3">= </span><span class="s1">nodelist_empty</span>
+
+    <span class="s2">def </span><span class="s1">__repr__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">reversed_text </span><span class="s3">= </span><span class="s4">&quot; reversed&quot; </span><span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">is_reversed </span><span class="s2">else </span><span class="s4">&quot;&quot;</span>
+        <span class="s2">return </span><span class="s4">&quot;&lt;%s: for %s in %s, tail_len: %d%s&gt;&quot; </span><span class="s3">% (</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">__class__</span><span class="s3">.</span><span class="s1">__name__</span><span class="s3">,</span>
+            <span class="s4">&quot;, &quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">loopvars</span><span class="s3">),</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">sequence</span><span class="s3">,</span>
+            <span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist_loop</span><span class="s3">),</span>
+            <span class="s1">reversed_text</span><span class="s3">,</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s4">&quot;forloop&quot; </span><span class="s2">in </span><span class="s1">context</span><span class="s3">:</span>
+            <span class="s1">parentloop </span><span class="s3">= </span><span class="s1">context</span><span class="s3">[</span><span class="s4">&quot;forloop&quot;</span><span class="s3">]</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">parentloop </span><span class="s3">= {}</span>
+        <span class="s2">with </span><span class="s1">context</span><span class="s3">.</span><span class="s1">push</span><span class="s3">():</span>
+            <span class="s1">values </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">sequence</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">, </span><span class="s1">ignore_failures</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">values </span><span class="s2">is None</span><span class="s3">:</span>
+                <span class="s1">values </span><span class="s3">= []</span>
+            <span class="s2">if not </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">values</span><span class="s3">, </span><span class="s4">&quot;__len__&quot;</span><span class="s3">):</span>
+                <span class="s1">values </span><span class="s3">= </span><span class="s1">list</span><span class="s3">(</span><span class="s1">values</span><span class="s3">)</span>
+            <span class="s1">len_values </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">values</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">len_values </span><span class="s3">&lt; </span><span class="s6">1</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist_empty</span><span class="s3">.</span><span class="s1">render</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+            <span class="s1">nodelist </span><span class="s3">= []</span>
+            <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">is_reversed</span><span class="s3">:</span>
+                <span class="s1">values </span><span class="s3">= </span><span class="s1">reversed</span><span class="s3">(</span><span class="s1">values</span><span class="s3">)</span>
+            <span class="s1">num_loopvars </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">loopvars</span><span class="s3">)</span>
+            <span class="s1">unpack </span><span class="s3">= </span><span class="s1">num_loopvars </span><span class="s3">&gt; </span><span class="s6">1</span>
+            <span class="s5"># Create a forloop value in the context.  We'll update counters on each</span>
+            <span class="s5"># iteration just below.</span>
+            <span class="s1">loop_dict </span><span class="s3">= </span><span class="s1">context</span><span class="s3">[</span><span class="s4">&quot;forloop&quot;</span><span class="s3">] = {</span><span class="s4">&quot;parentloop&quot;</span><span class="s3">: </span><span class="s1">parentloop</span><span class="s3">}</span>
+            <span class="s2">for </span><span class="s1">i</span><span class="s3">, </span><span class="s1">item </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">values</span><span class="s3">):</span>
+                <span class="s5"># Shortcuts for current loop iteration number.</span>
+                <span class="s1">loop_dict</span><span class="s3">[</span><span class="s4">&quot;counter0&quot;</span><span class="s3">] = </span><span class="s1">i</span>
+                <span class="s1">loop_dict</span><span class="s3">[</span><span class="s4">&quot;counter&quot;</span><span class="s3">] = </span><span class="s1">i </span><span class="s3">+ </span><span class="s6">1</span>
+                <span class="s5"># Reverse counter iteration numbers.</span>
+                <span class="s1">loop_dict</span><span class="s3">[</span><span class="s4">&quot;revcounter&quot;</span><span class="s3">] = </span><span class="s1">len_values </span><span class="s3">- </span><span class="s1">i</span>
+                <span class="s1">loop_dict</span><span class="s3">[</span><span class="s4">&quot;revcounter0&quot;</span><span class="s3">] = </span><span class="s1">len_values </span><span class="s3">- </span><span class="s1">i </span><span class="s3">- </span><span class="s6">1</span>
+                <span class="s5"># Boolean values designating first and last times through loop.</span>
+                <span class="s1">loop_dict</span><span class="s3">[</span><span class="s4">&quot;first&quot;</span><span class="s3">] = </span><span class="s1">i </span><span class="s3">== </span><span class="s6">0</span>
+                <span class="s1">loop_dict</span><span class="s3">[</span><span class="s4">&quot;last&quot;</span><span class="s3">] = </span><span class="s1">i </span><span class="s3">== </span><span class="s1">len_values </span><span class="s3">- </span><span class="s6">1</span>
+
+                <span class="s1">pop_context </span><span class="s3">= </span><span class="s2">False</span>
+                <span class="s2">if </span><span class="s1">unpack</span><span class="s3">:</span>
+                    <span class="s5"># If there are multiple loop variables, unpack the item into</span>
+                    <span class="s5"># them.</span>
+                    <span class="s2">try</span><span class="s3">:</span>
+                        <span class="s1">len_item </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">item</span><span class="s3">)</span>
+                    <span class="s2">except </span><span class="s1">TypeError</span><span class="s3">:  </span><span class="s5"># not an iterable</span>
+                        <span class="s1">len_item </span><span class="s3">= </span><span class="s6">1</span>
+                    <span class="s5"># Check loop variable count before unpacking</span>
+                    <span class="s2">if </span><span class="s1">num_loopvars </span><span class="s3">!= </span><span class="s1">len_item</span><span class="s3">:</span>
+                        <span class="s2">raise </span><span class="s1">ValueError</span><span class="s3">(</span>
+                            <span class="s4">&quot;Need {} values to unpack in for loop; got {}. &quot;</span><span class="s3">.</span><span class="s1">format</span><span class="s3">(</span>
+                                <span class="s1">num_loopvars</span><span class="s3">, </span><span class="s1">len_item</span>
+                            <span class="s3">),</span>
+                        <span class="s3">)</span>
+                    <span class="s1">unpacked_vars </span><span class="s3">= </span><span class="s1">dict</span><span class="s3">(</span><span class="s1">zip</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">loopvars</span><span class="s3">, </span><span class="s1">item</span><span class="s3">))</span>
+                    <span class="s1">pop_context </span><span class="s3">= </span><span class="s2">True</span>
+                    <span class="s1">context</span><span class="s3">.</span><span class="s1">update</span><span class="s3">(</span><span class="s1">unpacked_vars</span><span class="s3">)</span>
+                <span class="s2">else</span><span class="s3">:</span>
+                    <span class="s1">context</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">loopvars</span><span class="s3">[</span><span class="s6">0</span><span class="s3">]] = </span><span class="s1">item</span>
+
+                <span class="s2">for </span><span class="s1">node </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist_loop</span><span class="s3">:</span>
+                    <span class="s1">nodelist</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">node</span><span class="s3">.</span><span class="s1">render_annotated</span><span class="s3">(</span><span class="s1">context</span><span class="s3">))</span>
+
+                <span class="s2">if </span><span class="s1">pop_context</span><span class="s3">:</span>
+                    <span class="s5"># Pop the loop variables pushed on to the context to avoid</span>
+                    <span class="s5"># the context ending up in an inconsistent state when other</span>
+                    <span class="s5"># tags (e.g., include and with) push data to context.</span>
+                    <span class="s1">context</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">()</span>
+        <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s4">&quot;&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">nodelist</span><span class="s3">))</span>
+
+
+<span class="s2">class </span><span class="s1">IfChangedNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s1">child_nodelists </span><span class="s3">= (</span><span class="s4">&quot;nodelist_true&quot;</span><span class="s3">, </span><span class="s4">&quot;nodelist_false&quot;</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">nodelist_true</span><span class="s3">, </span><span class="s1">nodelist_false</span><span class="s3">, *</span><span class="s1">varlist</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist_true </span><span class="s3">= </span><span class="s1">nodelist_true</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist_false </span><span class="s3">= </span><span class="s1">nodelist_false</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">_varlist </span><span class="s3">= </span><span class="s1">varlist</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s5"># Init state storage</span>
+        <span class="s1">state_frame </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_get_context_stack_frame</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+        <span class="s1">state_frame</span><span class="s3">.</span><span class="s1">setdefault</span><span class="s3">(</span><span class="s1">self</span><span class="s3">)</span>
+
+        <span class="s1">nodelist_true_output </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_varlist</span><span class="s3">:</span>
+            <span class="s5"># Consider multiple parameters. This behaves like an OR evaluation</span>
+            <span class="s5"># of the multiple variables.</span>
+            <span class="s1">compare_to </span><span class="s3">= [</span>
+                <span class="s1">var</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">, </span><span class="s1">ignore_failures</span><span class="s3">=</span><span class="s2">True</span><span class="s3">) </span><span class="s2">for </span><span class="s1">var </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_varlist</span>
+            <span class="s3">]</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s5"># The &quot;{% ifchanged %}&quot; syntax (without any variables) compares</span>
+            <span class="s5"># the rendered output.</span>
+            <span class="s1">compare_to </span><span class="s3">= </span><span class="s1">nodelist_true_output </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist_true</span><span class="s3">.</span><span class="s1">render</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+
+        <span class="s2">if </span><span class="s1">compare_to </span><span class="s3">!= </span><span class="s1">state_frame</span><span class="s3">[</span><span class="s1">self</span><span class="s3">]:</span>
+            <span class="s1">state_frame</span><span class="s3">[</span><span class="s1">self</span><span class="s3">] = </span><span class="s1">compare_to</span>
+            <span class="s5"># render true block if not already rendered</span>
+            <span class="s2">return </span><span class="s1">nodelist_true_output </span><span class="s2">or </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist_true</span><span class="s3">.</span><span class="s1">render</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+        <span class="s2">elif </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist_false</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist_false</span><span class="s3">.</span><span class="s1">render</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">_get_context_stack_frame</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s5"># The Context object behaves like a stack where each template tag can</span>
+        <span class="s5"># create a new scope. Find the place where to store the state to detect</span>
+        <span class="s5"># changes.</span>
+        <span class="s2">if </span><span class="s4">&quot;forloop&quot; </span><span class="s2">in </span><span class="s1">context</span><span class="s3">:</span>
+            <span class="s5"># Ifchanged is bound to the local for loop.</span>
+            <span class="s5"># When there is a loop-in-loop, the state is bound to the inner loop,</span>
+            <span class="s5"># so it resets when the outer loop continues.</span>
+            <span class="s2">return </span><span class="s1">context</span><span class="s3">[</span><span class="s4">&quot;forloop&quot;</span><span class="s3">]</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s5"># Using ifchanged outside loops. Effectively this is a no-op</span>
+            <span class="s5"># because the state is associated with 'self'.</span>
+            <span class="s2">return </span><span class="s1">context</span><span class="s3">.</span><span class="s1">render_context</span>
+
+
+<span class="s2">class </span><span class="s1">IfNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">conditions_nodelists</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">conditions_nodelists </span><span class="s3">= </span><span class="s1">conditions_nodelists</span>
+
+    <span class="s2">def </span><span class="s1">__repr__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s4">&quot;&lt;%s&gt;&quot; </span><span class="s3">% </span><span class="s1">self</span><span class="s3">.</span><span class="s1">__class__</span><span class="s3">.</span><span class="s1">__name__</span>
+
+    <span class="s2">def </span><span class="s1">__iter__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">_</span><span class="s3">, </span><span class="s1">nodelist </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">conditions_nodelists</span><span class="s3">:</span>
+            <span class="s2">yield from </span><span class="s1">nodelist</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">nodelist</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">NodeList</span><span class="s3">(</span><span class="s1">self</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">condition</span><span class="s3">, </span><span class="s1">nodelist </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">conditions_nodelists</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">condition </span><span class="s2">is not None</span><span class="s3">:  </span><span class="s5"># if / elif clause</span>
+                <span class="s2">try</span><span class="s3">:</span>
+                    <span class="s1">match </span><span class="s3">= </span><span class="s1">condition</span><span class="s3">.</span><span class="s1">eval</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+                <span class="s2">except </span><span class="s1">VariableDoesNotExist</span><span class="s3">:</span>
+                    <span class="s1">match </span><span class="s3">= </span><span class="s2">None</span>
+            <span class="s2">else</span><span class="s3">:  </span><span class="s5"># else clause</span>
+                <span class="s1">match </span><span class="s3">= </span><span class="s2">True</span>
+
+            <span class="s2">if </span><span class="s1">match</span><span class="s3">:</span>
+                <span class="s2">return </span><span class="s1">nodelist</span><span class="s3">.</span><span class="s1">render</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+
+        <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+
+
+<span class="s2">class </span><span class="s1">LoremNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">count</span><span class="s3">, </span><span class="s1">method</span><span class="s3">, </span><span class="s1">common</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">count </span><span class="s3">= </span><span class="s1">count</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">method </span><span class="s3">= </span><span class="s1">method</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">common </span><span class="s3">= </span><span class="s1">common</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">count </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">count</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">))</span>
+        <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+            <span class="s1">count </span><span class="s3">= </span><span class="s6">1</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">method </span><span class="s3">== </span><span class="s4">&quot;w&quot;</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">words</span><span class="s3">(</span><span class="s1">count</span><span class="s3">, </span><span class="s1">common</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">common</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">paras </span><span class="s3">= </span><span class="s1">paragraphs</span><span class="s3">(</span><span class="s1">count</span><span class="s3">, </span><span class="s1">common</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">common</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">method </span><span class="s3">== </span><span class="s4">&quot;p&quot;</span><span class="s3">:</span>
+            <span class="s1">paras </span><span class="s3">= [</span><span class="s4">&quot;&lt;p&gt;%s&lt;/p&gt;&quot; </span><span class="s3">% </span><span class="s1">p </span><span class="s2">for </span><span class="s1">p </span><span class="s2">in </span><span class="s1">paras</span><span class="s3">]</span>
+        <span class="s2">return </span><span class="s4">&quot;</span><span class="s2">\n\n</span><span class="s4">&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">paras</span><span class="s3">)</span>
+
+
+<span class="s1">GroupedResult </span><span class="s3">= </span><span class="s1">namedtuple</span><span class="s3">(</span><span class="s4">&quot;GroupedResult&quot;</span><span class="s3">, [</span><span class="s4">&quot;grouper&quot;</span><span class="s3">, </span><span class="s4">&quot;list&quot;</span><span class="s3">])</span>
+
+
+<span class="s2">class </span><span class="s1">RegroupNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">target</span><span class="s3">, </span><span class="s1">expression</span><span class="s3">, </span><span class="s1">var_name</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">target </span><span class="s3">= </span><span class="s1">target</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">expression </span><span class="s3">= </span><span class="s1">expression</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">var_name </span><span class="s3">= </span><span class="s1">var_name</span>
+
+    <span class="s2">def </span><span class="s1">resolve_expression</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s5"># This method is called for each object in self.target. See regroup()</span>
+        <span class="s5"># for the reason why we temporarily put the object in the context.</span>
+        <span class="s1">context</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">var_name</span><span class="s3">] = </span><span class="s1">obj</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">expression</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">, </span><span class="s1">ignore_failures</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s1">obj_list </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">target</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">, </span><span class="s1">ignore_failures</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">obj_list </span><span class="s2">is None</span><span class="s3">:</span>
+            <span class="s5"># target variable wasn't found in context; fail silently.</span>
+            <span class="s1">context</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">var_name</span><span class="s3">] = []</span>
+            <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+        <span class="s5"># List of dictionaries in the format:</span>
+        <span class="s5"># {'grouper': 'key', 'list': [list of contents]}.</span>
+        <span class="s1">context</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">var_name</span><span class="s3">] = [</span>
+            <span class="s1">GroupedResult</span><span class="s3">(</span><span class="s1">grouper</span><span class="s3">=</span><span class="s1">key</span><span class="s3">, </span><span class="s1">list</span><span class="s3">=</span><span class="s1">list</span><span class="s3">(</span><span class="s1">val</span><span class="s3">))</span>
+            <span class="s2">for </span><span class="s1">key</span><span class="s3">, </span><span class="s1">val </span><span class="s2">in </span><span class="s1">groupby</span><span class="s3">(</span>
+                <span class="s1">obj_list</span><span class="s3">, </span><span class="s2">lambda </span><span class="s1">obj</span><span class="s3">: </span><span class="s1">self</span><span class="s3">.</span><span class="s1">resolve_expression</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">context</span><span class="s3">)</span>
+            <span class="s3">)</span>
+        <span class="s3">]</span>
+        <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+
+
+<span class="s2">class </span><span class="s1">LoadNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s1">child_nodelists </span><span class="s3">= ()</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+
+
+<span class="s2">class </span><span class="s1">NowNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">format_string</span><span class="s3">, </span><span class="s1">asvar</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">format_string </span><span class="s3">= </span><span class="s1">format_string</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">asvar </span><span class="s3">= </span><span class="s1">asvar</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s1">tzinfo </span><span class="s3">= </span><span class="s1">timezone</span><span class="s3">.</span><span class="s1">get_current_timezone</span><span class="s3">() </span><span class="s2">if </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">USE_TZ </span><span class="s2">else None</span>
+        <span class="s1">formatted </span><span class="s3">= </span><span class="s1">date</span><span class="s3">(</span><span class="s1">datetime</span><span class="s3">.</span><span class="s1">now</span><span class="s3">(</span><span class="s1">tz</span><span class="s3">=</span><span class="s1">tzinfo</span><span class="s3">), </span><span class="s1">self</span><span class="s3">.</span><span class="s1">format_string</span><span class="s3">)</span>
+
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">asvar</span><span class="s3">:</span>
+            <span class="s1">context</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">asvar</span><span class="s3">] = </span><span class="s1">formatted</span>
+            <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">formatted</span>
+
+
+<span class="s2">class </span><span class="s1">ResetCycleNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">node</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">node </span><span class="s3">= </span><span class="s1">node</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">node</span><span class="s3">.</span><span class="s1">reset</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+
+
+<span class="s2">class </span><span class="s1">SpacelessNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">nodelist</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist </span><span class="s3">= </span><span class="s1">nodelist</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">html </span><span class="s2">import </span><span class="s1">strip_spaces_between_tags</span>
+
+        <span class="s2">return </span><span class="s1">strip_spaces_between_tags</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist</span><span class="s3">.</span><span class="s1">render</span><span class="s3">(</span><span class="s1">context</span><span class="s3">).</span><span class="s1">strip</span><span class="s3">())</span>
+
+
+<span class="s2">class </span><span class="s1">TemplateTagNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s1">mapping </span><span class="s3">= {</span>
+        <span class="s4">&quot;openblock&quot;</span><span class="s3">: </span><span class="s1">BLOCK_TAG_START</span><span class="s3">,</span>
+        <span class="s4">&quot;closeblock&quot;</span><span class="s3">: </span><span class="s1">BLOCK_TAG_END</span><span class="s3">,</span>
+        <span class="s4">&quot;openvariable&quot;</span><span class="s3">: </span><span class="s1">VARIABLE_TAG_START</span><span class="s3">,</span>
+        <span class="s4">&quot;closevariable&quot;</span><span class="s3">: </span><span class="s1">VARIABLE_TAG_END</span><span class="s3">,</span>
+        <span class="s4">&quot;openbrace&quot;</span><span class="s3">: </span><span class="s1">SINGLE_BRACE_START</span><span class="s3">,</span>
+        <span class="s4">&quot;closebrace&quot;</span><span class="s3">: </span><span class="s1">SINGLE_BRACE_END</span><span class="s3">,</span>
+        <span class="s4">&quot;opencomment&quot;</span><span class="s3">: </span><span class="s1">COMMENT_TAG_START</span><span class="s3">,</span>
+        <span class="s4">&quot;closecomment&quot;</span><span class="s3">: </span><span class="s1">COMMENT_TAG_END</span><span class="s3">,</span>
+    <span class="s3">}</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">tagtype</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">tagtype </span><span class="s3">= </span><span class="s1">tagtype</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">mapping</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">tagtype</span><span class="s3">, </span><span class="s4">&quot;&quot;</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">URLNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s1">child_nodelists </span><span class="s3">= ()</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">view_name</span><span class="s3">, </span><span class="s1">args</span><span class="s3">, </span><span class="s1">kwargs</span><span class="s3">, </span><span class="s1">asvar</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">view_name </span><span class="s3">= </span><span class="s1">view_name</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">args </span><span class="s3">= </span><span class="s1">args</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">kwargs </span><span class="s3">= </span><span class="s1">kwargs</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">asvar </span><span class="s3">= </span><span class="s1">asvar</span>
+
+    <span class="s2">def </span><span class="s1">__repr__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s4">&quot;&lt;%s view_name='%s' args=%s kwargs=%s as=%s&gt;&quot; </span><span class="s3">% (</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">__class__</span><span class="s3">.</span><span class="s1">__qualname__</span><span class="s3">,</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">view_name</span><span class="s3">,</span>
+            <span class="s1">repr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">args</span><span class="s3">),</span>
+            <span class="s1">repr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">kwargs</span><span class="s3">),</span>
+            <span class="s1">repr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">asvar</span><span class="s3">),</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">urls </span><span class="s2">import </span><span class="s1">NoReverseMatch</span><span class="s3">, </span><span class="s1">reverse</span>
+
+        <span class="s1">args </span><span class="s3">= [</span><span class="s1">arg</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">) </span><span class="s2">for </span><span class="s1">arg </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">args</span><span class="s3">]</span>
+        <span class="s1">kwargs </span><span class="s3">= {</span><span class="s1">k</span><span class="s3">: </span><span class="s1">v</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">) </span><span class="s2">for </span><span class="s1">k</span><span class="s3">, </span><span class="s1">v </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">kwargs</span><span class="s3">.</span><span class="s1">items</span><span class="s3">()}</span>
+        <span class="s1">view_name </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">view_name</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">current_app </span><span class="s3">= </span><span class="s1">context</span><span class="s3">.</span><span class="s1">request</span><span class="s3">.</span><span class="s1">current_app</span>
+        <span class="s2">except </span><span class="s1">AttributeError</span><span class="s3">:</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s1">current_app </span><span class="s3">= </span><span class="s1">context</span><span class="s3">.</span><span class="s1">request</span><span class="s3">.</span><span class="s1">resolver_match</span><span class="s3">.</span><span class="s1">namespace</span>
+            <span class="s2">except </span><span class="s1">AttributeError</span><span class="s3">:</span>
+                <span class="s1">current_app </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s5"># Try to look up the URL. If it fails, raise NoReverseMatch unless the</span>
+        <span class="s5"># {% url ... as var %} construct is used, in which case return nothing.</span>
+        <span class="s1">url </span><span class="s3">= </span><span class="s4">&quot;&quot;</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">url </span><span class="s3">= </span><span class="s1">reverse</span><span class="s3">(</span><span class="s1">view_name</span><span class="s3">, </span><span class="s1">args</span><span class="s3">=</span><span class="s1">args</span><span class="s3">, </span><span class="s1">kwargs</span><span class="s3">=</span><span class="s1">kwargs</span><span class="s3">, </span><span class="s1">current_app</span><span class="s3">=</span><span class="s1">current_app</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">NoReverseMatch</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">asvar </span><span class="s2">is None</span><span class="s3">:</span>
+                <span class="s2">raise</span>
+
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">asvar</span><span class="s3">:</span>
+            <span class="s1">context</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">asvar</span><span class="s3">] = </span><span class="s1">url</span>
+            <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">context</span><span class="s3">.</span><span class="s1">autoescape</span><span class="s3">:</span>
+                <span class="s1">url </span><span class="s3">= </span><span class="s1">conditional_escape</span><span class="s3">(</span><span class="s1">url</span><span class="s3">)</span>
+            <span class="s2">return </span><span class="s1">url</span>
+
+
+<span class="s2">class </span><span class="s1">VerbatimNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">content</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">content </span><span class="s3">= </span><span class="s1">content</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">content</span>
+
+
+<span class="s2">class </span><span class="s1">WidthRatioNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">val_expr</span><span class="s3">, </span><span class="s1">max_expr</span><span class="s3">, </span><span class="s1">max_width</span><span class="s3">, </span><span class="s1">asvar</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">val_expr </span><span class="s3">= </span><span class="s1">val_expr</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">max_expr </span><span class="s3">= </span><span class="s1">max_expr</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">max_width </span><span class="s3">= </span><span class="s1">max_width</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">asvar </span><span class="s3">= </span><span class="s1">asvar</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">value </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">val_expr</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+            <span class="s1">max_value </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">max_expr</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+            <span class="s1">max_width </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">max_width</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">))</span>
+        <span class="s2">except </span><span class="s1">VariableDoesNotExist</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+        <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;widthratio final argument must be a number&quot;</span><span class="s3">)</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">value </span><span class="s3">= </span><span class="s1">float</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+            <span class="s1">max_value </span><span class="s3">= </span><span class="s1">float</span><span class="s3">(</span><span class="s1">max_value</span><span class="s3">)</span>
+            <span class="s1">ratio </span><span class="s3">= (</span><span class="s1">value </span><span class="s3">/ </span><span class="s1">max_value</span><span class="s3">) * </span><span class="s1">max_width</span>
+            <span class="s1">result </span><span class="s3">= </span><span class="s1">str</span><span class="s3">(</span><span class="s1">round</span><span class="s3">(</span><span class="s1">ratio</span><span class="s3">))</span>
+        <span class="s2">except </span><span class="s1">ZeroDivisionError</span><span class="s3">:</span>
+            <span class="s1">result </span><span class="s3">= </span><span class="s4">&quot;0&quot;</span>
+        <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">, </span><span class="s1">OverflowError</span><span class="s3">):</span>
+            <span class="s1">result </span><span class="s3">= </span><span class="s4">&quot;&quot;</span>
+
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">asvar</span><span class="s3">:</span>
+            <span class="s1">context</span><span class="s3">[</span><span class="s1">self</span><span class="s3">.</span><span class="s1">asvar</span><span class="s3">] = </span><span class="s1">result</span>
+            <span class="s2">return </span><span class="s4">&quot;&quot;</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">result</span>
+
+
+<span class="s2">class </span><span class="s1">WithNode</span><span class="s3">(</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">var</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">nodelist</span><span class="s3">, </span><span class="s1">extra_context</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist </span><span class="s3">= </span><span class="s1">nodelist</span>
+        <span class="s5"># var and name are legacy attributes, being left in case they are used</span>
+        <span class="s5"># by third-party subclasses of this Node.</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">extra_context </span><span class="s3">= </span><span class="s1">extra_context </span><span class="s2">or </span><span class="s3">{}</span>
+        <span class="s2">if </span><span class="s1">name</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">extra_context</span><span class="s3">[</span><span class="s1">name</span><span class="s3">] = </span><span class="s1">var</span>
+
+    <span class="s2">def </span><span class="s1">__repr__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s4">&quot;&lt;%s&gt;&quot; </span><span class="s3">% </span><span class="s1">self</span><span class="s3">.</span><span class="s1">__class__</span><span class="s3">.</span><span class="s1">__name__</span>
+
+    <span class="s2">def </span><span class="s1">render</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s1">values </span><span class="s3">= {</span><span class="s1">key</span><span class="s3">: </span><span class="s1">val</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">) </span><span class="s2">for </span><span class="s1">key</span><span class="s3">, </span><span class="s1">val </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">extra_context</span><span class="s3">.</span><span class="s1">items</span><span class="s3">()}</span>
+        <span class="s2">with </span><span class="s1">context</span><span class="s3">.</span><span class="s1">push</span><span class="s3">(**</span><span class="s1">values</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">nodelist</span><span class="s3">.</span><span class="s1">render</span><span class="s3">(</span><span class="s1">context</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">autoescape</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Force autoescape behavior for this block. 
+    &quot;&quot;&quot;</span>
+    <span class="s5"># token.split_contents() isn't useful here because this tag doesn't accept</span>
+    <span class="s5"># variable as arguments.</span>
+    <span class="s1">args </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">contents</span><span class="s3">.</span><span class="s1">split</span><span class="s3">()</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">args</span><span class="s3">) != </span><span class="s6">2</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;'autoescape' tag requires exactly one argument.&quot;</span><span class="s3">)</span>
+    <span class="s1">arg </span><span class="s3">= </span><span class="s1">args</span><span class="s3">[</span><span class="s6">1</span><span class="s3">]</span>
+    <span class="s2">if </span><span class="s1">arg </span><span class="s2">not in </span><span class="s3">(</span><span class="s4">&quot;on&quot;</span><span class="s3">, </span><span class="s4">&quot;off&quot;</span><span class="s3">):</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;'autoescape' argument should be 'on' or 'off'&quot;</span><span class="s3">)</span>
+    <span class="s1">nodelist </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">parse</span><span class="s3">((</span><span class="s4">&quot;endautoescape&quot;</span><span class="s3">,))</span>
+    <span class="s1">parser</span><span class="s3">.</span><span class="s1">delete_first_token</span><span class="s3">()</span>
+    <span class="s2">return </span><span class="s1">AutoEscapeControlNode</span><span class="s3">((</span><span class="s1">arg </span><span class="s3">== </span><span class="s4">&quot;on&quot;</span><span class="s3">), </span><span class="s1">nodelist</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">comment</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Ignore everything between ``{% comment %}`` and ``{% endcomment %}``. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">parser</span><span class="s3">.</span><span class="s1">skip_past</span><span class="s3">(</span><span class="s4">&quot;endcomment&quot;</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">CommentNode</span><span class="s3">()</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">cycle</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Cycle among the given strings each time this tag is encountered. 
+ 
+    Within a loop, cycles among the given strings each time through 
+    the loop:: 
+ 
+        {% for o in some_list %} 
+            &lt;tr class=&quot;{% cycle 'row1' 'row2' %}&quot;&gt; 
+                ... 
+            &lt;/tr&gt; 
+        {% endfor %} 
+ 
+    Outside of a loop, give the values a unique name the first time you call 
+    it, then use that name each successive time through:: 
+ 
+            &lt;tr class=&quot;{% cycle 'row1' 'row2' 'row3' as rowcolors %}&quot;&gt;...&lt;/tr&gt; 
+            &lt;tr class=&quot;{% cycle rowcolors %}&quot;&gt;...&lt;/tr&gt; 
+            &lt;tr class=&quot;{% cycle rowcolors %}&quot;&gt;...&lt;/tr&gt; 
+ 
+    You can use any number of values, separated by spaces. Commas can also 
+    be used to separate values; if a comma is used, the cycle values are 
+    interpreted as literal strings. 
+ 
+    The optional flag &quot;silent&quot; can be used to prevent the cycle declaration 
+    from returning any value:: 
+ 
+        {% for o in some_list %} 
+            {% cycle 'row1' 'row2' as rowcolors silent %} 
+            &lt;tr class=&quot;{{ rowcolors }}&quot;&gt;{% include &quot;subtemplate.html &quot; %}&lt;/tr&gt; 
+        {% endfor %} 
+    &quot;&quot;&quot;</span>
+    <span class="s5"># Note: This returns the exact same node on each {% cycle name %} call;</span>
+    <span class="s5"># that is, the node object returned from {% cycle a b c as name %} and the</span>
+    <span class="s5"># one returned from {% cycle name %} are the exact same object. This</span>
+    <span class="s5"># shouldn't cause problems (heh), but if it does, now you know.</span>
+    <span class="s5">#</span>
+    <span class="s5"># Ugly hack warning: This stuffs the named template dict into parser so</span>
+    <span class="s5"># that names are only unique within each template (as opposed to using</span>
+    <span class="s5"># a global variable, which would make cycle names have to be unique across</span>
+    <span class="s5"># *all* templates.</span>
+    <span class="s5">#</span>
+    <span class="s5"># It keeps the last node in the parser to be able to reset it with</span>
+    <span class="s5"># {% resetcycle %}.</span>
+
+    <span class="s1">args </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">split_contents</span><span class="s3">()</span>
+
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">args</span><span class="s3">) &lt; </span><span class="s6">2</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;'cycle' tag requires at least two arguments&quot;</span><span class="s3">)</span>
+
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">args</span><span class="s3">) == </span><span class="s6">2</span><span class="s3">:</span>
+        <span class="s5"># {% cycle foo %} case.</span>
+        <span class="s1">name </span><span class="s3">= </span><span class="s1">args</span><span class="s3">[</span><span class="s6">1</span><span class="s3">]</span>
+        <span class="s2">if not </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s4">&quot;_named_cycle_nodes&quot;</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+                <span class="s4">&quot;No named cycles in template. '%s' is not defined&quot; </span><span class="s3">% </span><span class="s1">name</span>
+            <span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">name </span><span class="s2">not in </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">_named_cycle_nodes</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;Named cycle '%s' does not exist&quot; </span><span class="s3">% </span><span class="s1">name</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">_named_cycle_nodes</span><span class="s3">[</span><span class="s1">name</span><span class="s3">]</span>
+
+    <span class="s1">as_form </span><span class="s3">= </span><span class="s2">False</span>
+
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">args</span><span class="s3">) &gt; </span><span class="s6">4</span><span class="s3">:</span>
+        <span class="s5"># {% cycle ... as foo [silent] %} case.</span>
+        <span class="s2">if </span><span class="s1">args</span><span class="s3">[-</span><span class="s6">3</span><span class="s3">] == </span><span class="s4">&quot;as&quot;</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">args</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">] != </span><span class="s4">&quot;silent&quot;</span><span class="s3">:</span>
+                <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+                    <span class="s4">&quot;Only 'silent' flag is allowed after cycle's name, not '%s'.&quot;</span>
+                    <span class="s3">% </span><span class="s1">args</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">]</span>
+                <span class="s3">)</span>
+            <span class="s1">as_form </span><span class="s3">= </span><span class="s2">True</span>
+            <span class="s1">silent </span><span class="s3">= </span><span class="s2">True</span>
+            <span class="s1">args </span><span class="s3">= </span><span class="s1">args</span><span class="s3">[:-</span><span class="s6">1</span><span class="s3">]</span>
+        <span class="s2">elif </span><span class="s1">args</span><span class="s3">[-</span><span class="s6">2</span><span class="s3">] == </span><span class="s4">&quot;as&quot;</span><span class="s3">:</span>
+            <span class="s1">as_form </span><span class="s3">= </span><span class="s2">True</span>
+            <span class="s1">silent </span><span class="s3">= </span><span class="s2">False</span>
+
+    <span class="s2">if </span><span class="s1">as_form</span><span class="s3">:</span>
+        <span class="s1">name </span><span class="s3">= </span><span class="s1">args</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">]</span>
+        <span class="s1">values </span><span class="s3">= [</span><span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">) </span><span class="s2">for </span><span class="s1">arg </span><span class="s2">in </span><span class="s1">args</span><span class="s3">[</span><span class="s6">1</span><span class="s3">:-</span><span class="s6">2</span><span class="s3">]]</span>
+        <span class="s1">node </span><span class="s3">= </span><span class="s1">CycleNode</span><span class="s3">(</span><span class="s1">values</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">silent</span><span class="s3">=</span><span class="s1">silent</span><span class="s3">)</span>
+        <span class="s2">if not </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s4">&quot;_named_cycle_nodes&quot;</span><span class="s3">):</span>
+            <span class="s1">parser</span><span class="s3">.</span><span class="s1">_named_cycle_nodes </span><span class="s3">= {}</span>
+        <span class="s1">parser</span><span class="s3">.</span><span class="s1">_named_cycle_nodes</span><span class="s3">[</span><span class="s1">name</span><span class="s3">] = </span><span class="s1">node</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">values </span><span class="s3">= [</span><span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">) </span><span class="s2">for </span><span class="s1">arg </span><span class="s2">in </span><span class="s1">args</span><span class="s3">[</span><span class="s6">1</span><span class="s3">:]]</span>
+        <span class="s1">node </span><span class="s3">= </span><span class="s1">CycleNode</span><span class="s3">(</span><span class="s1">values</span><span class="s3">)</span>
+    <span class="s1">parser</span><span class="s3">.</span><span class="s1">_last_cycle_node </span><span class="s3">= </span><span class="s1">node</span>
+    <span class="s2">return </span><span class="s1">node</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">csrf_token</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s2">return </span><span class="s1">CsrfTokenNode</span><span class="s3">()</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">debug</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Output a whole load of debugging information, including the current 
+    context and imported modules. 
+ 
+    Sample usage:: 
+ 
+        &lt;pre&gt; 
+            {% debug %} 
+        &lt;/pre&gt; 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">DebugNode</span><span class="s3">()</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span><span class="s3">(</span><span class="s4">&quot;filter&quot;</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">do_filter</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Filter the contents of the block through variable filters. 
+ 
+    Filters can also be piped through each other, and they can have 
+    arguments -- just like in variable syntax. 
+ 
+    Sample usage:: 
+ 
+        {% filter force_escape|lower %} 
+            This text will be HTML-escaped, and will appear in lowercase. 
+        {% endfilter %} 
+ 
+    Note that the ``escape`` and ``safe`` filters are not acceptable arguments. 
+    Instead, use the ``autoescape`` tag to manage autoescaping for blocks of 
+    template code. 
+    &quot;&quot;&quot;</span>
+    <span class="s5"># token.split_contents() isn't useful here because this tag doesn't accept</span>
+    <span class="s5"># variable as arguments.</span>
+    <span class="s1">_</span><span class="s3">, </span><span class="s1">rest </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">contents</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s6">1</span><span class="s3">)</span>
+    <span class="s1">filter_expr </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s4">&quot;var|%s&quot; </span><span class="s3">% (</span><span class="s1">rest</span><span class="s3">))</span>
+    <span class="s2">for </span><span class="s1">func</span><span class="s3">, </span><span class="s1">unused </span><span class="s2">in </span><span class="s1">filter_expr</span><span class="s3">.</span><span class="s1">filters</span><span class="s3">:</span>
+        <span class="s1">filter_name </span><span class="s3">= </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">func</span><span class="s3">, </span><span class="s4">&quot;_filter_name&quot;</span><span class="s3">, </span><span class="s2">None</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">filter_name </span><span class="s2">in </span><span class="s3">(</span><span class="s4">&quot;escape&quot;</span><span class="s3">, </span><span class="s4">&quot;safe&quot;</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+                <span class="s4">'&quot;filter %s&quot; is not permitted.  Use the &quot;autoescape&quot; tag instead.'</span>
+                <span class="s3">% </span><span class="s1">filter_name</span>
+            <span class="s3">)</span>
+    <span class="s1">nodelist </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">parse</span><span class="s3">((</span><span class="s4">&quot;endfilter&quot;</span><span class="s3">,))</span>
+    <span class="s1">parser</span><span class="s3">.</span><span class="s1">delete_first_token</span><span class="s3">()</span>
+    <span class="s2">return </span><span class="s1">FilterNode</span><span class="s3">(</span><span class="s1">filter_expr</span><span class="s3">, </span><span class="s1">nodelist</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">firstof</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Output the first variable passed that is not False. 
+ 
+    Output nothing if all the passed variables are False. 
+ 
+    Sample usage:: 
+ 
+        {% firstof var1 var2 var3 as myvar %} 
+ 
+    This is equivalent to:: 
+ 
+        {% if var1 %} 
+            {{ var1 }} 
+        {% elif var2 %} 
+            {{ var2 }} 
+        {% elif var3 %} 
+            {{ var3 }} 
+        {% endif %} 
+ 
+    but much cleaner! 
+ 
+    You can also use a literal string as a fallback value in case all 
+    passed variables are False:: 
+ 
+        {% firstof var1 var2 var3 &quot;fallback value&quot; %} 
+ 
+    If you want to disable auto-escaping of variables you can use:: 
+ 
+        {% autoescape off %} 
+            {% firstof var1 var2 var3 &quot;&lt;strong&gt;fallback value&lt;/strong&gt;&quot; %} 
+        {% autoescape %} 
+ 
+    Or if only some variables should be escaped, you can use:: 
+ 
+        {% firstof var1 var2|safe var3 &quot;&lt;strong&gt;fallback value&lt;/strong&gt;&quot;|safe %} 
+    &quot;&quot;&quot;</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">split_contents</span><span class="s3">()[</span><span class="s6">1</span><span class="s3">:]</span>
+    <span class="s1">asvar </span><span class="s3">= </span><span class="s2">None</span>
+    <span class="s2">if not </span><span class="s1">bits</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;'firstof' statement requires at least one argument&quot;</span><span class="s3">)</span>
+
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) &gt;= </span><span class="s6">2 </span><span class="s2">and </span><span class="s1">bits</span><span class="s3">[-</span><span class="s6">2</span><span class="s3">] == </span><span class="s4">&quot;as&quot;</span><span class="s3">:</span>
+        <span class="s1">asvar </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">]</span>
+        <span class="s1">bits </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[:-</span><span class="s6">2</span><span class="s3">]</span>
+    <span class="s2">return </span><span class="s1">FirstOfNode</span><span class="s3">([</span><span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">bit</span><span class="s3">) </span><span class="s2">for </span><span class="s1">bit </span><span class="s2">in </span><span class="s1">bits</span><span class="s3">], </span><span class="s1">asvar</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span><span class="s3">(</span><span class="s4">&quot;for&quot;</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">do_for</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Loop over each item in an array. 
+ 
+    For example, to display a list of athletes given ``athlete_list``:: 
+ 
+        &lt;ul&gt; 
+        {% for athlete in athlete_list %} 
+            &lt;li&gt;{{ athlete.name }}&lt;/li&gt; 
+        {% endfor %} 
+        &lt;/ul&gt; 
+ 
+    You can loop over a list in reverse by using 
+    ``{% for obj in list reversed %}``. 
+ 
+    You can also unpack multiple values from a two-dimensional array:: 
+ 
+        {% for key,value in dict.items %} 
+            {{ key }}: {{ value }} 
+        {% endfor %} 
+ 
+    The ``for`` tag can take an optional ``{% empty %}`` clause that will 
+    be displayed if the given array is empty or could not be found:: 
+ 
+        &lt;ul&gt; 
+          {% for athlete in athlete_list %} 
+            &lt;li&gt;{{ athlete.name }}&lt;/li&gt; 
+          {% empty %} 
+            &lt;li&gt;Sorry, no athletes in this list.&lt;/li&gt; 
+          {% endfor %} 
+        &lt;ul&gt; 
+ 
+    The above is equivalent to -- but shorter, cleaner, and possibly faster 
+    than -- the following:: 
+ 
+        &lt;ul&gt; 
+          {% if athlete_list %} 
+            {% for athlete in athlete_list %} 
+              &lt;li&gt;{{ athlete.name }}&lt;/li&gt; 
+            {% endfor %} 
+          {% else %} 
+            &lt;li&gt;Sorry, no athletes in this list.&lt;/li&gt; 
+          {% endif %} 
+        &lt;/ul&gt; 
+ 
+    The for loop sets a number of variables available within the loop: 
+ 
+        ==========================  ================================================ 
+        Variable                    Description 
+        ==========================  ================================================ 
+        ``forloop.counter``         The current iteration of the loop (1-indexed) 
+        ``forloop.counter0``        The current iteration of the loop (0-indexed) 
+        ``forloop.revcounter``      The number of iterations from the end of the 
+                                    loop (1-indexed) 
+        ``forloop.revcounter0``     The number of iterations from the end of the 
+                                    loop (0-indexed) 
+        ``forloop.first``           True if this is the first time through the loop 
+        ``forloop.last``            True if this is the last time through the loop 
+        ``forloop.parentloop``      For nested loops, this is the loop &quot;above&quot; the 
+                                    current one 
+        ==========================  ================================================ 
+    &quot;&quot;&quot;</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">split_contents</span><span class="s3">()</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) &lt; </span><span class="s6">4</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+            <span class="s4">&quot;'for' statements should have at least four words: %s&quot; </span><span class="s3">% </span><span class="s1">token</span><span class="s3">.</span><span class="s1">contents</span>
+        <span class="s3">)</span>
+
+    <span class="s1">is_reversed </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">] == </span><span class="s4">&quot;reversed&quot;</span>
+    <span class="s1">in_index </span><span class="s3">= -</span><span class="s6">3 </span><span class="s2">if </span><span class="s1">is_reversed </span><span class="s2">else </span><span class="s3">-</span><span class="s6">2</span>
+    <span class="s2">if </span><span class="s1">bits</span><span class="s3">[</span><span class="s1">in_index</span><span class="s3">] != </span><span class="s4">&quot;in&quot;</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+            <span class="s4">&quot;'for' statements should use the format&quot;</span>
+            <span class="s4">&quot; 'for x in y': %s&quot; </span><span class="s3">% </span><span class="s1">token</span><span class="s3">.</span><span class="s1">contents</span>
+        <span class="s3">)</span>
+
+    <span class="s1">invalid_chars </span><span class="s3">= </span><span class="s1">frozenset</span><span class="s3">((</span><span class="s4">&quot; &quot;</span><span class="s3">, </span><span class="s4">'&quot;'</span><span class="s3">, </span><span class="s4">&quot;'&quot;</span><span class="s3">, </span><span class="s1">FILTER_SEPARATOR</span><span class="s3">))</span>
+    <span class="s1">loopvars </span><span class="s3">= </span><span class="s1">re</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s4">r&quot; *, *&quot;</span><span class="s3">, </span><span class="s4">&quot; &quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">[</span><span class="s6">1</span><span class="s3">:</span><span class="s1">in_index</span><span class="s3">]))</span>
+    <span class="s2">for </span><span class="s1">var </span><span class="s2">in </span><span class="s1">loopvars</span><span class="s3">:</span>
+        <span class="s2">if not </span><span class="s1">var </span><span class="s2">or not </span><span class="s1">invalid_chars</span><span class="s3">.</span><span class="s1">isdisjoint</span><span class="s3">(</span><span class="s1">var</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+                <span class="s4">&quot;'for' tag received an invalid argument: %s&quot; </span><span class="s3">% </span><span class="s1">token</span><span class="s3">.</span><span class="s1">contents</span>
+            <span class="s3">)</span>
+
+    <span class="s1">sequence </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">[</span><span class="s1">in_index </span><span class="s3">+ </span><span class="s6">1</span><span class="s3">])</span>
+    <span class="s1">nodelist_loop </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">parse</span><span class="s3">(</span>
+        <span class="s3">(</span>
+            <span class="s4">&quot;empty&quot;</span><span class="s3">,</span>
+            <span class="s4">&quot;endfor&quot;</span><span class="s3">,</span>
+        <span class="s3">)</span>
+    <span class="s3">)</span>
+    <span class="s1">token </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">next_token</span><span class="s3">()</span>
+    <span class="s2">if </span><span class="s1">token</span><span class="s3">.</span><span class="s1">contents </span><span class="s3">== </span><span class="s4">&quot;empty&quot;</span><span class="s3">:</span>
+        <span class="s1">nodelist_empty </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">parse</span><span class="s3">((</span><span class="s4">&quot;endfor&quot;</span><span class="s3">,))</span>
+        <span class="s1">parser</span><span class="s3">.</span><span class="s1">delete_first_token</span><span class="s3">()</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">nodelist_empty </span><span class="s3">= </span><span class="s2">None</span>
+    <span class="s2">return </span><span class="s1">ForNode</span><span class="s3">(</span><span class="s1">loopvars</span><span class="s3">, </span><span class="s1">sequence</span><span class="s3">, </span><span class="s1">is_reversed</span><span class="s3">, </span><span class="s1">nodelist_loop</span><span class="s3">, </span><span class="s1">nodelist_empty</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">TemplateLiteral</span><span class="s3">(</span><span class="s1">Literal</span><span class="s3">):</span>
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">value</span><span class="s3">, </span><span class="s1">text</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">value </span><span class="s3">= </span><span class="s1">value</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">text </span><span class="s3">= </span><span class="s1">text  </span><span class="s5"># for better error messages</span>
+
+    <span class="s2">def </span><span class="s1">display</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">text</span>
+
+    <span class="s2">def </span><span class="s1">eval</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">context</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">value</span><span class="s3">.</span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">context</span><span class="s3">, </span><span class="s1">ignore_failures</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+
+
+<span class="s2">class </span><span class="s1">TemplateIfParser</span><span class="s3">(</span><span class="s1">IfParser</span><span class="s3">):</span>
+    <span class="s1">error_class </span><span class="s3">= </span><span class="s1">TemplateSyntaxError</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">parser</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">template_parser </span><span class="s3">= </span><span class="s1">parser</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">__init__</span><span class="s3">(*</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">create_var</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">value</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">TemplateLiteral</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">template_parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">value</span><span class="s3">), </span><span class="s1">value</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span><span class="s3">(</span><span class="s4">&quot;if&quot;</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">do_if</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Evaluate a variable, and if that variable is &quot;true&quot; (i.e., exists, is not 
+    empty, and is not a false boolean value), output the contents of the block: 
+ 
+    :: 
+ 
+        {% if athlete_list %} 
+            Number of athletes: {{ athlete_list|count }} 
+        {% elif athlete_in_locker_room_list %} 
+            Athletes should be out of the locker room soon! 
+        {% else %} 
+            No athletes. 
+        {% endif %} 
+ 
+    In the above, if ``athlete_list`` is not empty, the number of athletes will 
+    be displayed by the ``{{ athlete_list|count }}`` variable. 
+ 
+    The ``if`` tag may take one or several `` {% elif %}`` clauses, as well as 
+    an ``{% else %}`` clause that will be displayed if all previous conditions 
+    fail. These clauses are optional. 
+ 
+    ``if`` tags may use ``or``, ``and`` or ``not`` to test a number of 
+    variables or to negate a given variable:: 
+ 
+        {% if not athlete_list %} 
+            There are no athletes. 
+        {% endif %} 
+ 
+        {% if athlete_list or coach_list %} 
+            There are some athletes or some coaches. 
+        {% endif %} 
+ 
+        {% if athlete_list and coach_list %} 
+            Both athletes and coaches are available. 
+        {% endif %} 
+ 
+        {% if not athlete_list or coach_list %} 
+            There are no athletes, or there are some coaches. 
+        {% endif %} 
+ 
+        {% if athlete_list and not coach_list %} 
+            There are some athletes and absolutely no coaches. 
+        {% endif %} 
+ 
+    Comparison operators are also available, and the use of filters is also 
+    allowed, for example:: 
+ 
+        {% if articles|length &gt;= 5 %}...{% endif %} 
+ 
+    Arguments and operators _must_ have a space between them, so 
+    ``{% if 1&gt;2 %}`` is not a valid if tag. 
+ 
+    All supported operators are: ``or``, ``and``, ``in``, ``not in`` 
+    ``==``, ``!=``, ``&gt;``, ``&gt;=``, ``&lt;`` and ``&lt;=``. 
+ 
+    Operator precedence follows Python. 
+    &quot;&quot;&quot;</span>
+    <span class="s5"># {% if ... %}</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">split_contents</span><span class="s3">()[</span><span class="s6">1</span><span class="s3">:]</span>
+    <span class="s1">condition </span><span class="s3">= </span><span class="s1">TemplateIfParser</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">bits</span><span class="s3">).</span><span class="s1">parse</span><span class="s3">()</span>
+    <span class="s1">nodelist </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">parse</span><span class="s3">((</span><span class="s4">&quot;elif&quot;</span><span class="s3">, </span><span class="s4">&quot;else&quot;</span><span class="s3">, </span><span class="s4">&quot;endif&quot;</span><span class="s3">))</span>
+    <span class="s1">conditions_nodelists </span><span class="s3">= [(</span><span class="s1">condition</span><span class="s3">, </span><span class="s1">nodelist</span><span class="s3">)]</span>
+    <span class="s1">token </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">next_token</span><span class="s3">()</span>
+
+    <span class="s5"># {% elif ... %} (repeatable)</span>
+    <span class="s2">while </span><span class="s1">token</span><span class="s3">.</span><span class="s1">contents</span><span class="s3">.</span><span class="s1">startswith</span><span class="s3">(</span><span class="s4">&quot;elif&quot;</span><span class="s3">):</span>
+        <span class="s1">bits </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">split_contents</span><span class="s3">()[</span><span class="s6">1</span><span class="s3">:]</span>
+        <span class="s1">condition </span><span class="s3">= </span><span class="s1">TemplateIfParser</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">bits</span><span class="s3">).</span><span class="s1">parse</span><span class="s3">()</span>
+        <span class="s1">nodelist </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">parse</span><span class="s3">((</span><span class="s4">&quot;elif&quot;</span><span class="s3">, </span><span class="s4">&quot;else&quot;</span><span class="s3">, </span><span class="s4">&quot;endif&quot;</span><span class="s3">))</span>
+        <span class="s1">conditions_nodelists</span><span class="s3">.</span><span class="s1">append</span><span class="s3">((</span><span class="s1">condition</span><span class="s3">, </span><span class="s1">nodelist</span><span class="s3">))</span>
+        <span class="s1">token </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">next_token</span><span class="s3">()</span>
+
+    <span class="s5"># {% else %} (optional)</span>
+    <span class="s2">if </span><span class="s1">token</span><span class="s3">.</span><span class="s1">contents </span><span class="s3">== </span><span class="s4">&quot;else&quot;</span><span class="s3">:</span>
+        <span class="s1">nodelist </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">parse</span><span class="s3">((</span><span class="s4">&quot;endif&quot;</span><span class="s3">,))</span>
+        <span class="s1">conditions_nodelists</span><span class="s3">.</span><span class="s1">append</span><span class="s3">((</span><span class="s2">None</span><span class="s3">, </span><span class="s1">nodelist</span><span class="s3">))</span>
+        <span class="s1">token </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">next_token</span><span class="s3">()</span>
+
+    <span class="s5"># {% endif %}</span>
+    <span class="s2">if </span><span class="s1">token</span><span class="s3">.</span><span class="s1">contents </span><span class="s3">!= </span><span class="s4">&quot;endif&quot;</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+            <span class="s4">'Malformed template tag at line {}: &quot;{}&quot;'</span><span class="s3">.</span><span class="s1">format</span><span class="s3">(</span>
+                <span class="s1">token</span><span class="s3">.</span><span class="s1">lineno</span><span class="s3">, </span><span class="s1">token</span><span class="s3">.</span><span class="s1">contents</span>
+            <span class="s3">)</span>
+        <span class="s3">)</span>
+
+    <span class="s2">return </span><span class="s1">IfNode</span><span class="s3">(</span><span class="s1">conditions_nodelists</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">ifchanged</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Check if a value has changed from the last iteration of a loop. 
+ 
+    The ``{% ifchanged %}`` block tag is used within a loop. It has two 
+    possible uses. 
+ 
+    1. Check its own rendered contents against its previous state and only 
+       displays the content if it has changed. For example, this displays a 
+       list of days, only displaying the month if it changes:: 
+ 
+            &lt;h1&gt;Archive for {{ year }}&lt;/h1&gt; 
+ 
+            {% for date in days %} 
+                {% ifchanged %}&lt;h3&gt;{{ date|date:&quot;F&quot; }}&lt;/h3&gt;{% endifchanged %} 
+                &lt;a href=&quot;{{ date|date:&quot;M/d&quot;|lower }}/&quot;&gt;{{ date|date:&quot;j&quot; }}&lt;/a&gt; 
+            {% endfor %} 
+ 
+    2. If given one or more variables, check whether any variable has changed. 
+       For example, the following shows the date every time it changes, while 
+       showing the hour if either the hour or the date has changed:: 
+ 
+            {% for date in days %} 
+                {% ifchanged date.date %} {{ date.date }} {% endifchanged %} 
+                {% ifchanged date.hour date.date %} 
+                    {{ date.hour }} 
+                {% endifchanged %} 
+            {% endfor %} 
+    &quot;&quot;&quot;</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">split_contents</span><span class="s3">()</span>
+    <span class="s1">nodelist_true </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">parse</span><span class="s3">((</span><span class="s4">&quot;else&quot;</span><span class="s3">, </span><span class="s4">&quot;endifchanged&quot;</span><span class="s3">))</span>
+    <span class="s1">token </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">next_token</span><span class="s3">()</span>
+    <span class="s2">if </span><span class="s1">token</span><span class="s3">.</span><span class="s1">contents </span><span class="s3">== </span><span class="s4">&quot;else&quot;</span><span class="s3">:</span>
+        <span class="s1">nodelist_false </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">parse</span><span class="s3">((</span><span class="s4">&quot;endifchanged&quot;</span><span class="s3">,))</span>
+        <span class="s1">parser</span><span class="s3">.</span><span class="s1">delete_first_token</span><span class="s3">()</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">nodelist_false </span><span class="s3">= </span><span class="s1">NodeList</span><span class="s3">()</span>
+    <span class="s1">values </span><span class="s3">= [</span><span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">bit</span><span class="s3">) </span><span class="s2">for </span><span class="s1">bit </span><span class="s2">in </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">1</span><span class="s3">:]]</span>
+    <span class="s2">return </span><span class="s1">IfChangedNode</span><span class="s3">(</span><span class="s1">nodelist_true</span><span class="s3">, </span><span class="s1">nodelist_false</span><span class="s3">, *</span><span class="s1">values</span><span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">find_library</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">name</span><span class="s3">):</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">libraries</span><span class="s3">[</span><span class="s1">name</span><span class="s3">]</span>
+    <span class="s2">except </span><span class="s1">KeyError</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+            <span class="s4">&quot;'%s' is not a registered tag library. Must be one of:</span><span class="s2">\n</span><span class="s4">%s&quot;</span>
+            <span class="s3">% (</span>
+                <span class="s1">name</span><span class="s3">,</span>
+                <span class="s4">&quot;</span><span class="s2">\n</span><span class="s4">&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">sorted</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">.</span><span class="s1">libraries</span><span class="s3">)),</span>
+            <span class="s3">),</span>
+        <span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">load_from_library</span><span class="s3">(</span><span class="s1">library</span><span class="s3">, </span><span class="s1">label</span><span class="s3">, </span><span class="s1">names</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Return a subset of tags and filters from a library. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">subset </span><span class="s3">= </span><span class="s1">Library</span><span class="s3">()</span>
+    <span class="s2">for </span><span class="s1">name </span><span class="s2">in </span><span class="s1">names</span><span class="s3">:</span>
+        <span class="s1">found </span><span class="s3">= </span><span class="s2">False</span>
+        <span class="s2">if </span><span class="s1">name </span><span class="s2">in </span><span class="s1">library</span><span class="s3">.</span><span class="s1">tags</span><span class="s3">:</span>
+            <span class="s1">found </span><span class="s3">= </span><span class="s2">True</span>
+            <span class="s1">subset</span><span class="s3">.</span><span class="s1">tags</span><span class="s3">[</span><span class="s1">name</span><span class="s3">] = </span><span class="s1">library</span><span class="s3">.</span><span class="s1">tags</span><span class="s3">[</span><span class="s1">name</span><span class="s3">]</span>
+        <span class="s2">if </span><span class="s1">name </span><span class="s2">in </span><span class="s1">library</span><span class="s3">.</span><span class="s1">filters</span><span class="s3">:</span>
+            <span class="s1">found </span><span class="s3">= </span><span class="s2">True</span>
+            <span class="s1">subset</span><span class="s3">.</span><span class="s1">filters</span><span class="s3">[</span><span class="s1">name</span><span class="s3">] = </span><span class="s1">library</span><span class="s3">.</span><span class="s1">filters</span><span class="s3">[</span><span class="s1">name</span><span class="s3">]</span>
+        <span class="s2">if </span><span class="s1">found </span><span class="s2">is False</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+                <span class="s4">&quot;'%s' is not a valid tag or filter in tag library '%s'&quot;</span>
+                <span class="s3">% (</span>
+                    <span class="s1">name</span><span class="s3">,</span>
+                    <span class="s1">label</span><span class="s3">,</span>
+                <span class="s3">),</span>
+            <span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">subset</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">load</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Load a custom template tag library into the parser. 
+ 
+    For example, to load the template tags in 
+    ``django/templatetags/news/photos.py``:: 
+ 
+        {% load news.photos %} 
+ 
+    Can also be used to load an individual tag/filter from 
+    a library:: 
+ 
+        {% load byline from news %} 
+    &quot;&quot;&quot;</span>
+    <span class="s5"># token.split_contents() isn't useful here because this tag doesn't accept</span>
+    <span class="s5"># variable as arguments.</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">contents</span><span class="s3">.</span><span class="s1">split</span><span class="s3">()</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) &gt;= </span><span class="s6">4 </span><span class="s2">and </span><span class="s1">bits</span><span class="s3">[-</span><span class="s6">2</span><span class="s3">] == </span><span class="s4">&quot;from&quot;</span><span class="s3">:</span>
+        <span class="s5"># from syntax is used; load individual tags from the library</span>
+        <span class="s1">name </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">]</span>
+        <span class="s1">lib </span><span class="s3">= </span><span class="s1">find_library</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">name</span><span class="s3">)</span>
+        <span class="s1">subset </span><span class="s3">= </span><span class="s1">load_from_library</span><span class="s3">(</span><span class="s1">lib</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">1</span><span class="s3">:-</span><span class="s6">2</span><span class="s3">])</span>
+        <span class="s1">parser</span><span class="s3">.</span><span class="s1">add_library</span><span class="s3">(</span><span class="s1">subset</span><span class="s3">)</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s5"># one or more libraries are specified; load and add them to the parser</span>
+        <span class="s2">for </span><span class="s1">name </span><span class="s2">in </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">1</span><span class="s3">:]:</span>
+            <span class="s1">lib </span><span class="s3">= </span><span class="s1">find_library</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">name</span><span class="s3">)</span>
+            <span class="s1">parser</span><span class="s3">.</span><span class="s1">add_library</span><span class="s3">(</span><span class="s1">lib</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">LoadNode</span><span class="s3">()</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">lorem</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Create random Latin text useful for providing test data in templates. 
+ 
+    Usage format:: 
+ 
+        {% lorem [count] [method] [random] %} 
+ 
+    ``count`` is a number (or variable) containing the number of paragraphs or 
+    words to generate (default is 1). 
+ 
+    ``method`` is either ``w`` for words, ``p`` for HTML paragraphs, ``b`` for 
+    plain-text paragraph blocks (default is ``b``). 
+ 
+    ``random`` is the word ``random``, which if given, does not use the common 
+    paragraph (starting &quot;Lorem ipsum dolor sit amet, consectetuer...&quot;). 
+ 
+    Examples: 
+ 
+    * ``{% lorem %}`` outputs the common &quot;lorem ipsum&quot; paragraph 
+    * ``{% lorem 3 p %}`` outputs the common &quot;lorem ipsum&quot; paragraph 
+      and two random paragraphs each wrapped in HTML ``&lt;p&gt;`` tags 
+    * ``{% lorem 2 w random %}`` outputs two random latin words 
+    &quot;&quot;&quot;</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">list</span><span class="s3">(</span><span class="s1">token</span><span class="s3">.</span><span class="s1">split_contents</span><span class="s3">())</span>
+    <span class="s1">tagname </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">0</span><span class="s3">]</span>
+    <span class="s5"># Random bit</span>
+    <span class="s1">common </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">] != </span><span class="s4">&quot;random&quot;</span>
+    <span class="s2">if not </span><span class="s1">common</span><span class="s3">:</span>
+        <span class="s1">bits</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">()</span>
+    <span class="s5"># Method bit</span>
+    <span class="s2">if </span><span class="s1">bits</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">] </span><span class="s2">in </span><span class="s3">(</span><span class="s4">&quot;w&quot;</span><span class="s3">, </span><span class="s4">&quot;p&quot;</span><span class="s3">, </span><span class="s4">&quot;b&quot;</span><span class="s3">):</span>
+        <span class="s1">method </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">()</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">method </span><span class="s3">= </span><span class="s4">&quot;b&quot;</span>
+    <span class="s5"># Count bit</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) &gt; </span><span class="s6">1</span><span class="s3">:</span>
+        <span class="s1">count </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">.</span><span class="s1">pop</span><span class="s3">()</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">count </span><span class="s3">= </span><span class="s4">&quot;1&quot;</span>
+    <span class="s1">count </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">count</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) != </span><span class="s6">1</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;Incorrect format for %r tag&quot; </span><span class="s3">% </span><span class="s1">tagname</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">LoremNode</span><span class="s3">(</span><span class="s1">count</span><span class="s3">, </span><span class="s1">method</span><span class="s3">, </span><span class="s1">common</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">now</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Display the date, formatted according to the given string. 
+ 
+    Use the same format as PHP's ``date()`` function; see https://php.net/date 
+    for all the possible values. 
+ 
+    Sample usage:: 
+ 
+        It is {% now &quot;jS F Y H:i&quot; %} 
+    &quot;&quot;&quot;</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">split_contents</span><span class="s3">()</span>
+    <span class="s1">asvar </span><span class="s3">= </span><span class="s2">None</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) == </span><span class="s6">4 </span><span class="s2">and </span><span class="s1">bits</span><span class="s3">[-</span><span class="s6">2</span><span class="s3">] == </span><span class="s4">&quot;as&quot;</span><span class="s3">:</span>
+        <span class="s1">asvar </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">]</span>
+        <span class="s1">bits </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[:-</span><span class="s6">2</span><span class="s3">]</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) != </span><span class="s6">2</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;'now' statement takes one argument&quot;</span><span class="s3">)</span>
+    <span class="s1">format_string </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">1</span><span class="s3">][</span><span class="s6">1</span><span class="s3">:-</span><span class="s6">1</span><span class="s3">]</span>
+    <span class="s2">return </span><span class="s1">NowNode</span><span class="s3">(</span><span class="s1">format_string</span><span class="s3">, </span><span class="s1">asvar</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">regroup</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Regroup a list of alike objects by a common attribute. 
+ 
+    This complex tag is best illustrated by use of an example: say that 
+    ``musicians`` is a list of ``Musician`` objects that have ``name`` and 
+    ``instrument`` attributes, and you'd like to display a list that 
+    looks like: 
+ 
+        * Guitar: 
+            * Django Reinhardt 
+            * Emily Remler 
+        * Piano: 
+            * Lovie Austin 
+            * Bud Powell 
+        * Trumpet: 
+            * Duke Ellington 
+ 
+    The following snippet of template code would accomplish this dubious task:: 
+ 
+        {% regroup musicians by instrument as grouped %} 
+        &lt;ul&gt; 
+        {% for group in grouped %} 
+            &lt;li&gt;{{ group.grouper }} 
+            &lt;ul&gt; 
+                {% for musician in group.list %} 
+                &lt;li&gt;{{ musician.name }}&lt;/li&gt; 
+                {% endfor %} 
+            &lt;/ul&gt; 
+        {% endfor %} 
+        &lt;/ul&gt; 
+ 
+    As you can see, ``{% regroup %}`` populates a variable with a list of 
+    objects with ``grouper`` and ``list`` attributes. ``grouper`` contains the 
+    item that was grouped by; ``list`` contains the list of objects that share 
+    that ``grouper``. In this case, ``grouper`` would be ``Guitar``, ``Piano`` 
+    and ``Trumpet``, and ``list`` is the list of musicians who play this 
+    instrument. 
+ 
+    Note that ``{% regroup %}`` does not work when the list to be grouped is not 
+    sorted by the key you are grouping by! This means that if your list of 
+    musicians was not sorted by instrument, you'd need to make sure it is sorted 
+    before using it, i.e.:: 
+ 
+        {% regroup musicians|dictsort:&quot;instrument&quot; by instrument as grouped %} 
+    &quot;&quot;&quot;</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">split_contents</span><span class="s3">()</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) != </span><span class="s6">6</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;'regroup' tag takes five arguments&quot;</span><span class="s3">)</span>
+    <span class="s1">target </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">[</span><span class="s6">1</span><span class="s3">])</span>
+    <span class="s2">if </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">2</span><span class="s3">] != </span><span class="s4">&quot;by&quot;</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;second argument to 'regroup' tag must be 'by'&quot;</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">4</span><span class="s3">] != </span><span class="s4">&quot;as&quot;</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;next-to-last argument to 'regroup' tag must be 'as'&quot;</span><span class="s3">)</span>
+    <span class="s1">var_name </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">5</span><span class="s3">]</span>
+    <span class="s5"># RegroupNode will take each item in 'target', put it in the context under</span>
+    <span class="s5"># 'var_name', evaluate 'var_name'.'expression' in the current context, and</span>
+    <span class="s5"># group by the resulting value. After all items are processed, it will</span>
+    <span class="s5"># save the final result in the context under 'var_name', thus clearing the</span>
+    <span class="s5"># temporary values. This hack is necessary because the template engine</span>
+    <span class="s5"># doesn't provide a context-aware equivalent of Python's getattr.</span>
+    <span class="s1">expression </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span>
+        <span class="s1">var_name </span><span class="s3">+ </span><span class="s1">VARIABLE_ATTRIBUTE_SEPARATOR </span><span class="s3">+ </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">3</span><span class="s3">]</span>
+    <span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">RegroupNode</span><span class="s3">(</span><span class="s1">target</span><span class="s3">, </span><span class="s1">expression</span><span class="s3">, </span><span class="s1">var_name</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">resetcycle</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Reset a cycle tag. 
+ 
+    If an argument is given, reset the last rendered cycle tag whose name 
+    matches the argument, else reset the last rendered cycle tag (named or 
+    unnamed). 
+    &quot;&quot;&quot;</span>
+    <span class="s1">args </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">split_contents</span><span class="s3">()</span>
+
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">args</span><span class="s3">) &gt; </span><span class="s6">2</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;%r tag accepts at most one argument.&quot; </span><span class="s3">% </span><span class="s1">args</span><span class="s3">[</span><span class="s6">0</span><span class="s3">])</span>
+
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">args</span><span class="s3">) == </span><span class="s6">2</span><span class="s3">:</span>
+        <span class="s1">name </span><span class="s3">= </span><span class="s1">args</span><span class="s3">[</span><span class="s6">1</span><span class="s3">]</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">ResetCycleNode</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">.</span><span class="s1">_named_cycle_nodes</span><span class="s3">[</span><span class="s1">name</span><span class="s3">])</span>
+        <span class="s2">except </span><span class="s3">(</span><span class="s1">AttributeError</span><span class="s3">, </span><span class="s1">KeyError</span><span class="s3">):</span>
+            <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;Named cycle '%s' does not exist.&quot; </span><span class="s3">% </span><span class="s1">name</span><span class="s3">)</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">ResetCycleNode</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">.</span><span class="s1">_last_cycle_node</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">AttributeError</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;No cycles in template.&quot;</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">spaceless</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Remove whitespace between HTML tags, including tab and newline characters. 
+ 
+    Example usage:: 
+ 
+        {% spaceless %} 
+            &lt;p&gt; 
+                &lt;a href=&quot;foo/&quot;&gt;Foo&lt;/a&gt; 
+            &lt;/p&gt; 
+        {% endspaceless %} 
+ 
+    This example returns this HTML:: 
+ 
+        &lt;p&gt;&lt;a href=&quot;foo/&quot;&gt;Foo&lt;/a&gt;&lt;/p&gt; 
+ 
+    Only space between *tags* is normalized -- not space between tags and text. 
+    In this example, the space around ``Hello`` isn't stripped:: 
+ 
+        {% spaceless %} 
+            &lt;strong&gt; 
+                Hello 
+            &lt;/strong&gt; 
+        {% endspaceless %} 
+    &quot;&quot;&quot;</span>
+    <span class="s1">nodelist </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">parse</span><span class="s3">((</span><span class="s4">&quot;endspaceless&quot;</span><span class="s3">,))</span>
+    <span class="s1">parser</span><span class="s3">.</span><span class="s1">delete_first_token</span><span class="s3">()</span>
+    <span class="s2">return </span><span class="s1">SpacelessNode</span><span class="s3">(</span><span class="s1">nodelist</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">templatetag</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Output one of the bits used to compose template tags. 
+ 
+    Since the template system has no concept of &quot;escaping&quot;, to display one of 
+    the bits used in template tags, you must use the ``{% templatetag %}`` tag. 
+ 
+    The argument tells which template bit to output: 
+ 
+        ==================  ======= 
+        Argument            Outputs 
+        ==================  ======= 
+        ``openblock``       ``{%`` 
+        ``closeblock``      ``%}`` 
+        ``openvariable``    ``{{`` 
+        ``closevariable``   ``}}`` 
+        ``openbrace``       ``{`` 
+        ``closebrace``      ``}`` 
+        ``opencomment``     ``{#`` 
+        ``closecomment``    ``#}`` 
+        ==================  ======= 
+    &quot;&quot;&quot;</span>
+    <span class="s5"># token.split_contents() isn't useful here because this tag doesn't accept</span>
+    <span class="s5"># variable as arguments.</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">contents</span><span class="s3">.</span><span class="s1">split</span><span class="s3">()</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) != </span><span class="s6">2</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;'templatetag' statement takes one argument&quot;</span><span class="s3">)</span>
+    <span class="s1">tag </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">1</span><span class="s3">]</span>
+    <span class="s2">if </span><span class="s1">tag </span><span class="s2">not in </span><span class="s1">TemplateTagNode</span><span class="s3">.</span><span class="s1">mapping</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+            <span class="s4">&quot;Invalid templatetag argument: '%s'.&quot;</span>
+            <span class="s4">&quot; Must be one of: %s&quot; </span><span class="s3">% (</span><span class="s1">tag</span><span class="s3">, </span><span class="s1">list</span><span class="s3">(</span><span class="s1">TemplateTagNode</span><span class="s3">.</span><span class="s1">mapping</span><span class="s3">))</span>
+        <span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">TemplateTagNode</span><span class="s3">(</span><span class="s1">tag</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">url</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">r&quot;&quot;&quot; 
+    Return an absolute URL matching the given view with its parameters. 
+ 
+    This is a way to define links that aren't tied to a particular URL 
+    configuration:: 
+ 
+        {% url &quot;url_name&quot; arg1 arg2 %} 
+ 
+        or 
+ 
+        {% url &quot;url_name&quot; name1=value1 name2=value2 %} 
+ 
+    The first argument is a URL pattern name. Other arguments are 
+    space-separated values that will be filled in place of positional and 
+    keyword arguments in the URL. Don't mix positional and keyword arguments. 
+    All arguments for the URL must be present. 
+ 
+    For example, if you have a view ``app_name.views.client_details`` taking 
+    the client's id and the corresponding line in a URLconf looks like this:: 
+ 
+        path('client/&lt;int:id&gt;/', views.client_details, name='client-detail-view') 
+ 
+    and this app's URLconf is included into the project's URLconf under some 
+    path:: 
+ 
+        path('clients/', include('app_name.urls')) 
+ 
+    then in a template you can create a link for a certain client like this:: 
+ 
+        {% url &quot;client-detail-view&quot; client.id %} 
+ 
+    The URL will look like ``/clients/client/123/``. 
+ 
+    The first argument may also be the name of a template variable that will be 
+    evaluated to obtain the view name or the URL name, e.g.:: 
+ 
+        {% with url_name=&quot;client-detail-view&quot; %} 
+        {% url url_name client.id %} 
+        {% endwith %} 
+    &quot;&quot;&quot;</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">split_contents</span><span class="s3">()</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) &lt; </span><span class="s6">2</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+            <span class="s4">&quot;'%s' takes at least one argument, a URL pattern name.&quot; </span><span class="s3">% </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">0</span><span class="s3">]</span>
+        <span class="s3">)</span>
+    <span class="s1">viewname </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">[</span><span class="s6">1</span><span class="s3">])</span>
+    <span class="s1">args </span><span class="s3">= []</span>
+    <span class="s1">kwargs </span><span class="s3">= {}</span>
+    <span class="s1">asvar </span><span class="s3">= </span><span class="s2">None</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">2</span><span class="s3">:]</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) &gt;= </span><span class="s6">2 </span><span class="s2">and </span><span class="s1">bits</span><span class="s3">[-</span><span class="s6">2</span><span class="s3">] == </span><span class="s4">&quot;as&quot;</span><span class="s3">:</span>
+        <span class="s1">asvar </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">]</span>
+        <span class="s1">bits </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[:-</span><span class="s6">2</span><span class="s3">]</span>
+
+    <span class="s2">for </span><span class="s1">bit </span><span class="s2">in </span><span class="s1">bits</span><span class="s3">:</span>
+        <span class="s1">match </span><span class="s3">= </span><span class="s1">kwarg_re</span><span class="s3">.</span><span class="s1">match</span><span class="s3">(</span><span class="s1">bit</span><span class="s3">)</span>
+        <span class="s2">if not </span><span class="s1">match</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;Malformed arguments to url tag&quot;</span><span class="s3">)</span>
+        <span class="s1">name</span><span class="s3">, </span><span class="s1">value </span><span class="s3">= </span><span class="s1">match</span><span class="s3">.</span><span class="s1">groups</span><span class="s3">()</span>
+        <span class="s2">if </span><span class="s1">name</span><span class="s3">:</span>
+            <span class="s1">kwargs</span><span class="s3">[</span><span class="s1">name</span><span class="s3">] = </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">args</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">value</span><span class="s3">))</span>
+
+    <span class="s2">return </span><span class="s1">URLNode</span><span class="s3">(</span><span class="s1">viewname</span><span class="s3">, </span><span class="s1">args</span><span class="s3">, </span><span class="s1">kwargs</span><span class="s3">, </span><span class="s1">asvar</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">verbatim</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Stop the template engine from rendering the contents of this block tag. 
+ 
+    Usage:: 
+ 
+        {% verbatim %} 
+            {% don't process this %} 
+        {% endverbatim %} 
+ 
+    You can also designate a specific closing tag block (allowing the 
+    unrendered use of ``{% endverbatim %}``):: 
+ 
+        {% verbatim myblock %} 
+            ... 
+        {% endverbatim myblock %} 
+    &quot;&quot;&quot;</span>
+    <span class="s1">nodelist </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">parse</span><span class="s3">((</span><span class="s4">&quot;endverbatim&quot;</span><span class="s3">,))</span>
+    <span class="s1">parser</span><span class="s3">.</span><span class="s1">delete_first_token</span><span class="s3">()</span>
+    <span class="s2">return </span><span class="s1">VerbatimNode</span><span class="s3">(</span><span class="s1">nodelist</span><span class="s3">.</span><span class="s1">render</span><span class="s3">(</span><span class="s1">Context</span><span class="s3">()))</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span>
+<span class="s2">def </span><span class="s1">widthratio</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    For creating bar charts and such. Calculate the ratio of a given value to a 
+    maximum value, and then apply that ratio to a constant. 
+ 
+    For example:: 
+ 
+        &lt;img src=&quot;bar.png&quot; alt=&quot;Bar&quot; 
+             height=&quot;10&quot; width=&quot;{% widthratio this_value max_value max_width %}&quot;&gt; 
+ 
+    If ``this_value`` is 175, ``max_value`` is 200, and ``max_width`` is 100, 
+    the image in the above example will be 88 pixels wide 
+    (because 175/200 = .875; .875 * 100 = 87.5 which is rounded up to 88). 
+ 
+    In some cases you might want to capture the result of widthratio in a 
+    variable. It can be useful for instance in a blocktranslate like this:: 
+ 
+        {% widthratio this_value max_value max_width as width %} 
+        {% blocktranslate %}The width is: {{ width }}{% endblocktranslate %} 
+    &quot;&quot;&quot;</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">split_contents</span><span class="s3">()</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) == </span><span class="s6">4</span><span class="s3">:</span>
+        <span class="s1">tag</span><span class="s3">, </span><span class="s1">this_value_expr</span><span class="s3">, </span><span class="s1">max_value_expr</span><span class="s3">, </span><span class="s1">max_width </span><span class="s3">= </span><span class="s1">bits</span>
+        <span class="s1">asvar </span><span class="s3">= </span><span class="s2">None</span>
+    <span class="s2">elif </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) == </span><span class="s6">6</span><span class="s3">:</span>
+        <span class="s1">tag</span><span class="s3">, </span><span class="s1">this_value_expr</span><span class="s3">, </span><span class="s1">max_value_expr</span><span class="s3">, </span><span class="s1">max_width</span><span class="s3">, </span><span class="s1">as_</span><span class="s3">, </span><span class="s1">asvar </span><span class="s3">= </span><span class="s1">bits</span>
+        <span class="s2">if </span><span class="s1">as_ </span><span class="s3">!= </span><span class="s4">&quot;as&quot;</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+                <span class="s4">&quot;Invalid syntax in widthratio tag. Expecting 'as' keyword&quot;</span>
+            <span class="s3">)</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span><span class="s4">&quot;widthratio takes at least three arguments&quot;</span><span class="s3">)</span>
+
+    <span class="s2">return </span><span class="s1">WidthRatioNode</span><span class="s3">(</span>
+        <span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">this_value_expr</span><span class="s3">),</span>
+        <span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">max_value_expr</span><span class="s3">),</span>
+        <span class="s1">parser</span><span class="s3">.</span><span class="s1">compile_filter</span><span class="s3">(</span><span class="s1">max_width</span><span class="s3">),</span>
+        <span class="s1">asvar</span><span class="s3">=</span><span class="s1">asvar</span><span class="s3">,</span>
+    <span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">tag</span><span class="s3">(</span><span class="s4">&quot;with&quot;</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">do_with</span><span class="s3">(</span><span class="s1">parser</span><span class="s3">, </span><span class="s1">token</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Add one or more values to the context (inside of this block) for caching 
+    and easy access. 
+ 
+    For example:: 
+ 
+        {% with total=person.some_sql_method %} 
+            {{ total }} object{{ total|pluralize }} 
+        {% endwith %} 
+ 
+    Multiple values can be added to the context:: 
+ 
+        {% with foo=1 bar=2 %} 
+            ... 
+        {% endwith %} 
+ 
+    The legacy format of ``{% with person.some_sql_method as total %}`` is 
+    still accepted. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">token</span><span class="s3">.</span><span class="s1">split_contents</span><span class="s3">()</span>
+    <span class="s1">remaining_bits </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">1</span><span class="s3">:]</span>
+    <span class="s1">extra_context </span><span class="s3">= </span><span class="s1">token_kwargs</span><span class="s3">(</span><span class="s1">remaining_bits</span><span class="s3">, </span><span class="s1">parser</span><span class="s3">, </span><span class="s1">support_legacy</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+    <span class="s2">if not </span><span class="s1">extra_context</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+            <span class="s4">&quot;%r expected at least one variable assignment&quot; </span><span class="s3">% </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">0</span><span class="s3">]</span>
+        <span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">remaining_bits</span><span class="s3">:</span>
+        <span class="s2">raise </span><span class="s1">TemplateSyntaxError</span><span class="s3">(</span>
+            <span class="s4">&quot;%r received an invalid token: %r&quot; </span><span class="s3">% (</span><span class="s1">bits</span><span class="s3">[</span><span class="s6">0</span><span class="s3">], </span><span class="s1">remaining_bits</span><span class="s3">[</span><span class="s6">0</span><span class="s3">])</span>
+        <span class="s3">)</span>
+    <span class="s1">nodelist </span><span class="s3">= </span><span class="s1">parser</span><span class="s3">.</span><span class="s1">parse</span><span class="s3">((</span><span class="s4">&quot;endwith&quot;</span><span class="s3">,))</span>
+    <span class="s1">parser</span><span class="s3">.</span><span class="s1">delete_first_token</span><span class="s3">()</span>
+    <span class="s2">return </span><span class="s1">WithNode</span><span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s2">None</span><span class="s3">, </span><span class="s1">nodelist</span><span class="s3">, </span><span class="s1">extra_context</span><span class="s3">=</span><span class="s1">extra_context</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

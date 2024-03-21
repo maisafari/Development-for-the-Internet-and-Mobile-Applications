@@ -1,0 +1,263 @@
+<html>
+<head>
+<title>RelatedObjectLookups.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #6aab73;}
+.s3 { color: #bcbec4;}
+.s4 { color: #cf8e6d;}
+.s5 { color: #2aacb8;}
+.s6 { color: #42c3d4;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+RelatedObjectLookups.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/*global SelectBox, interpolate*/</span>
+<span class="s0">// Handles related-objects functionality: lookup link for raw_id_fields</span>
+<span class="s0">// and Add Another links.</span>
+<span class="s2">'use strict'</span><span class="s3">;</span>
+<span class="s3">{</span>
+    <span class="s4">const </span><span class="s1">$ </span><span class="s3">= </span><span class="s1">django</span><span class="s3">.</span><span class="s1">jQuery</span><span class="s3">;</span>
+    <span class="s4">let </span><span class="s1">popupIndex </span><span class="s3">= </span><span class="s5">0</span><span class="s3">;</span>
+    <span class="s4">const </span><span class="s1">relatedWindows </span><span class="s3">= [];</span>
+
+    <span class="s4">function </span><span class="s1">dismissChildPopups</span><span class="s3">() {</span>
+        <span class="s1">relatedWindows</span><span class="s3">.</span><span class="s1">forEach</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">win</span><span class="s3">) {</span>
+            <span class="s4">if</span><span class="s3">(!</span><span class="s1">win</span><span class="s3">.</span><span class="s1">closed</span><span class="s3">) {</span>
+                <span class="s1">win</span><span class="s3">.</span><span class="s1">dismissChildPopups</span><span class="s3">();</span>
+                <span class="s1">win</span><span class="s3">.</span><span class="s1">close</span><span class="s3">();    </span>
+            <span class="s3">}</span>
+        <span class="s3">});</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">setPopupIndex</span><span class="s3">() {</span>
+        <span class="s4">if</span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementsByName</span><span class="s3">(</span><span class="s2">&quot;_popup&quot;</span><span class="s3">).</span><span class="s1">length </span><span class="s3">&gt; </span><span class="s5">0</span><span class="s3">) {</span>
+            <span class="s4">const </span><span class="s1">index </span><span class="s3">= </span><span class="s1">window</span><span class="s3">.</span><span class="s1">name</span><span class="s3">.</span><span class="s1">lastIndexOf</span><span class="s3">(</span><span class="s2">&quot;__&quot;</span><span class="s3">) + </span><span class="s5">2</span><span class="s3">;</span>
+            <span class="s1">popupIndex </span><span class="s3">= </span><span class="s1">parseInt</span><span class="s3">(</span><span class="s1">window</span><span class="s3">.</span><span class="s1">name</span><span class="s3">.</span><span class="s1">substring</span><span class="s3">(</span><span class="s1">index</span><span class="s3">));   </span>
+        <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+            <span class="s1">popupIndex </span><span class="s3">= </span><span class="s5">0</span><span class="s3">;</span>
+        <span class="s3">}</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">addPopupIndex</span><span class="s3">(</span><span class="s1">name</span><span class="s3">) {</span>
+        <span class="s4">return </span><span class="s1">name </span><span class="s3">+ </span><span class="s2">&quot;__&quot; </span><span class="s3">+ (</span><span class="s1">popupIndex </span><span class="s3">+ </span><span class="s5">1</span><span class="s3">);</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">removePopupIndex</span><span class="s3">(</span><span class="s1">name</span><span class="s3">) {</span>
+        <span class="s4">return </span><span class="s1">name</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s4">new </span><span class="s1">RegExp</span><span class="s3">(</span><span class="s2">&quot;__&quot; </span><span class="s3">+ (</span><span class="s1">popupIndex </span><span class="s3">+ </span><span class="s5">1</span><span class="s3">) + </span><span class="s2">&quot;$&quot;</span><span class="s3">), </span><span class="s2">''</span><span class="s3">);</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">showAdminPopup</span><span class="s3">(</span><span class="s1">triggeringLink</span><span class="s3">, </span><span class="s1">name_regexp</span><span class="s3">, </span><span class="s1">add_popup</span><span class="s3">) {</span>
+        <span class="s4">const </span><span class="s1">name </span><span class="s3">= </span><span class="s1">addPopupIndex</span><span class="s3">(</span><span class="s1">triggeringLink</span><span class="s3">.</span><span class="s1">id</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s1">name_regexp</span><span class="s3">, </span><span class="s2">''</span><span class="s3">));</span>
+        <span class="s4">const </span><span class="s1">href </span><span class="s3">= </span><span class="s4">new </span><span class="s1">URL</span><span class="s3">(</span><span class="s1">triggeringLink</span><span class="s3">.</span><span class="s1">href</span><span class="s3">);</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">add_popup</span><span class="s3">) {</span>
+            <span class="s1">href</span><span class="s3">.</span><span class="s1">searchParams</span><span class="s3">.</span><span class="s1">set</span><span class="s3">(</span><span class="s2">'_popup'</span><span class="s3">, </span><span class="s5">1</span><span class="s3">);</span>
+        <span class="s3">}</span>
+        <span class="s4">const </span><span class="s1">win </span><span class="s3">= </span><span class="s1">window</span><span class="s3">.</span><span class="s1">open</span><span class="s3">(</span><span class="s1">href</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s2">'height=500,width=800,resizable=yes,scrollbars=yes'</span><span class="s3">);</span>
+        <span class="s1">relatedWindows</span><span class="s3">.</span><span class="s1">push</span><span class="s3">(</span><span class="s1">win</span><span class="s3">);</span>
+        <span class="s1">win</span><span class="s3">.</span><span class="s1">focus</span><span class="s3">();</span>
+        <span class="s4">return false</span><span class="s3">;</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">showRelatedObjectLookupPopup</span><span class="s3">(</span><span class="s1">triggeringLink</span><span class="s3">) {</span>
+        <span class="s4">return </span><span class="s1">showAdminPopup</span><span class="s3">(</span><span class="s1">triggeringLink</span><span class="s3">, </span><span class="s6">/^lookup_/</span><span class="s3">, </span><span class="s4">true</span><span class="s3">);</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">dismissRelatedLookupPopup</span><span class="s3">(</span><span class="s1">win</span><span class="s3">, </span><span class="s1">chosenId</span><span class="s3">) {</span>
+        <span class="s4">const </span><span class="s1">name </span><span class="s3">= </span><span class="s1">removePopupIndex</span><span class="s3">(</span><span class="s1">win</span><span class="s3">.</span><span class="s1">name</span><span class="s3">);</span>
+        <span class="s4">const </span><span class="s1">elem </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">name</span><span class="s3">);</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">elem</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">contains</span><span class="s3">(</span><span class="s2">'vManyToManyRawIdAdminField'</span><span class="s3">) &amp;&amp; </span><span class="s1">elem</span><span class="s3">.</span><span class="s1">value</span><span class="s3">) {</span>
+            <span class="s1">elem</span><span class="s3">.</span><span class="s1">value </span><span class="s3">+= </span><span class="s2">',' </span><span class="s3">+ </span><span class="s1">chosenId</span><span class="s3">;</span>
+        <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+            <span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">name</span><span class="s3">).</span><span class="s1">value </span><span class="s3">= </span><span class="s1">chosenId</span><span class="s3">;</span>
+        <span class="s3">}</span>
+        <span class="s4">const </span><span class="s1">index </span><span class="s3">= </span><span class="s1">relatedWindows</span><span class="s3">.</span><span class="s1">indexOf</span><span class="s3">(</span><span class="s1">win</span><span class="s3">);</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">index </span><span class="s3">&gt; -</span><span class="s5">1</span><span class="s3">) {</span>
+            <span class="s1">relatedWindows</span><span class="s3">.</span><span class="s1">splice</span><span class="s3">(</span><span class="s1">index</span><span class="s3">, </span><span class="s5">1</span><span class="s3">);</span>
+        <span class="s3">}</span>
+        <span class="s1">win</span><span class="s3">.</span><span class="s1">close</span><span class="s3">();</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">showRelatedObjectPopup</span><span class="s3">(</span><span class="s1">triggeringLink</span><span class="s3">) {</span>
+        <span class="s4">return </span><span class="s1">showAdminPopup</span><span class="s3">(</span><span class="s1">triggeringLink</span><span class="s3">, </span><span class="s6">/^(change|add|delete)_/</span><span class="s3">, </span><span class="s4">false</span><span class="s3">);</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">updateRelatedObjectLinks</span><span class="s3">(</span><span class="s1">triggeringLink</span><span class="s3">) {</span>
+        <span class="s4">const </span><span class="s1">$this </span><span class="s3">= </span><span class="s1">$</span><span class="s3">(</span><span class="s1">triggeringLink</span><span class="s3">);</span>
+        <span class="s4">const </span><span class="s1">siblings </span><span class="s3">= </span><span class="s1">$this</span><span class="s3">.</span><span class="s1">nextAll</span><span class="s3">(</span><span class="s2">'.view-related, .change-related, .delete-related'</span><span class="s3">);</span>
+        <span class="s4">if </span><span class="s3">(!</span><span class="s1">siblings</span><span class="s3">.</span><span class="s1">length</span><span class="s3">) {</span>
+            <span class="s4">return</span><span class="s3">;</span>
+        <span class="s3">}</span>
+        <span class="s4">const </span><span class="s1">value </span><span class="s3">= </span><span class="s1">$this</span><span class="s3">.</span><span class="s1">val</span><span class="s3">();</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">value</span><span class="s3">) {</span>
+            <span class="s1">siblings</span><span class="s3">.</span><span class="s1">each</span><span class="s3">(</span><span class="s4">function</span><span class="s3">() {</span>
+                <span class="s4">const </span><span class="s1">elm </span><span class="s3">= </span><span class="s1">$</span><span class="s3">(</span><span class="s4">this</span><span class="s3">);</span>
+                <span class="s1">elm</span><span class="s3">.</span><span class="s1">attr</span><span class="s3">(</span><span class="s2">'href'</span><span class="s3">, </span><span class="s1">elm</span><span class="s3">.</span><span class="s1">attr</span><span class="s3">(</span><span class="s2">'data-href-template'</span><span class="s3">).</span><span class="s1">replace</span><span class="s3">(</span><span class="s2">'__fk__'</span><span class="s3">, </span><span class="s1">value</span><span class="s3">));</span>
+                <span class="s1">elm</span><span class="s3">.</span><span class="s1">removeAttr</span><span class="s3">(</span><span class="s2">'aria-disabled'</span><span class="s3">);</span>
+            <span class="s3">});</span>
+        <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+            <span class="s1">siblings</span><span class="s3">.</span><span class="s1">removeAttr</span><span class="s3">(</span><span class="s2">'href'</span><span class="s3">);</span>
+            <span class="s1">siblings</span><span class="s3">.</span><span class="s1">attr</span><span class="s3">(</span><span class="s2">'aria-disabled'</span><span class="s3">, </span><span class="s4">true</span><span class="s3">);</span>
+        <span class="s3">}</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">updateRelatedSelectsOptions</span><span class="s3">(</span><span class="s1">currentSelect</span><span class="s3">, </span><span class="s1">win</span><span class="s3">, </span><span class="s1">objId</span><span class="s3">, </span><span class="s1">newRepr</span><span class="s3">, </span><span class="s1">newId</span><span class="s3">) {</span>
+        <span class="s0">// After create/edit a model from the options next to the current</span>
+        <span class="s0">// select (+ or :pencil:) update ForeignKey PK of the rest of selects</span>
+        <span class="s0">// in the page.</span>
+
+        <span class="s4">const </span><span class="s1">path </span><span class="s3">= </span><span class="s1">win</span><span class="s3">.</span><span class="s1">location</span><span class="s3">.</span><span class="s1">pathname</span><span class="s3">;</span>
+        <span class="s0">// Extract the model from the popup url '.../&lt;model&gt;/add/' or</span>
+        <span class="s0">// '.../&lt;model&gt;/&lt;id&gt;/change/' depending the action (add or change).</span>
+        <span class="s4">const </span><span class="s1">modelName </span><span class="s3">= </span><span class="s1">path</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s2">'/'</span><span class="s3">)[</span><span class="s1">path</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s2">'/'</span><span class="s3">).</span><span class="s1">length </span><span class="s3">- (</span><span class="s1">objId </span><span class="s3">? </span><span class="s5">4 </span><span class="s3">: </span><span class="s5">3</span><span class="s3">)];</span>
+        <span class="s0">// Exclude autocomplete selects.</span>
+        <span class="s4">const </span><span class="s1">selectsRelated </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">querySelectorAll</span><span class="s3">(</span><span class="s2">`[data-model-ref=&quot;</span><span class="s1">$</span><span class="s3">{</span><span class="s1">modelName</span><span class="s3">}</span><span class="s2">&quot;] select:not(.admin-autocomplete)`</span><span class="s3">);</span>
+
+        <span class="s1">selectsRelated</span><span class="s3">.</span><span class="s1">forEach</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">select</span><span class="s3">) {</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">currentSelect </span><span class="s3">=== </span><span class="s1">select</span><span class="s3">) {</span>
+                <span class="s4">return</span><span class="s3">;</span>
+            <span class="s3">}</span>
+
+            <span class="s4">let </span><span class="s1">option </span><span class="s3">= </span><span class="s1">select</span><span class="s3">.</span><span class="s1">querySelector</span><span class="s3">(</span><span class="s2">`option[value=&quot;</span><span class="s1">$</span><span class="s3">{</span><span class="s1">objId</span><span class="s3">}</span><span class="s2">&quot;]`</span><span class="s3">);</span>
+
+            <span class="s4">if </span><span class="s3">(!</span><span class="s1">option</span><span class="s3">) {</span>
+                <span class="s1">option </span><span class="s3">= </span><span class="s4">new </span><span class="s1">Option</span><span class="s3">(</span><span class="s1">newRepr</span><span class="s3">, </span><span class="s1">newId</span><span class="s3">);</span>
+                <span class="s1">select</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">add</span><span class="s3">(</span><span class="s1">option</span><span class="s3">);</span>
+                <span class="s4">return</span><span class="s3">;</span>
+            <span class="s3">}</span>
+
+            <span class="s1">option</span><span class="s3">.</span><span class="s1">textContent </span><span class="s3">= </span><span class="s1">newRepr</span><span class="s3">;</span>
+            <span class="s1">option</span><span class="s3">.</span><span class="s1">value </span><span class="s3">= </span><span class="s1">newId</span><span class="s3">;</span>
+        <span class="s3">});</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">dismissAddRelatedObjectPopup</span><span class="s3">(</span><span class="s1">win</span><span class="s3">, </span><span class="s1">newId</span><span class="s3">, </span><span class="s1">newRepr</span><span class="s3">) {</span>
+        <span class="s4">const </span><span class="s1">name </span><span class="s3">= </span><span class="s1">removePopupIndex</span><span class="s3">(</span><span class="s1">win</span><span class="s3">.</span><span class="s1">name</span><span class="s3">);</span>
+        <span class="s4">const </span><span class="s1">elem </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">getElementById</span><span class="s3">(</span><span class="s1">name</span><span class="s3">);</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">elem</span><span class="s3">) {</span>
+            <span class="s4">const </span><span class="s1">elemName </span><span class="s3">= </span><span class="s1">elem</span><span class="s3">.</span><span class="s1">nodeName</span><span class="s3">.</span><span class="s1">toUpperCase</span><span class="s3">();</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">elemName </span><span class="s3">=== </span><span class="s2">'SELECT'</span><span class="s3">) {</span>
+                <span class="s1">elem</span><span class="s3">.</span><span class="s1">options</span><span class="s3">[</span><span class="s1">elem</span><span class="s3">.</span><span class="s1">options</span><span class="s3">.</span><span class="s1">length</span><span class="s3">] = </span><span class="s4">new </span><span class="s1">Option</span><span class="s3">(</span><span class="s1">newRepr</span><span class="s3">, </span><span class="s1">newId</span><span class="s3">, </span><span class="s4">true</span><span class="s3">, </span><span class="s4">true</span><span class="s3">);</span>
+                <span class="s1">updateRelatedSelectsOptions</span><span class="s3">(</span><span class="s1">elem</span><span class="s3">, </span><span class="s1">win</span><span class="s3">, </span><span class="s4">null</span><span class="s3">, </span><span class="s1">newRepr</span><span class="s3">, </span><span class="s1">newId</span><span class="s3">);</span>
+            <span class="s3">} </span><span class="s4">else if </span><span class="s3">(</span><span class="s1">elemName </span><span class="s3">=== </span><span class="s2">'INPUT'</span><span class="s3">) {</span>
+                <span class="s4">if </span><span class="s3">(</span><span class="s1">elem</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">contains</span><span class="s3">(</span><span class="s2">'vManyToManyRawIdAdminField'</span><span class="s3">) &amp;&amp; </span><span class="s1">elem</span><span class="s3">.</span><span class="s1">value</span><span class="s3">) {</span>
+                    <span class="s1">elem</span><span class="s3">.</span><span class="s1">value </span><span class="s3">+= </span><span class="s2">',' </span><span class="s3">+ </span><span class="s1">newId</span><span class="s3">;</span>
+                <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+                    <span class="s1">elem</span><span class="s3">.</span><span class="s1">value </span><span class="s3">= </span><span class="s1">newId</span><span class="s3">;</span>
+                <span class="s3">}</span>
+            <span class="s3">}</span>
+            <span class="s0">// Trigger a change event to update related links if required.</span>
+            <span class="s1">$</span><span class="s3">(</span><span class="s1">elem</span><span class="s3">).</span><span class="s1">trigger</span><span class="s3">(</span><span class="s2">'change'</span><span class="s3">);</span>
+        <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+            <span class="s4">const </span><span class="s1">toId </span><span class="s3">= </span><span class="s1">name </span><span class="s3">+ </span><span class="s2">&quot;_to&quot;</span><span class="s3">;</span>
+            <span class="s4">const </span><span class="s1">o </span><span class="s3">= </span><span class="s4">new </span><span class="s1">Option</span><span class="s3">(</span><span class="s1">newRepr</span><span class="s3">, </span><span class="s1">newId</span><span class="s3">);</span>
+            <span class="s1">SelectBox</span><span class="s3">.</span><span class="s1">add_to_cache</span><span class="s3">(</span><span class="s1">toId</span><span class="s3">, </span><span class="s1">o</span><span class="s3">);</span>
+            <span class="s1">SelectBox</span><span class="s3">.</span><span class="s1">redisplay</span><span class="s3">(</span><span class="s1">toId</span><span class="s3">);</span>
+        <span class="s3">}</span>
+        <span class="s4">const </span><span class="s1">index </span><span class="s3">= </span><span class="s1">relatedWindows</span><span class="s3">.</span><span class="s1">indexOf</span><span class="s3">(</span><span class="s1">win</span><span class="s3">);</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">index </span><span class="s3">&gt; -</span><span class="s5">1</span><span class="s3">) {</span>
+            <span class="s1">relatedWindows</span><span class="s3">.</span><span class="s1">splice</span><span class="s3">(</span><span class="s1">index</span><span class="s3">, </span><span class="s5">1</span><span class="s3">);</span>
+        <span class="s3">}</span>
+        <span class="s1">win</span><span class="s3">.</span><span class="s1">close</span><span class="s3">();</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">dismissChangeRelatedObjectPopup</span><span class="s3">(</span><span class="s1">win</span><span class="s3">, </span><span class="s1">objId</span><span class="s3">, </span><span class="s1">newRepr</span><span class="s3">, </span><span class="s1">newId</span><span class="s3">) {</span>
+        <span class="s4">const </span><span class="s1">id </span><span class="s3">= </span><span class="s1">removePopupIndex</span><span class="s3">(</span><span class="s1">win</span><span class="s3">.</span><span class="s1">name</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s6">/^edit_/</span><span class="s3">, </span><span class="s2">''</span><span class="s3">));</span>
+        <span class="s4">const </span><span class="s1">selectsSelector </span><span class="s3">= </span><span class="s1">interpolate</span><span class="s3">(</span><span class="s2">'#%s, #%s_from, #%s_to'</span><span class="s3">, [</span><span class="s1">id</span><span class="s3">, </span><span class="s1">id</span><span class="s3">, </span><span class="s1">id</span><span class="s3">]);</span>
+        <span class="s4">const </span><span class="s1">selects </span><span class="s3">= </span><span class="s1">$</span><span class="s3">(</span><span class="s1">selectsSelector</span><span class="s3">);</span>
+        <span class="s1">selects</span><span class="s3">.</span><span class="s1">find</span><span class="s3">(</span><span class="s2">'option'</span><span class="s3">).</span><span class="s1">each</span><span class="s3">(</span><span class="s4">function</span><span class="s3">() {</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">value </span><span class="s3">=== </span><span class="s1">objId</span><span class="s3">) {</span>
+                <span class="s4">this</span><span class="s3">.</span><span class="s1">textContent </span><span class="s3">= </span><span class="s1">newRepr</span><span class="s3">;</span>
+                <span class="s4">this</span><span class="s3">.</span><span class="s1">value </span><span class="s3">= </span><span class="s1">newId</span><span class="s3">;</span>
+            <span class="s3">}</span>
+        <span class="s3">}).</span><span class="s1">trigger</span><span class="s3">(</span><span class="s2">'change'</span><span class="s3">);</span>
+        <span class="s1">updateRelatedSelectsOptions</span><span class="s3">(</span><span class="s1">selects</span><span class="s3">[</span><span class="s5">0</span><span class="s3">], </span><span class="s1">win</span><span class="s3">, </span><span class="s1">objId</span><span class="s3">, </span><span class="s1">newRepr</span><span class="s3">, </span><span class="s1">newId</span><span class="s3">);</span>
+        <span class="s1">selects</span><span class="s3">.</span><span class="s1">next</span><span class="s3">().</span><span class="s1">find</span><span class="s3">(</span><span class="s2">'.select2-selection__rendered'</span><span class="s3">).</span><span class="s1">each</span><span class="s3">(</span><span class="s4">function</span><span class="s3">() {</span>
+            <span class="s0">// The element can have a clear button as a child.</span>
+            <span class="s0">// Use the lastChild to modify only the displayed value.</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">lastChild</span><span class="s3">.</span><span class="s1">textContent </span><span class="s3">= </span><span class="s1">newRepr</span><span class="s3">;</span>
+            <span class="s4">this</span><span class="s3">.</span><span class="s1">title </span><span class="s3">= </span><span class="s1">newRepr</span><span class="s3">;</span>
+        <span class="s3">});</span>
+        <span class="s4">const </span><span class="s1">index </span><span class="s3">= </span><span class="s1">relatedWindows</span><span class="s3">.</span><span class="s1">indexOf</span><span class="s3">(</span><span class="s1">win</span><span class="s3">);</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">index </span><span class="s3">&gt; -</span><span class="s5">1</span><span class="s3">) {</span>
+            <span class="s1">relatedWindows</span><span class="s3">.</span><span class="s1">splice</span><span class="s3">(</span><span class="s1">index</span><span class="s3">, </span><span class="s5">1</span><span class="s3">);</span>
+        <span class="s3">}</span>
+        <span class="s1">win</span><span class="s3">.</span><span class="s1">close</span><span class="s3">();</span>
+    <span class="s3">}</span>
+
+    <span class="s4">function </span><span class="s1">dismissDeleteRelatedObjectPopup</span><span class="s3">(</span><span class="s1">win</span><span class="s3">, </span><span class="s1">objId</span><span class="s3">) {</span>
+        <span class="s4">const </span><span class="s1">id </span><span class="s3">= </span><span class="s1">removePopupIndex</span><span class="s3">(</span><span class="s1">win</span><span class="s3">.</span><span class="s1">name</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s6">/^delete_/</span><span class="s3">, </span><span class="s2">''</span><span class="s3">));</span>
+        <span class="s4">const </span><span class="s1">selectsSelector </span><span class="s3">= </span><span class="s1">interpolate</span><span class="s3">(</span><span class="s2">'#%s, #%s_from, #%s_to'</span><span class="s3">, [</span><span class="s1">id</span><span class="s3">, </span><span class="s1">id</span><span class="s3">, </span><span class="s1">id</span><span class="s3">]);</span>
+        <span class="s4">const </span><span class="s1">selects </span><span class="s3">= </span><span class="s1">$</span><span class="s3">(</span><span class="s1">selectsSelector</span><span class="s3">);</span>
+        <span class="s1">selects</span><span class="s3">.</span><span class="s1">find</span><span class="s3">(</span><span class="s2">'option'</span><span class="s3">).</span><span class="s1">each</span><span class="s3">(</span><span class="s4">function</span><span class="s3">() {</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">value </span><span class="s3">=== </span><span class="s1">objId</span><span class="s3">) {</span>
+                <span class="s1">$</span><span class="s3">(</span><span class="s4">this</span><span class="s3">).</span><span class="s1">remove</span><span class="s3">();</span>
+            <span class="s3">}</span>
+        <span class="s3">}).</span><span class="s1">trigger</span><span class="s3">(</span><span class="s2">'change'</span><span class="s3">);</span>
+        <span class="s4">const </span><span class="s1">index </span><span class="s3">= </span><span class="s1">relatedWindows</span><span class="s3">.</span><span class="s1">indexOf</span><span class="s3">(</span><span class="s1">win</span><span class="s3">);</span>
+        <span class="s4">if </span><span class="s3">(</span><span class="s1">index </span><span class="s3">&gt; -</span><span class="s5">1</span><span class="s3">) {</span>
+            <span class="s1">relatedWindows</span><span class="s3">.</span><span class="s1">splice</span><span class="s3">(</span><span class="s1">index</span><span class="s3">, </span><span class="s5">1</span><span class="s3">);</span>
+        <span class="s3">}</span>
+        <span class="s1">win</span><span class="s3">.</span><span class="s1">close</span><span class="s3">();</span>
+    <span class="s3">}</span>
+
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">showRelatedObjectLookupPopup </span><span class="s3">= </span><span class="s1">showRelatedObjectLookupPopup</span><span class="s3">;</span>
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">dismissRelatedLookupPopup </span><span class="s3">= </span><span class="s1">dismissRelatedLookupPopup</span><span class="s3">;</span>
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">showRelatedObjectPopup </span><span class="s3">= </span><span class="s1">showRelatedObjectPopup</span><span class="s3">;</span>
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">updateRelatedObjectLinks </span><span class="s3">= </span><span class="s1">updateRelatedObjectLinks</span><span class="s3">;</span>
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">dismissAddRelatedObjectPopup </span><span class="s3">= </span><span class="s1">dismissAddRelatedObjectPopup</span><span class="s3">;</span>
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">dismissChangeRelatedObjectPopup </span><span class="s3">= </span><span class="s1">dismissChangeRelatedObjectPopup</span><span class="s3">;</span>
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">dismissDeleteRelatedObjectPopup </span><span class="s3">= </span><span class="s1">dismissDeleteRelatedObjectPopup</span><span class="s3">;</span>
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">dismissChildPopups </span><span class="s3">= </span><span class="s1">dismissChildPopups</span><span class="s3">;</span>
+
+    <span class="s0">// Kept for backward compatibility</span>
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">showAddAnotherPopup </span><span class="s3">= </span><span class="s1">showRelatedObjectPopup</span><span class="s3">;</span>
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">dismissAddAnotherPopup </span><span class="s3">= </span><span class="s1">dismissAddRelatedObjectPopup</span><span class="s3">;</span>
+
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'unload'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">evt</span><span class="s3">) {</span>
+        <span class="s1">window</span><span class="s3">.</span><span class="s1">dismissChildPopups</span><span class="s3">();</span>
+    <span class="s3">});</span>
+
+    <span class="s1">$</span><span class="s3">(</span><span class="s1">document</span><span class="s3">).</span><span class="s1">ready</span><span class="s3">(</span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s1">setPopupIndex</span><span class="s3">();</span>
+        <span class="s1">$</span><span class="s3">(</span><span class="s2">&quot;a[data-popup-opener]&quot;</span><span class="s3">).</span><span class="s1">on</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">event</span><span class="s3">) {</span>
+            <span class="s1">event</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+            <span class="s1">opener</span><span class="s3">.</span><span class="s1">dismissRelatedLookupPopup</span><span class="s3">(</span><span class="s1">window</span><span class="s3">, </span><span class="s1">$</span><span class="s3">(</span><span class="s4">this</span><span class="s3">).</span><span class="s1">data</span><span class="s3">(</span><span class="s2">&quot;popup-opener&quot;</span><span class="s3">));</span>
+        <span class="s3">});</span>
+        <span class="s1">$</span><span class="s3">(</span><span class="s2">'body'</span><span class="s3">).</span><span class="s1">on</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s2">'.related-widget-wrapper-link[data-popup=&quot;yes&quot;]'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+            <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s4">this</span><span class="s3">.</span><span class="s1">href</span><span class="s3">) {</span>
+                <span class="s4">const </span><span class="s1">event </span><span class="s3">= </span><span class="s1">$</span><span class="s3">.</span><span class="s1">Event</span><span class="s3">(</span><span class="s2">'django:show-related'</span><span class="s3">, {</span><span class="s1">href</span><span class="s3">: </span><span class="s4">this</span><span class="s3">.</span><span class="s1">href</span><span class="s3">});</span>
+                <span class="s1">$</span><span class="s3">(</span><span class="s4">this</span><span class="s3">).</span><span class="s1">trigger</span><span class="s3">(</span><span class="s1">event</span><span class="s3">);</span>
+                <span class="s4">if </span><span class="s3">(!</span><span class="s1">event</span><span class="s3">.</span><span class="s1">isDefaultPrevented</span><span class="s3">()) {</span>
+                    <span class="s1">showRelatedObjectPopup</span><span class="s3">(</span><span class="s4">this</span><span class="s3">);</span>
+                <span class="s3">}</span>
+            <span class="s3">}</span>
+        <span class="s3">});</span>
+        <span class="s1">$</span><span class="s3">(</span><span class="s2">'body'</span><span class="s3">).</span><span class="s1">on</span><span class="s3">(</span><span class="s2">'change'</span><span class="s3">, </span><span class="s2">'.related-widget-wrapper select'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+            <span class="s4">const </span><span class="s1">event </span><span class="s3">= </span><span class="s1">$</span><span class="s3">.</span><span class="s1">Event</span><span class="s3">(</span><span class="s2">'django:update-related'</span><span class="s3">);</span>
+            <span class="s1">$</span><span class="s3">(</span><span class="s4">this</span><span class="s3">).</span><span class="s1">trigger</span><span class="s3">(</span><span class="s1">event</span><span class="s3">);</span>
+            <span class="s4">if </span><span class="s3">(!</span><span class="s1">event</span><span class="s3">.</span><span class="s1">isDefaultPrevented</span><span class="s3">()) {</span>
+                <span class="s1">updateRelatedObjectLinks</span><span class="s3">(</span><span class="s4">this</span><span class="s3">);</span>
+            <span class="s3">}</span>
+        <span class="s3">});</span>
+        <span class="s1">$</span><span class="s3">(</span><span class="s2">'.related-widget-wrapper select'</span><span class="s3">).</span><span class="s1">trigger</span><span class="s3">(</span><span class="s2">'change'</span><span class="s3">);</span>
+        <span class="s1">$</span><span class="s3">(</span><span class="s2">'body'</span><span class="s3">).</span><span class="s1">on</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s2">'.related-lookup'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">(</span><span class="s1">e</span><span class="s3">) {</span>
+            <span class="s1">e</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+            <span class="s4">const </span><span class="s1">event </span><span class="s3">= </span><span class="s1">$</span><span class="s3">.</span><span class="s1">Event</span><span class="s3">(</span><span class="s2">'django:lookup-related'</span><span class="s3">);</span>
+            <span class="s1">$</span><span class="s3">(</span><span class="s4">this</span><span class="s3">).</span><span class="s1">trigger</span><span class="s3">(</span><span class="s1">event</span><span class="s3">);</span>
+            <span class="s4">if </span><span class="s3">(!</span><span class="s1">event</span><span class="s3">.</span><span class="s1">isDefaultPrevented</span><span class="s3">()) {</span>
+                <span class="s1">showRelatedObjectLookupPopup</span><span class="s3">(</span><span class="s4">this</span><span class="s3">);</span>
+            <span class="s3">}</span>
+        <span class="s3">});</span>
+    <span class="s3">});</span>
+<span class="s3">}</span>
+</pre>
+</body>
+</html>

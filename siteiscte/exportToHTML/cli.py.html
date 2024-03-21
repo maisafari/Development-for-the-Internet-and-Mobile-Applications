@@ -1,0 +1,219 @@
+<html>
+<head>
+<title>cli.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #5f826b; font-style: italic;}
+.s3 { color: #cf8e6d;}
+.s4 { color: #bcbec4;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+cli.py</font>
+</center></td></tr></table>
+<pre><span class="s0">#!/usr/bin/env python</span>
+<span class="s0">#</span>
+<span class="s0"># Copyright (C) 2009-2020 the sqlparse authors and contributors</span>
+<span class="s0"># &lt;see AUTHORS file&gt;</span>
+<span class="s0">#</span>
+<span class="s0"># This module is part of python-sqlparse and is released under</span>
+<span class="s0"># the BSD License: https://opensource.org/licenses/BSD-3-Clause</span>
+
+<span class="s2">&quot;&quot;&quot;Module that contains the command line app. 
+ 
+Why does this file exist, and why not put this in __main__? 
+  You might be tempted to import things from __main__ later, but that will 
+  cause problems: the code will get executed twice: 
+  - When you run `python -m sqlparse` python will execute 
+    ``__main__.py`` as a script. That means there won't be any 
+    ``sqlparse.__main__`` in ``sys.modules``. 
+  - When you import __main__ it will get executed again (as a module) because 
+    there's no ``sqlparse.__main__`` in ``sys.modules``. 
+  Also see (1) from http://click.pocoo.org/5/setuptools/#setuptools-integration 
+&quot;&quot;&quot;</span>
+
+<span class="s3">import </span><span class="s1">argparse</span>
+<span class="s3">import </span><span class="s1">sys</span>
+<span class="s3">from </span><span class="s1">io </span><span class="s3">import </span><span class="s1">TextIOWrapper</span>
+
+<span class="s3">import </span><span class="s1">sqlparse</span>
+<span class="s3">from </span><span class="s1">sqlparse</span><span class="s4">.</span><span class="s1">exceptions </span><span class="s3">import </span><span class="s1">SQLParseError</span>
+
+
+<span class="s0"># TODO: Add CLI Tests</span>
+<span class="s0"># TODO: Simplify formatter by using argparse `type` arguments</span>
+<span class="s3">def </span><span class="s1">create_parser</span><span class="s4">():</span>
+    <span class="s1">_CASE_CHOICES </span><span class="s4">= [</span><span class="s5">'upper'</span><span class="s4">, </span><span class="s5">'lower'</span><span class="s4">, </span><span class="s5">'capitalize'</span><span class="s4">]</span>
+
+    <span class="s1">parser </span><span class="s4">= </span><span class="s1">argparse</span><span class="s4">.</span><span class="s1">ArgumentParser</span><span class="s4">(</span>
+        <span class="s1">prog</span><span class="s4">=</span><span class="s5">'sqlformat'</span><span class="s4">,</span>
+        <span class="s1">description</span><span class="s4">=</span><span class="s5">'Format FILE according to OPTIONS. Use &quot;-&quot; as FILE '</span>
+                    <span class="s5">'to read from stdin.'</span><span class="s4">,</span>
+        <span class="s1">usage</span><span class="s4">=</span><span class="s5">'%(prog)s  [OPTIONS] FILE, ...'</span><span class="s4">,</span>
+    <span class="s4">)</span>
+
+    <span class="s1">parser</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span><span class="s5">'filename'</span><span class="s4">)</span>
+
+    <span class="s1">parser</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'-o'</span><span class="s4">, </span><span class="s5">'--outfile'</span><span class="s4">,</span>
+        <span class="s1">dest</span><span class="s4">=</span><span class="s5">'outfile'</span><span class="s4">,</span>
+        <span class="s1">metavar</span><span class="s4">=</span><span class="s5">'FILE'</span><span class="s4">,</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'write output to FILE (defaults to stdout)'</span><span class="s4">)</span>
+
+    <span class="s1">parser</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'--version'</span><span class="s4">,</span>
+        <span class="s1">action</span><span class="s4">=</span><span class="s5">'version'</span><span class="s4">,</span>
+        <span class="s1">version</span><span class="s4">=</span><span class="s1">sqlparse</span><span class="s4">.</span><span class="s1">__version__</span><span class="s4">)</span>
+
+    <span class="s1">group </span><span class="s4">= </span><span class="s1">parser</span><span class="s4">.</span><span class="s1">add_argument_group</span><span class="s4">(</span><span class="s5">'Formatting Options'</span><span class="s4">)</span>
+
+    <span class="s1">group</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'-k'</span><span class="s4">, </span><span class="s5">'--keywords'</span><span class="s4">,</span>
+        <span class="s1">metavar</span><span class="s4">=</span><span class="s5">'CHOICE'</span><span class="s4">,</span>
+        <span class="s1">dest</span><span class="s4">=</span><span class="s5">'keyword_case'</span><span class="s4">,</span>
+        <span class="s1">choices</span><span class="s4">=</span><span class="s1">_CASE_CHOICES</span><span class="s4">,</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'change case of keywords, CHOICE is one of {}'</span><span class="s4">.</span><span class="s1">format</span><span class="s4">(</span>
+            <span class="s5">', '</span><span class="s4">.</span><span class="s1">join</span><span class="s4">(</span><span class="s5">'&quot;{}&quot;'</span><span class="s4">.</span><span class="s1">format</span><span class="s4">(</span><span class="s1">x</span><span class="s4">) </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">_CASE_CHOICES</span><span class="s4">)))</span>
+
+    <span class="s1">group</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'-i'</span><span class="s4">, </span><span class="s5">'--identifiers'</span><span class="s4">,</span>
+        <span class="s1">metavar</span><span class="s4">=</span><span class="s5">'CHOICE'</span><span class="s4">,</span>
+        <span class="s1">dest</span><span class="s4">=</span><span class="s5">'identifier_case'</span><span class="s4">,</span>
+        <span class="s1">choices</span><span class="s4">=</span><span class="s1">_CASE_CHOICES</span><span class="s4">,</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'change case of identifiers, CHOICE is one of {}'</span><span class="s4">.</span><span class="s1">format</span><span class="s4">(</span>
+            <span class="s5">', '</span><span class="s4">.</span><span class="s1">join</span><span class="s4">(</span><span class="s5">'&quot;{}&quot;'</span><span class="s4">.</span><span class="s1">format</span><span class="s4">(</span><span class="s1">x</span><span class="s4">) </span><span class="s3">for </span><span class="s1">x </span><span class="s3">in </span><span class="s1">_CASE_CHOICES</span><span class="s4">)))</span>
+
+    <span class="s1">group</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'-l'</span><span class="s4">, </span><span class="s5">'--language'</span><span class="s4">,</span>
+        <span class="s1">metavar</span><span class="s4">=</span><span class="s5">'LANG'</span><span class="s4">,</span>
+        <span class="s1">dest</span><span class="s4">=</span><span class="s5">'output_format'</span><span class="s4">,</span>
+        <span class="s1">choices</span><span class="s4">=[</span><span class="s5">'python'</span><span class="s4">, </span><span class="s5">'php'</span><span class="s4">],</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'output a snippet in programming language LANG, '</span>
+             <span class="s5">'choices are &quot;python&quot;, &quot;php&quot;'</span><span class="s4">)</span>
+
+    <span class="s1">group</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'--strip-comments'</span><span class="s4">,</span>
+        <span class="s1">dest</span><span class="s4">=</span><span class="s5">'strip_comments'</span><span class="s4">,</span>
+        <span class="s1">action</span><span class="s4">=</span><span class="s5">'store_true'</span><span class="s4">,</span>
+        <span class="s1">default</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'remove comments'</span><span class="s4">)</span>
+
+    <span class="s1">group</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'-r'</span><span class="s4">, </span><span class="s5">'--reindent'</span><span class="s4">,</span>
+        <span class="s1">dest</span><span class="s4">=</span><span class="s5">'reindent'</span><span class="s4">,</span>
+        <span class="s1">action</span><span class="s4">=</span><span class="s5">'store_true'</span><span class="s4">,</span>
+        <span class="s1">default</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'reindent statements'</span><span class="s4">)</span>
+
+    <span class="s1">group</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'--indent_width'</span><span class="s4">,</span>
+        <span class="s1">dest</span><span class="s4">=</span><span class="s5">'indent_width'</span><span class="s4">,</span>
+        <span class="s1">default</span><span class="s4">=</span><span class="s6">2</span><span class="s4">,</span>
+        <span class="s1">type</span><span class="s4">=</span><span class="s1">int</span><span class="s4">,</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'indentation width (defaults to 2 spaces)'</span><span class="s4">)</span>
+
+    <span class="s1">group</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'--indent_after_first'</span><span class="s4">,</span>
+        <span class="s1">dest</span><span class="s4">=</span><span class="s5">'indent_after_first'</span><span class="s4">,</span>
+        <span class="s1">action</span><span class="s4">=</span><span class="s5">'store_true'</span><span class="s4">,</span>
+        <span class="s1">default</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'indent after first line of statement (e.g. SELECT)'</span><span class="s4">)</span>
+
+    <span class="s1">group</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'--indent_columns'</span><span class="s4">,</span>
+        <span class="s1">dest</span><span class="s4">=</span><span class="s5">'indent_columns'</span><span class="s4">,</span>
+        <span class="s1">action</span><span class="s4">=</span><span class="s5">'store_true'</span><span class="s4">,</span>
+        <span class="s1">default</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'indent all columns by indent_width instead of keyword length'</span><span class="s4">)</span>
+
+    <span class="s1">group</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'-a'</span><span class="s4">, </span><span class="s5">'--reindent_aligned'</span><span class="s4">,</span>
+        <span class="s1">action</span><span class="s4">=</span><span class="s5">'store_true'</span><span class="s4">,</span>
+        <span class="s1">default</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'reindent statements to aligned format'</span><span class="s4">)</span>
+
+    <span class="s1">group</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'-s'</span><span class="s4">, </span><span class="s5">'--use_space_around_operators'</span><span class="s4">,</span>
+        <span class="s1">action</span><span class="s4">=</span><span class="s5">'store_true'</span><span class="s4">,</span>
+        <span class="s1">default</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'place spaces around mathematical operators'</span><span class="s4">)</span>
+
+    <span class="s1">group</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'--wrap_after'</span><span class="s4">,</span>
+        <span class="s1">dest</span><span class="s4">=</span><span class="s5">'wrap_after'</span><span class="s4">,</span>
+        <span class="s1">default</span><span class="s4">=</span><span class="s6">0</span><span class="s4">,</span>
+        <span class="s1">type</span><span class="s4">=</span><span class="s1">int</span><span class="s4">,</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'Column after which lists should be wrapped'</span><span class="s4">)</span>
+
+    <span class="s1">group</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'--comma_first'</span><span class="s4">,</span>
+        <span class="s1">dest</span><span class="s4">=</span><span class="s5">'comma_first'</span><span class="s4">,</span>
+        <span class="s1">default</span><span class="s4">=</span><span class="s3">False</span><span class="s4">,</span>
+        <span class="s1">type</span><span class="s4">=</span><span class="s1">bool</span><span class="s4">,</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'Insert linebreak before comma (default False)'</span><span class="s4">)</span>
+
+    <span class="s1">group</span><span class="s4">.</span><span class="s1">add_argument</span><span class="s4">(</span>
+        <span class="s5">'--encoding'</span><span class="s4">,</span>
+        <span class="s1">dest</span><span class="s4">=</span><span class="s5">'encoding'</span><span class="s4">,</span>
+        <span class="s1">default</span><span class="s4">=</span><span class="s5">'utf-8'</span><span class="s4">,</span>
+        <span class="s1">help</span><span class="s4">=</span><span class="s5">'Specify the input encoding (default utf-8)'</span><span class="s4">)</span>
+
+    <span class="s3">return </span><span class="s1">parser</span>
+
+
+<span class="s3">def </span><span class="s1">_error</span><span class="s4">(</span><span class="s1">msg</span><span class="s4">):</span>
+    <span class="s2">&quot;&quot;&quot;Print msg and optionally exit with return code exit_.&quot;&quot;&quot;</span>
+    <span class="s1">sys</span><span class="s4">.</span><span class="s1">stderr</span><span class="s4">.</span><span class="s1">write</span><span class="s4">(</span><span class="s5">'[ERROR] {}</span><span class="s3">\n</span><span class="s5">'</span><span class="s4">.</span><span class="s1">format</span><span class="s4">(</span><span class="s1">msg</span><span class="s4">))</span>
+    <span class="s3">return </span><span class="s6">1</span>
+
+
+<span class="s3">def </span><span class="s1">main</span><span class="s4">(</span><span class="s1">args</span><span class="s4">=</span><span class="s3">None</span><span class="s4">):</span>
+    <span class="s1">parser </span><span class="s4">= </span><span class="s1">create_parser</span><span class="s4">()</span>
+    <span class="s1">args </span><span class="s4">= </span><span class="s1">parser</span><span class="s4">.</span><span class="s1">parse_args</span><span class="s4">(</span><span class="s1">args</span><span class="s4">)</span>
+
+    <span class="s3">if </span><span class="s1">args</span><span class="s4">.</span><span class="s1">filename </span><span class="s4">== </span><span class="s5">'-'</span><span class="s4">:  </span><span class="s0"># read from stdin</span>
+        <span class="s1">wrapper </span><span class="s4">= </span><span class="s1">TextIOWrapper</span><span class="s4">(</span><span class="s1">sys</span><span class="s4">.</span><span class="s1">stdin</span><span class="s4">.</span><span class="s1">buffer</span><span class="s4">, </span><span class="s1">encoding</span><span class="s4">=</span><span class="s1">args</span><span class="s4">.</span><span class="s1">encoding</span><span class="s4">)</span>
+        <span class="s3">try</span><span class="s4">:</span>
+            <span class="s1">data </span><span class="s4">= </span><span class="s1">wrapper</span><span class="s4">.</span><span class="s1">read</span><span class="s4">()</span>
+        <span class="s3">finally</span><span class="s4">:</span>
+            <span class="s1">wrapper</span><span class="s4">.</span><span class="s1">detach</span><span class="s4">()</span>
+    <span class="s3">else</span><span class="s4">:</span>
+        <span class="s3">try</span><span class="s4">:</span>
+            <span class="s3">with </span><span class="s1">open</span><span class="s4">(</span><span class="s1">args</span><span class="s4">.</span><span class="s1">filename</span><span class="s4">, </span><span class="s1">encoding</span><span class="s4">=</span><span class="s1">args</span><span class="s4">.</span><span class="s1">encoding</span><span class="s4">) </span><span class="s3">as </span><span class="s1">f</span><span class="s4">:</span>
+                <span class="s1">data </span><span class="s4">= </span><span class="s5">''</span><span class="s4">.</span><span class="s1">join</span><span class="s4">(</span><span class="s1">f</span><span class="s4">.</span><span class="s1">readlines</span><span class="s4">())</span>
+        <span class="s3">except </span><span class="s1">OSError </span><span class="s3">as </span><span class="s1">e</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">_error</span><span class="s4">(</span>
+                <span class="s5">'Failed to read {}: {}'</span><span class="s4">.</span><span class="s1">format</span><span class="s4">(</span><span class="s1">args</span><span class="s4">.</span><span class="s1">filename</span><span class="s4">, </span><span class="s1">e</span><span class="s4">))</span>
+
+    <span class="s1">close_stream </span><span class="s4">= </span><span class="s3">False</span>
+    <span class="s3">if </span><span class="s1">args</span><span class="s4">.</span><span class="s1">outfile</span><span class="s4">:</span>
+        <span class="s3">try</span><span class="s4">:</span>
+            <span class="s1">stream </span><span class="s4">= </span><span class="s1">open</span><span class="s4">(</span><span class="s1">args</span><span class="s4">.</span><span class="s1">outfile</span><span class="s4">, </span><span class="s5">'w'</span><span class="s4">, </span><span class="s1">encoding</span><span class="s4">=</span><span class="s1">args</span><span class="s4">.</span><span class="s1">encoding</span><span class="s4">)</span>
+            <span class="s1">close_stream </span><span class="s4">= </span><span class="s3">True</span>
+        <span class="s3">except </span><span class="s1">OSError </span><span class="s3">as </span><span class="s1">e</span><span class="s4">:</span>
+            <span class="s3">return </span><span class="s1">_error</span><span class="s4">(</span><span class="s5">'Failed to open {}: {}'</span><span class="s4">.</span><span class="s1">format</span><span class="s4">(</span><span class="s1">args</span><span class="s4">.</span><span class="s1">outfile</span><span class="s4">, </span><span class="s1">e</span><span class="s4">))</span>
+    <span class="s3">else</span><span class="s4">:</span>
+        <span class="s1">stream </span><span class="s4">= </span><span class="s1">sys</span><span class="s4">.</span><span class="s1">stdout</span>
+
+    <span class="s1">formatter_opts </span><span class="s4">= </span><span class="s1">vars</span><span class="s4">(</span><span class="s1">args</span><span class="s4">)</span>
+    <span class="s3">try</span><span class="s4">:</span>
+        <span class="s1">formatter_opts </span><span class="s4">= </span><span class="s1">sqlparse</span><span class="s4">.</span><span class="s1">formatter</span><span class="s4">.</span><span class="s1">validate_options</span><span class="s4">(</span><span class="s1">formatter_opts</span><span class="s4">)</span>
+    <span class="s3">except </span><span class="s1">SQLParseError </span><span class="s3">as </span><span class="s1">e</span><span class="s4">:</span>
+        <span class="s3">return </span><span class="s1">_error</span><span class="s4">(</span><span class="s5">'Invalid options: {}'</span><span class="s4">.</span><span class="s1">format</span><span class="s4">(</span><span class="s1">e</span><span class="s4">))</span>
+
+    <span class="s1">s </span><span class="s4">= </span><span class="s1">sqlparse</span><span class="s4">.</span><span class="s1">format</span><span class="s4">(</span><span class="s1">data</span><span class="s4">, **</span><span class="s1">formatter_opts</span><span class="s4">)</span>
+    <span class="s1">stream</span><span class="s4">.</span><span class="s1">write</span><span class="s4">(</span><span class="s1">s</span><span class="s4">)</span>
+    <span class="s1">stream</span><span class="s4">.</span><span class="s1">flush</span><span class="s4">()</span>
+    <span class="s3">if </span><span class="s1">close_stream</span><span class="s4">:</span>
+        <span class="s1">stream</span><span class="s4">.</span><span class="s1">close</span><span class="s4">()</span>
+    <span class="s3">return </span><span class="s6">0</span>
+</pre>
+</body>
+</html>

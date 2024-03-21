@@ -1,0 +1,275 @@
+<html>
+<head>
+<title>uploadhandler.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #2aacb8;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+uploadhandler.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Base file upload handler classes, and the built-in concrete subclasses 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">from </span><span class="s1">io </span><span class="s2">import </span><span class="s1">BytesIO</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">conf </span><span class="s2">import </span><span class="s1">settings</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">files</span><span class="s3">.</span><span class="s1">uploadedfile </span><span class="s2">import </span><span class="s1">InMemoryUploadedFile</span><span class="s3">, </span><span class="s1">TemporaryUploadedFile</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">module_loading </span><span class="s2">import </span><span class="s1">import_string</span>
+
+<span class="s1">__all__ </span><span class="s3">= [</span>
+    <span class="s4">&quot;UploadFileException&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;StopUpload&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;SkipFile&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;FileUploadHandler&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;TemporaryFileUploadHandler&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;MemoryFileUploadHandler&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;load_handler&quot;</span><span class="s3">,</span>
+    <span class="s4">&quot;StopFutureHandlers&quot;</span><span class="s3">,</span>
+<span class="s3">]</span>
+
+
+<span class="s2">class </span><span class="s1">UploadFileException</span><span class="s3">(</span><span class="s1">Exception</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Any error having to do with uploading files. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">pass</span>
+
+
+<span class="s2">class </span><span class="s1">StopUpload</span><span class="s3">(</span><span class="s1">UploadFileException</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    This exception is raised when an upload must abort. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">connection_reset</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        If ``connection_reset`` is ``True``, Django knows will halt the upload 
+        without consuming the rest of the upload. This will cause the browser to 
+        show a &quot;connection reset&quot; error. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">connection_reset </span><span class="s3">= </span><span class="s1">connection_reset</span>
+
+    <span class="s2">def </span><span class="s1">__str__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">connection_reset</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s4">&quot;StopUpload: Halt current upload.&quot;</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s4">&quot;StopUpload: Consume request data, then halt.&quot;</span>
+
+
+<span class="s2">class </span><span class="s1">SkipFile</span><span class="s3">(</span><span class="s1">UploadFileException</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    This exception is raised by an upload handler that wants to skip a given file. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">pass</span>
+
+
+<span class="s2">class </span><span class="s1">StopFutureHandlers</span><span class="s3">(</span><span class="s1">UploadFileException</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Upload handlers that have handled a file and do not want future handlers to 
+    run should raise this exception instead of returning None. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">pass</span>
+
+
+<span class="s2">class </span><span class="s1">FileUploadHandler</span><span class="s3">:</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Base class for streaming upload handlers. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">chunk_size </span><span class="s3">= </span><span class="s5">64 </span><span class="s3">* </span><span class="s5">2</span><span class="s3">**</span><span class="s5">10  </span><span class="s6"># : The default chunk size is 64 KB.</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">request</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">file_name </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">content_type </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">content_length </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">charset </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">content_type_extra </span><span class="s3">= </span><span class="s2">None</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">request </span><span class="s3">= </span><span class="s1">request</span>
+
+    <span class="s2">def </span><span class="s1">handle_raw_input</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">, </span><span class="s1">input_data</span><span class="s3">, </span><span class="s1">META</span><span class="s3">, </span><span class="s1">content_length</span><span class="s3">, </span><span class="s1">boundary</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">=</span><span class="s2">None</span>
+    <span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Handle the raw input from the client. 
+ 
+        Parameters: 
+ 
+            :input_data: 
+                An object that supports reading via .read(). 
+            :META: 
+                ``request.META``. 
+            :content_length: 
+                The (integer) value of the Content-Length header from the 
+                client. 
+            :boundary: The boundary from the Content-Type header. Be sure to 
+                prepend two '--'. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">pass</span>
+
+    <span class="s2">def </span><span class="s1">new_file</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">,</span>
+        <span class="s1">field_name</span><span class="s3">,</span>
+        <span class="s1">file_name</span><span class="s3">,</span>
+        <span class="s1">content_type</span><span class="s3">,</span>
+        <span class="s1">content_length</span><span class="s3">,</span>
+        <span class="s1">charset</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+        <span class="s1">content_type_extra</span><span class="s3">=</span><span class="s2">None</span><span class="s3">,</span>
+    <span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Signal that a new file has been started. 
+ 
+        Warning: As with any data from the client, you should not trust 
+        content_length (and sometimes won't even get it). 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">field_name </span><span class="s3">= </span><span class="s1">field_name</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">file_name </span><span class="s3">= </span><span class="s1">file_name</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">content_type </span><span class="s3">= </span><span class="s1">content_type</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">content_length </span><span class="s3">= </span><span class="s1">content_length</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">charset </span><span class="s3">= </span><span class="s1">charset</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">content_type_extra </span><span class="s3">= </span><span class="s1">content_type_extra</span>
+
+    <span class="s2">def </span><span class="s1">receive_data_chunk</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">raw_data</span><span class="s3">, </span><span class="s1">start</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Receive data from the streamed upload parser. ``start`` is the position 
+        in the file of the chunk. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError</span><span class="s3">(</span>
+            <span class="s4">&quot;subclasses of FileUploadHandler must provide a receive_data_chunk() method&quot;</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">file_complete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">file_size</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Signal that a file has completed. File size corresponds to the actual 
+        size accumulated by all the chunks. 
+ 
+        Subclasses should return a valid ``UploadedFile`` object. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">raise </span><span class="s1">NotImplementedError</span><span class="s3">(</span>
+            <span class="s4">&quot;subclasses of FileUploadHandler must provide a file_complete() method&quot;</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">upload_complete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Signal that the upload is complete. Subclasses should perform cleanup 
+        that is necessary for this handler. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">pass</span>
+
+    <span class="s2">def </span><span class="s1">upload_interrupted</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Signal that the upload was interrupted. Subclasses should perform 
+        cleanup that is necessary for this handler. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">pass</span>
+
+
+<span class="s2">class </span><span class="s1">TemporaryFileUploadHandler</span><span class="s3">(</span><span class="s1">FileUploadHandler</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Upload handler that streams data into a temporary file. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">new_file</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Create the file object to append to as data is coming in. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">new_file</span><span class="s3">(*</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">file </span><span class="s3">= </span><span class="s1">TemporaryUploadedFile</span><span class="s3">(</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">file_name</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">content_type</span><span class="s3">, </span><span class="s5">0</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">charset</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">content_type_extra</span>
+        <span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">receive_data_chunk</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">raw_data</span><span class="s3">, </span><span class="s1">start</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">write</span><span class="s3">(</span><span class="s1">raw_data</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">file_complete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">file_size</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">seek</span><span class="s3">(</span><span class="s5">0</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">size </span><span class="s3">= </span><span class="s1">file_size</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">file</span>
+
+    <span class="s2">def </span><span class="s1">upload_interrupted</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s4">&quot;file&quot;</span><span class="s3">):</span>
+            <span class="s1">temp_location </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">temporary_file_path</span><span class="s3">()</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">close</span><span class="s3">()</span>
+                <span class="s1">os</span><span class="s3">.</span><span class="s1">remove</span><span class="s3">(</span><span class="s1">temp_location</span><span class="s3">)</span>
+            <span class="s2">except </span><span class="s1">FileNotFoundError</span><span class="s3">:</span>
+                <span class="s2">pass</span>
+
+
+<span class="s2">class </span><span class="s1">MemoryFileUploadHandler</span><span class="s3">(</span><span class="s1">FileUploadHandler</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    File upload handler to stream uploads into memory (used for small files). 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">handle_raw_input</span><span class="s3">(</span>
+        <span class="s1">self</span><span class="s3">, </span><span class="s1">input_data</span><span class="s3">, </span><span class="s1">META</span><span class="s3">, </span><span class="s1">content_length</span><span class="s3">, </span><span class="s1">boundary</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">=</span><span class="s2">None</span>
+    <span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Use the content_length to signal whether or not this handler should be 
+        used. 
+        &quot;&quot;&quot;</span>
+        <span class="s6"># Check the content-length header to see if we should</span>
+        <span class="s6"># If the post is too large, we cannot use the Memory handler.</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">activated </span><span class="s3">= </span><span class="s1">content_length </span><span class="s3">&lt;= </span><span class="s1">settings</span><span class="s3">.</span><span class="s1">FILE_UPLOAD_MAX_MEMORY_SIZE</span>
+
+    <span class="s2">def </span><span class="s1">new_file</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s1">super</span><span class="s3">().</span><span class="s1">new_file</span><span class="s3">(*</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">activated</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">file </span><span class="s3">= </span><span class="s1">BytesIO</span><span class="s3">()</span>
+            <span class="s2">raise </span><span class="s1">StopFutureHandlers</span><span class="s3">()</span>
+
+    <span class="s2">def </span><span class="s1">receive_data_chunk</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">raw_data</span><span class="s3">, </span><span class="s1">start</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Add the data to the BytesIO file.&quot;&quot;&quot;</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">activated</span><span class="s3">:</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">write</span><span class="s3">(</span><span class="s1">raw_data</span><span class="s3">)</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">raw_data</span>
+
+    <span class="s2">def </span><span class="s1">file_complete</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">file_size</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot;Return a file object if this handler is activated.&quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">activated</span><span class="s3">:</span>
+            <span class="s2">return</span>
+
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">.</span><span class="s1">seek</span><span class="s3">(</span><span class="s5">0</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">InMemoryUploadedFile</span><span class="s3">(</span>
+            <span class="s1">file</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">file</span><span class="s3">,</span>
+            <span class="s1">field_name</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">field_name</span><span class="s3">,</span>
+            <span class="s1">name</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">file_name</span><span class="s3">,</span>
+            <span class="s1">content_type</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">content_type</span><span class="s3">,</span>
+            <span class="s1">size</span><span class="s3">=</span><span class="s1">file_size</span><span class="s3">,</span>
+            <span class="s1">charset</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">charset</span><span class="s3">,</span>
+            <span class="s1">content_type_extra</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">content_type_extra</span><span class="s3">,</span>
+        <span class="s3">)</span>
+
+
+<span class="s2">def </span><span class="s1">load_handler</span><span class="s3">(</span><span class="s1">path</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Given a path to a handler, return an instance of that handler. 
+ 
+    E.g.:: 
+        &gt;&gt;&gt; from django.http import HttpRequest 
+        &gt;&gt;&gt; request = HttpRequest() 
+        &gt;&gt;&gt; load_handler( 
+        ...     'django.core.files.uploadhandler.TemporaryFileUploadHandler', 
+        ...     request, 
+        ... ) 
+        &lt;TemporaryFileUploadHandler object at 0x...&gt; 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">import_string</span><span class="s3">(</span><span class="s1">path</span><span class="s3">)(*</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

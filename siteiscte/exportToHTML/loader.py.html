@@ -1,0 +1,87 @@
+<html>
+<head>
+<title>loader.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #6aab73;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+loader.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s2">. </span><span class="s0">import </span><span class="s1">engines</span>
+<span class="s0">from </span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">TemplateDoesNotExist</span>
+
+
+<span class="s0">def </span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Load and return a template for the given name. 
+ 
+    Raise TemplateDoesNotExist if no such template exists. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">chain </span><span class="s2">= []</span>
+    <span class="s1">engines </span><span class="s2">= </span><span class="s1">_engine_list</span><span class="s2">(</span><span class="s1">using</span><span class="s2">)</span>
+    <span class="s0">for </span><span class="s1">engine </span><span class="s0">in </span><span class="s1">engines</span><span class="s2">:</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">engine</span><span class="s2">.</span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">TemplateDoesNotExist </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s1">chain</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">e</span><span class="s2">)</span>
+
+    <span class="s0">raise </span><span class="s1">TemplateDoesNotExist</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">, </span><span class="s1">chain</span><span class="s2">=</span><span class="s1">chain</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">select_template</span><span class="s2">(</span><span class="s1">template_name_list</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Load and return a template for one of the given names. 
+ 
+    Try names in order and return the first template found. 
+ 
+    Raise TemplateDoesNotExist if no such template exists. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">template_name_list</span><span class="s2">, </span><span class="s1">str</span><span class="s2">):</span>
+        <span class="s0">raise </span><span class="s1">TypeError</span><span class="s2">(</span>
+            <span class="s4">&quot;select_template() takes an iterable of template names but got a &quot;</span>
+            <span class="s4">&quot;string: %r. Use get_template() if you want to load a single &quot;</span>
+            <span class="s4">&quot;template by name.&quot; </span><span class="s2">% </span><span class="s1">template_name_list</span>
+        <span class="s2">)</span>
+
+    <span class="s1">chain </span><span class="s2">= []</span>
+    <span class="s1">engines </span><span class="s2">= </span><span class="s1">_engine_list</span><span class="s2">(</span><span class="s1">using</span><span class="s2">)</span>
+    <span class="s0">for </span><span class="s1">template_name </span><span class="s0">in </span><span class="s1">template_name_list</span><span class="s2">:</span>
+        <span class="s0">for </span><span class="s1">engine </span><span class="s0">in </span><span class="s1">engines</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">engine</span><span class="s2">.</span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">TemplateDoesNotExist </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+                <span class="s1">chain</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">e</span><span class="s2">)</span>
+
+    <span class="s0">if </span><span class="s1">template_name_list</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">TemplateDoesNotExist</span><span class="s2">(</span><span class="s4">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">template_name_list</span><span class="s2">), </span><span class="s1">chain</span><span class="s2">=</span><span class="s1">chain</span><span class="s2">)</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s0">raise </span><span class="s1">TemplateDoesNotExist</span><span class="s2">(</span><span class="s4">&quot;No template names provided&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">render_to_string</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">, </span><span class="s1">context</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">request</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Load a template and render it with a context. Return a string. 
+ 
+    template_name may be a string or a list of strings. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">, (</span><span class="s1">list</span><span class="s2">, </span><span class="s1">tuple</span><span class="s2">)):</span>
+        <span class="s1">template </span><span class="s2">= </span><span class="s1">select_template</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s1">using</span><span class="s2">)</span>
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">template </span><span class="s2">= </span><span class="s1">get_template</span><span class="s2">(</span><span class="s1">template_name</span><span class="s2">, </span><span class="s1">using</span><span class="s2">=</span><span class="s1">using</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">template</span><span class="s2">.</span><span class="s1">render</span><span class="s2">(</span><span class="s1">context</span><span class="s2">, </span><span class="s1">request</span><span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">_engine_list</span><span class="s2">(</span><span class="s1">using</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+    <span class="s0">return </span><span class="s1">engines</span><span class="s2">.</span><span class="s1">all</span><span class="s2">() </span><span class="s0">if </span><span class="s1">using </span><span class="s0">is None else </span><span class="s2">[</span><span class="s1">engines</span><span class="s2">[</span><span class="s1">using</span><span class="s2">]]</span>
+</pre>
+</body>
+</html>

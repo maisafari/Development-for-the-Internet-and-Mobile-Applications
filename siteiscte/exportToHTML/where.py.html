@@ -1,0 +1,384 @@
+<html>
+<head>
+<title>where.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+where.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+Code to manage the creation and SQL rendering of 'where' constraints. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">operator</span>
+<span class="s2">from </span><span class="s1">functools </span><span class="s2">import </span><span class="s1">reduce</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">core</span><span class="s3">.</span><span class="s1">exceptions </span><span class="s2">import </span><span class="s1">EmptyResultSet</span><span class="s3">, </span><span class="s1">FullResultSet</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db</span><span class="s3">.</span><span class="s1">models</span><span class="s3">.</span><span class="s1">expressions </span><span class="s2">import </span><span class="s1">Case</span><span class="s3">, </span><span class="s1">When</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db</span><span class="s3">.</span><span class="s1">models</span><span class="s3">.</span><span class="s1">functions </span><span class="s2">import </span><span class="s1">Mod</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db</span><span class="s3">.</span><span class="s1">models</span><span class="s3">.</span><span class="s1">lookups </span><span class="s2">import </span><span class="s1">Exact</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils </span><span class="s2">import </span><span class="s1">tree</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">functional </span><span class="s2">import </span><span class="s1">cached_property</span>
+
+<span class="s4"># Connection types</span>
+<span class="s1">AND </span><span class="s3">= </span><span class="s5">&quot;AND&quot;</span>
+<span class="s1">OR </span><span class="s3">= </span><span class="s5">&quot;OR&quot;</span>
+<span class="s1">XOR </span><span class="s3">= </span><span class="s5">&quot;XOR&quot;</span>
+
+
+<span class="s2">class </span><span class="s1">WhereNode</span><span class="s3">(</span><span class="s1">tree</span><span class="s3">.</span><span class="s1">Node</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    An SQL WHERE clause. 
+ 
+    The class is tied to the Query class that created it (in order to create 
+    the correct SQL). 
+ 
+    A child is usually an expression producing boolean values. Most likely the 
+    expression is a Lookup instance. 
+ 
+    However, a child could also be any class with as_sql() and either 
+    relabeled_clone() method or relabel_aliases() and clone() methods and 
+    contains_aggregate attribute. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">default </span><span class="s3">= </span><span class="s1">AND</span>
+    <span class="s1">resolved </span><span class="s3">= </span><span class="s2">False</span>
+    <span class="s1">conditional </span><span class="s3">= </span><span class="s2">True</span>
+
+    <span class="s2">def </span><span class="s1">split_having_qualify</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">negated</span><span class="s3">=</span><span class="s2">False</span><span class="s3">, </span><span class="s1">must_group_by</span><span class="s3">=</span><span class="s2">False</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return three possibly None nodes: one for those parts of self that 
+        should be included in the WHERE clause, one for those parts of self 
+        that must be included in the HAVING clause, and one for those parts 
+        that refer to window functions. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">if not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">contains_aggregate </span><span class="s2">and not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">contains_over_clause</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">, </span><span class="s2">None</span><span class="s3">, </span><span class="s2">None</span>
+        <span class="s1">in_negated </span><span class="s3">= </span><span class="s1">negated </span><span class="s3">^ </span><span class="s1">self</span><span class="s3">.</span><span class="s1">negated</span>
+        <span class="s4"># Whether or not children must be connected in the same filtering</span>
+        <span class="s4"># clause (WHERE &gt; HAVING &gt; QUALIFY) to maintain logical semantic.</span>
+        <span class="s1">must_remain_connected </span><span class="s3">= (</span>
+            <span class="s3">(</span><span class="s1">in_negated </span><span class="s2">and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">connector </span><span class="s3">== </span><span class="s1">AND</span><span class="s3">)</span>
+            <span class="s2">or </span><span class="s3">(</span><span class="s2">not </span><span class="s1">in_negated </span><span class="s2">and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">connector </span><span class="s3">== </span><span class="s1">OR</span><span class="s3">)</span>
+            <span class="s2">or </span><span class="s1">self</span><span class="s3">.</span><span class="s1">connector </span><span class="s3">== </span><span class="s1">XOR</span>
+        <span class="s3">)</span>
+        <span class="s2">if </span><span class="s3">(</span>
+            <span class="s1">must_remain_connected</span>
+            <span class="s2">and </span><span class="s1">self</span><span class="s3">.</span><span class="s1">contains_aggregate</span>
+            <span class="s2">and not </span><span class="s1">self</span><span class="s3">.</span><span class="s1">contains_over_clause</span>
+        <span class="s3">):</span>
+            <span class="s4"># It's must cheaper to short-circuit and stash everything in the</span>
+            <span class="s4"># HAVING clause than split children if possible.</span>
+            <span class="s2">return None</span><span class="s3">, </span><span class="s1">self</span><span class="s3">, </span><span class="s2">None</span>
+        <span class="s1">where_parts </span><span class="s3">= []</span>
+        <span class="s1">having_parts </span><span class="s3">= []</span>
+        <span class="s1">qualify_parts </span><span class="s3">= []</span>
+        <span class="s2">for </span><span class="s1">c </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">c</span><span class="s3">, </span><span class="s5">&quot;split_having_qualify&quot;</span><span class="s3">):</span>
+                <span class="s1">where_part</span><span class="s3">, </span><span class="s1">having_part</span><span class="s3">, </span><span class="s1">qualify_part </span><span class="s3">= </span><span class="s1">c</span><span class="s3">.</span><span class="s1">split_having_qualify</span><span class="s3">(</span>
+                    <span class="s1">in_negated</span><span class="s3">, </span><span class="s1">must_group_by</span>
+                <span class="s3">)</span>
+                <span class="s2">if </span><span class="s1">where_part </span><span class="s2">is not None</span><span class="s3">:</span>
+                    <span class="s1">where_parts</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">where_part</span><span class="s3">)</span>
+                <span class="s2">if </span><span class="s1">having_part </span><span class="s2">is not None</span><span class="s3">:</span>
+                    <span class="s1">having_parts</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">having_part</span><span class="s3">)</span>
+                <span class="s2">if </span><span class="s1">qualify_part </span><span class="s2">is not None</span><span class="s3">:</span>
+                    <span class="s1">qualify_parts</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">qualify_part</span><span class="s3">)</span>
+            <span class="s2">elif </span><span class="s1">c</span><span class="s3">.</span><span class="s1">contains_over_clause</span><span class="s3">:</span>
+                <span class="s1">qualify_parts</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">c</span><span class="s3">)</span>
+            <span class="s2">elif </span><span class="s1">c</span><span class="s3">.</span><span class="s1">contains_aggregate</span><span class="s3">:</span>
+                <span class="s1">having_parts</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">c</span><span class="s3">)</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s1">where_parts</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">c</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">must_remain_connected </span><span class="s2">and </span><span class="s1">qualify_parts</span><span class="s3">:</span>
+            <span class="s4"># Disjunctive heterogeneous predicates can be pushed down to</span>
+            <span class="s4"># qualify as long as no conditional aggregation is involved.</span>
+            <span class="s2">if not </span><span class="s1">where_parts </span><span class="s2">or </span><span class="s3">(</span><span class="s1">where_parts </span><span class="s2">and not </span><span class="s1">must_group_by</span><span class="s3">):</span>
+                <span class="s2">return None</span><span class="s3">, </span><span class="s2">None</span><span class="s3">, </span><span class="s1">self</span>
+            <span class="s2">elif </span><span class="s1">where_parts</span><span class="s3">:</span>
+                <span class="s4"># In theory this should only be enforced when dealing with</span>
+                <span class="s4"># where_parts containing predicates against multi-valued</span>
+                <span class="s4"># relationships that could affect aggregation results but this</span>
+                <span class="s4"># is complex to infer properly.</span>
+                <span class="s2">raise </span><span class="s1">NotImplementedError</span><span class="s3">(</span>
+                    <span class="s5">&quot;Heterogeneous disjunctive predicates against window functions are &quot;</span>
+                    <span class="s5">&quot;not implemented when performing conditional aggregation.&quot;</span>
+                <span class="s3">)</span>
+        <span class="s1">where_node </span><span class="s3">= (</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">create</span><span class="s3">(</span><span class="s1">where_parts</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">connector</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">negated</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">where_parts</span>
+            <span class="s2">else None</span>
+        <span class="s3">)</span>
+        <span class="s1">having_node </span><span class="s3">= (</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">create</span><span class="s3">(</span><span class="s1">having_parts</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">connector</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">negated</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">having_parts</span>
+            <span class="s2">else None</span>
+        <span class="s3">)</span>
+        <span class="s1">qualify_node </span><span class="s3">= (</span>
+            <span class="s1">self</span><span class="s3">.</span><span class="s1">create</span><span class="s3">(</span><span class="s1">qualify_parts</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">connector</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">negated</span><span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">qualify_parts</span>
+            <span class="s2">else None</span>
+        <span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">where_node</span><span class="s3">, </span><span class="s1">having_node</span><span class="s3">, </span><span class="s1">qualify_node</span>
+
+    <span class="s2">def </span><span class="s1">as_sql</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">compiler</span><span class="s3">, </span><span class="s1">connection</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Return the SQL version of the where clause and the value to be 
+        substituted in. Return '', [] if this node matches everything, 
+        None, [] if this node is empty, and raise EmptyResultSet if this 
+        node can't match anything. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">result </span><span class="s3">= []</span>
+        <span class="s1">result_params </span><span class="s3">= []</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">connector </span><span class="s3">== </span><span class="s1">AND</span><span class="s3">:</span>
+            <span class="s1">full_needed</span><span class="s3">, </span><span class="s1">empty_needed </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">), </span><span class="s6">1</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">full_needed</span><span class="s3">, </span><span class="s1">empty_needed </span><span class="s3">= </span><span class="s6">1</span><span class="s3">, </span><span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">)</span>
+
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">connector </span><span class="s3">== </span><span class="s1">XOR </span><span class="s2">and not </span><span class="s1">connection</span><span class="s3">.</span><span class="s1">features</span><span class="s3">.</span><span class="s1">supports_logical_xor</span><span class="s3">:</span>
+            <span class="s4"># Convert if the database doesn't support XOR:</span>
+            <span class="s4">#   a XOR b XOR c XOR ...</span>
+            <span class="s4"># to:</span>
+            <span class="s4">#   (a OR b OR c OR ...) AND MOD(a + b + c + ..., 2) == 1</span>
+            <span class="s4"># The result of an n-ary XOR is true when an odd number of operands</span>
+            <span class="s4"># are true.</span>
+            <span class="s1">lhs </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">__class__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">, </span><span class="s1">OR</span><span class="s3">)</span>
+            <span class="s1">rhs_sum </span><span class="s3">= </span><span class="s1">reduce</span><span class="s3">(</span>
+                <span class="s1">operator</span><span class="s3">.</span><span class="s1">add</span><span class="s3">,</span>
+                <span class="s3">(</span><span class="s1">Case</span><span class="s3">(</span><span class="s1">When</span><span class="s3">(</span><span class="s1">c</span><span class="s3">, </span><span class="s1">then</span><span class="s3">=</span><span class="s6">1</span><span class="s3">), </span><span class="s1">default</span><span class="s3">=</span><span class="s6">0</span><span class="s3">) </span><span class="s2">for </span><span class="s1">c </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">),</span>
+            <span class="s3">)</span>
+            <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">) &gt; </span><span class="s6">2</span><span class="s3">:</span>
+                <span class="s1">rhs_sum </span><span class="s3">= </span><span class="s1">Mod</span><span class="s3">(</span><span class="s1">rhs_sum</span><span class="s3">, </span><span class="s6">2</span><span class="s3">)</span>
+            <span class="s1">rhs </span><span class="s3">= </span><span class="s1">Exact</span><span class="s3">(</span><span class="s6">1</span><span class="s3">, </span><span class="s1">rhs_sum</span><span class="s3">)</span>
+            <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">__class__</span><span class="s3">([</span><span class="s1">lhs</span><span class="s3">, </span><span class="s1">rhs</span><span class="s3">], </span><span class="s1">AND</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">negated</span><span class="s3">).</span><span class="s1">as_sql</span><span class="s3">(</span>
+                <span class="s1">compiler</span><span class="s3">, </span><span class="s1">connection</span>
+            <span class="s3">)</span>
+
+        <span class="s2">for </span><span class="s1">child </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">:</span>
+            <span class="s2">try</span><span class="s3">:</span>
+                <span class="s1">sql</span><span class="s3">, </span><span class="s1">params </span><span class="s3">= </span><span class="s1">compiler</span><span class="s3">.</span><span class="s1">compile</span><span class="s3">(</span><span class="s1">child</span><span class="s3">)</span>
+            <span class="s2">except </span><span class="s1">EmptyResultSet</span><span class="s3">:</span>
+                <span class="s1">empty_needed </span><span class="s3">-= </span><span class="s6">1</span>
+            <span class="s2">except </span><span class="s1">FullResultSet</span><span class="s3">:</span>
+                <span class="s1">full_needed </span><span class="s3">-= </span><span class="s6">1</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s2">if </span><span class="s1">sql</span><span class="s3">:</span>
+                    <span class="s1">result</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">sql</span><span class="s3">)</span>
+                    <span class="s1">result_params</span><span class="s3">.</span><span class="s1">extend</span><span class="s3">(</span><span class="s1">params</span><span class="s3">)</span>
+                <span class="s2">else</span><span class="s3">:</span>
+                    <span class="s1">full_needed </span><span class="s3">-= </span><span class="s6">1</span>
+            <span class="s4"># Check if this node matches nothing or everything.</span>
+            <span class="s4"># First check the amount of full nodes and empty nodes</span>
+            <span class="s4"># to make this node empty/full.</span>
+            <span class="s4"># Now, check if this node is full/empty using the</span>
+            <span class="s4"># counts.</span>
+            <span class="s2">if </span><span class="s1">empty_needed </span><span class="s3">== </span><span class="s6">0</span><span class="s3">:</span>
+                <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">negated</span><span class="s3">:</span>
+                    <span class="s2">raise </span><span class="s1">FullResultSet</span>
+                <span class="s2">else</span><span class="s3">:</span>
+                    <span class="s2">raise </span><span class="s1">EmptyResultSet</span>
+            <span class="s2">if </span><span class="s1">full_needed </span><span class="s3">== </span><span class="s6">0</span><span class="s3">:</span>
+                <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">negated</span><span class="s3">:</span>
+                    <span class="s2">raise </span><span class="s1">EmptyResultSet</span>
+                <span class="s2">else</span><span class="s3">:</span>
+                    <span class="s2">raise </span><span class="s1">FullResultSet</span>
+        <span class="s1">conn </span><span class="s3">= </span><span class="s5">&quot; %s &quot; </span><span class="s3">% </span><span class="s1">self</span><span class="s3">.</span><span class="s1">connector</span>
+        <span class="s1">sql_string </span><span class="s3">= </span><span class="s1">conn</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">result</span><span class="s3">)</span>
+        <span class="s2">if not </span><span class="s1">sql_string</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">FullResultSet</span>
+        <span class="s2">if </span><span class="s1">self</span><span class="s3">.</span><span class="s1">negated</span><span class="s3">:</span>
+            <span class="s4"># Some backends (Oracle at least) need parentheses around the inner</span>
+            <span class="s4"># SQL in the negated case, even if the inner SQL contains just a</span>
+            <span class="s4"># single expression.</span>
+            <span class="s1">sql_string </span><span class="s3">= </span><span class="s5">&quot;NOT (%s)&quot; </span><span class="s3">% </span><span class="s1">sql_string</span>
+        <span class="s2">elif </span><span class="s1">len</span><span class="s3">(</span><span class="s1">result</span><span class="s3">) &gt; </span><span class="s6">1 </span><span class="s2">or </span><span class="s1">self</span><span class="s3">.</span><span class="s1">resolved</span><span class="s3">:</span>
+            <span class="s1">sql_string </span><span class="s3">= </span><span class="s5">&quot;(%s)&quot; </span><span class="s3">% </span><span class="s1">sql_string</span>
+        <span class="s2">return </span><span class="s1">sql_string</span><span class="s3">, </span><span class="s1">result_params</span>
+
+    <span class="s2">def </span><span class="s1">get_group_by_cols</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">cols </span><span class="s3">= []</span>
+        <span class="s2">for </span><span class="s1">child </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">:</span>
+            <span class="s1">cols</span><span class="s3">.</span><span class="s1">extend</span><span class="s3">(</span><span class="s1">child</span><span class="s3">.</span><span class="s1">get_group_by_cols</span><span class="s3">())</span>
+        <span class="s2">return </span><span class="s1">cols</span>
+
+    <span class="s2">def </span><span class="s1">get_source_expressions</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">[:]</span>
+
+    <span class="s2">def </span><span class="s1">set_source_expressions</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">children</span><span class="s3">):</span>
+        <span class="s2">assert </span><span class="s1">len</span><span class="s3">(</span><span class="s1">children</span><span class="s3">) == </span><span class="s1">len</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">children </span><span class="s3">= </span><span class="s1">children</span>
+
+    <span class="s2">def </span><span class="s1">relabel_aliases</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">change_map</span><span class="s3">):</span>
+        <span class="s0">&quot;&quot;&quot; 
+        Relabel the alias values of any children. 'change_map' is a dictionary 
+        mapping old (current) alias values to the new values. 
+        &quot;&quot;&quot;</span>
+        <span class="s2">for </span><span class="s1">pos</span><span class="s3">, </span><span class="s1">child </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">):</span>
+            <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">child</span><span class="s3">, </span><span class="s5">&quot;relabel_aliases&quot;</span><span class="s3">):</span>
+                <span class="s4"># For example another WhereNode</span>
+                <span class="s1">child</span><span class="s3">.</span><span class="s1">relabel_aliases</span><span class="s3">(</span><span class="s1">change_map</span><span class="s3">)</span>
+            <span class="s2">elif </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">child</span><span class="s3">, </span><span class="s5">&quot;relabeled_clone&quot;</span><span class="s3">):</span>
+                <span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">[</span><span class="s1">pos</span><span class="s3">] = </span><span class="s1">child</span><span class="s3">.</span><span class="s1">relabeled_clone</span><span class="s3">(</span><span class="s1">change_map</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">clone</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">clone </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">create</span><span class="s3">(</span><span class="s1">connector</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">connector</span><span class="s3">, </span><span class="s1">negated</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">negated</span><span class="s3">)</span>
+        <span class="s2">for </span><span class="s1">child </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">child</span><span class="s3">, </span><span class="s5">&quot;clone&quot;</span><span class="s3">):</span>
+                <span class="s1">child </span><span class="s3">= </span><span class="s1">child</span><span class="s3">.</span><span class="s1">clone</span><span class="s3">()</span>
+            <span class="s1">clone</span><span class="s3">.</span><span class="s1">children</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">child</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">clone</span>
+
+    <span class="s2">def </span><span class="s1">relabeled_clone</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">change_map</span><span class="s3">):</span>
+        <span class="s1">clone </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">clone</span><span class="s3">()</span>
+        <span class="s1">clone</span><span class="s3">.</span><span class="s1">relabel_aliases</span><span class="s3">(</span><span class="s1">change_map</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">clone</span>
+
+    <span class="s2">def </span><span class="s1">replace_expressions</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">replacements</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">replacement </span><span class="s3">:= </span><span class="s1">replacements</span><span class="s3">.</span><span class="s1">get</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">replacement</span>
+        <span class="s1">clone </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">create</span><span class="s3">(</span><span class="s1">connector</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">connector</span><span class="s3">, </span><span class="s1">negated</span><span class="s3">=</span><span class="s1">self</span><span class="s3">.</span><span class="s1">negated</span><span class="s3">)</span>
+        <span class="s2">for </span><span class="s1">child </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">:</span>
+            <span class="s1">clone</span><span class="s3">.</span><span class="s1">children</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">child</span><span class="s3">.</span><span class="s1">replace_expressions</span><span class="s3">(</span><span class="s1">replacements</span><span class="s3">))</span>
+        <span class="s2">return </span><span class="s1">clone</span>
+
+    <span class="s2">def </span><span class="s1">get_refs</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s1">refs </span><span class="s3">= </span><span class="s1">set</span><span class="s3">()</span>
+        <span class="s2">for </span><span class="s1">child </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">:</span>
+            <span class="s1">refs </span><span class="s3">|= </span><span class="s1">child</span><span class="s3">.</span><span class="s1">get_refs</span><span class="s3">()</span>
+        <span class="s2">return </span><span class="s1">refs</span>
+
+    <span class="s3">@</span><span class="s1">classmethod</span>
+    <span class="s2">def </span><span class="s1">_contains_aggregate</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">tree</span><span class="s3">.</span><span class="s1">Node</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">any</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">.</span><span class="s1">_contains_aggregate</span><span class="s3">(</span><span class="s1">c</span><span class="s3">) </span><span class="s2">for </span><span class="s1">c </span><span class="s2">in </span><span class="s1">obj</span><span class="s3">.</span><span class="s1">children</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">obj</span><span class="s3">.</span><span class="s1">contains_aggregate</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">contains_aggregate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_contains_aggregate</span><span class="s3">(</span><span class="s1">self</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">classmethod</span>
+    <span class="s2">def </span><span class="s1">_contains_over_clause</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">, </span><span class="s1">obj</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">, </span><span class="s1">tree</span><span class="s3">.</span><span class="s1">Node</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">any</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">.</span><span class="s1">_contains_over_clause</span><span class="s3">(</span><span class="s1">c</span><span class="s3">) </span><span class="s2">for </span><span class="s1">c </span><span class="s2">in </span><span class="s1">obj</span><span class="s3">.</span><span class="s1">children</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">obj</span><span class="s3">.</span><span class="s1">contains_over_clause</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">contains_over_clause</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">_contains_over_clause</span><span class="s3">(</span><span class="s1">self</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">is_summary</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">any</span><span class="s3">(</span><span class="s1">child</span><span class="s3">.</span><span class="s1">is_summary </span><span class="s2">for </span><span class="s1">child </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">)</span>
+
+    <span class="s3">@</span><span class="s1">staticmethod</span>
+    <span class="s2">def </span><span class="s1">_resolve_leaf</span><span class="s3">(</span><span class="s1">expr</span><span class="s3">, </span><span class="s1">query</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">expr</span><span class="s3">, </span><span class="s5">&quot;resolve_expression&quot;</span><span class="s3">):</span>
+            <span class="s1">expr </span><span class="s3">= </span><span class="s1">expr</span><span class="s3">.</span><span class="s1">resolve_expression</span><span class="s3">(</span><span class="s1">query</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">expr</span>
+
+    <span class="s3">@</span><span class="s1">classmethod</span>
+    <span class="s2">def </span><span class="s1">_resolve_node</span><span class="s3">(</span><span class="s1">cls</span><span class="s3">, </span><span class="s1">node</span><span class="s3">, </span><span class="s1">query</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">node</span><span class="s3">, </span><span class="s5">&quot;children&quot;</span><span class="s3">):</span>
+            <span class="s2">for </span><span class="s1">child </span><span class="s2">in </span><span class="s1">node</span><span class="s3">.</span><span class="s1">children</span><span class="s3">:</span>
+                <span class="s1">cls</span><span class="s3">.</span><span class="s1">_resolve_node</span><span class="s3">(</span><span class="s1">child</span><span class="s3">, </span><span class="s1">query</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">node</span><span class="s3">, </span><span class="s5">&quot;lhs&quot;</span><span class="s3">):</span>
+            <span class="s1">node</span><span class="s3">.</span><span class="s1">lhs </span><span class="s3">= </span><span class="s1">cls</span><span class="s3">.</span><span class="s1">_resolve_leaf</span><span class="s3">(</span><span class="s1">node</span><span class="s3">.</span><span class="s1">lhs</span><span class="s3">, </span><span class="s1">query</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">hasattr</span><span class="s3">(</span><span class="s1">node</span><span class="s3">, </span><span class="s5">&quot;rhs&quot;</span><span class="s3">):</span>
+            <span class="s1">node</span><span class="s3">.</span><span class="s1">rhs </span><span class="s3">= </span><span class="s1">cls</span><span class="s3">.</span><span class="s1">_resolve_leaf</span><span class="s3">(</span><span class="s1">node</span><span class="s3">.</span><span class="s1">rhs</span><span class="s3">, </span><span class="s1">query</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">resolve_expression</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s1">clone </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">clone</span><span class="s3">()</span>
+        <span class="s1">clone</span><span class="s3">.</span><span class="s1">_resolve_node</span><span class="s3">(</span><span class="s1">clone</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+        <span class="s1">clone</span><span class="s3">.</span><span class="s1">resolved </span><span class="s3">= </span><span class="s2">True</span>
+        <span class="s2">return </span><span class="s1">clone</span>
+
+    <span class="s3">@</span><span class="s1">cached_property</span>
+    <span class="s2">def </span><span class="s1">output_field</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">db</span><span class="s3">.</span><span class="s1">models </span><span class="s2">import </span><span class="s1">BooleanField</span>
+
+        <span class="s2">return </span><span class="s1">BooleanField</span><span class="s3">()</span>
+
+    <span class="s3">@</span><span class="s1">property</span>
+    <span class="s2">def </span><span class="s1">_output_field_or_none</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">output_field</span>
+
+    <span class="s2">def </span><span class="s1">select_format</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">compiler</span><span class="s3">, </span><span class="s1">sql</span><span class="s3">, </span><span class="s1">params</span><span class="s3">):</span>
+        <span class="s4"># Wrap filters with a CASE WHEN expression if a database backend</span>
+        <span class="s4"># (e.g. Oracle) doesn't support boolean expression in SELECT or GROUP</span>
+        <span class="s4"># BY list.</span>
+        <span class="s2">if not </span><span class="s1">compiler</span><span class="s3">.</span><span class="s1">connection</span><span class="s3">.</span><span class="s1">features</span><span class="s3">.</span><span class="s1">supports_boolean_expr_in_select_clause</span><span class="s3">:</span>
+            <span class="s1">sql </span><span class="s3">= </span><span class="s5">f&quot;CASE WHEN </span><span class="s2">{</span><span class="s1">sql</span><span class="s2">} </span><span class="s5">THEN 1 ELSE 0 END&quot;</span>
+        <span class="s2">return </span><span class="s1">sql</span><span class="s3">, </span><span class="s1">params</span>
+
+    <span class="s2">def </span><span class="s1">get_db_converters</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">connection</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">output_field</span><span class="s3">.</span><span class="s1">get_db_converters</span><span class="s3">(</span><span class="s1">connection</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">get_lookup</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">lookup</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">self</span><span class="s3">.</span><span class="s1">output_field</span><span class="s3">.</span><span class="s1">get_lookup</span><span class="s3">(</span><span class="s1">lookup</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">leaves</span><span class="s3">(</span><span class="s1">self</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">child </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">children</span><span class="s3">:</span>
+            <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">child</span><span class="s3">, </span><span class="s1">WhereNode</span><span class="s3">):</span>
+                <span class="s2">yield from </span><span class="s1">child</span><span class="s3">.</span><span class="s1">leaves</span><span class="s3">()</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s2">yield </span><span class="s1">child</span>
+
+
+<span class="s2">class </span><span class="s1">NothingNode</span><span class="s3">:</span>
+    <span class="s0">&quot;&quot;&quot;A node that matches nothing.&quot;&quot;&quot;</span>
+
+    <span class="s1">contains_aggregate </span><span class="s3">= </span><span class="s2">False</span>
+    <span class="s1">contains_over_clause </span><span class="s3">= </span><span class="s2">False</span>
+
+    <span class="s2">def </span><span class="s1">as_sql</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">compiler</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">connection</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s2">raise </span><span class="s1">EmptyResultSet</span>
+
+
+<span class="s2">class </span><span class="s1">ExtraWhere</span><span class="s3">:</span>
+    <span class="s4"># The contents are a black box - assume no aggregates or windows are used.</span>
+    <span class="s1">contains_aggregate </span><span class="s3">= </span><span class="s2">False</span>
+    <span class="s1">contains_over_clause </span><span class="s3">= </span><span class="s2">False</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">sqls</span><span class="s3">, </span><span class="s1">params</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">sqls </span><span class="s3">= </span><span class="s1">sqls</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">params </span><span class="s3">= </span><span class="s1">params</span>
+
+    <span class="s2">def </span><span class="s1">as_sql</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">compiler</span><span class="s3">=</span><span class="s2">None</span><span class="s3">, </span><span class="s1">connection</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+        <span class="s1">sqls </span><span class="s3">= [</span><span class="s5">&quot;(%s)&quot; </span><span class="s3">% </span><span class="s1">sql </span><span class="s2">for </span><span class="s1">sql </span><span class="s2">in </span><span class="s1">self</span><span class="s3">.</span><span class="s1">sqls</span><span class="s3">]</span>
+        <span class="s2">return </span><span class="s5">&quot; AND &quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">sqls</span><span class="s3">), </span><span class="s1">list</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">params </span><span class="s2">or </span><span class="s3">())</span>
+
+
+<span class="s2">class </span><span class="s1">SubqueryConstraint</span><span class="s3">:</span>
+    <span class="s4"># Even if aggregates or windows would be used in a subquery,</span>
+    <span class="s4"># the outer query isn't interested about those.</span>
+    <span class="s1">contains_aggregate </span><span class="s3">= </span><span class="s2">False</span>
+    <span class="s1">contains_over_clause </span><span class="s3">= </span><span class="s2">False</span>
+
+    <span class="s2">def </span><span class="s1">__init__</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">alias</span><span class="s3">, </span><span class="s1">columns</span><span class="s3">, </span><span class="s1">targets</span><span class="s3">, </span><span class="s1">query_object</span><span class="s3">):</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">alias </span><span class="s3">= </span><span class="s1">alias</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">columns </span><span class="s3">= </span><span class="s1">columns</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">targets </span><span class="s3">= </span><span class="s1">targets</span>
+        <span class="s1">query_object</span><span class="s3">.</span><span class="s1">clear_ordering</span><span class="s3">(</span><span class="s1">clear_default</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+        <span class="s1">self</span><span class="s3">.</span><span class="s1">query_object </span><span class="s3">= </span><span class="s1">query_object</span>
+
+    <span class="s2">def </span><span class="s1">as_sql</span><span class="s3">(</span><span class="s1">self</span><span class="s3">, </span><span class="s1">compiler</span><span class="s3">, </span><span class="s1">connection</span><span class="s3">):</span>
+        <span class="s1">query </span><span class="s3">= </span><span class="s1">self</span><span class="s3">.</span><span class="s1">query_object</span>
+        <span class="s1">query</span><span class="s3">.</span><span class="s1">set_values</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">targets</span><span class="s3">)</span>
+        <span class="s1">query_compiler </span><span class="s3">= </span><span class="s1">query</span><span class="s3">.</span><span class="s1">get_compiler</span><span class="s3">(</span><span class="s1">connection</span><span class="s3">=</span><span class="s1">connection</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">query_compiler</span><span class="s3">.</span><span class="s1">as_subquery_condition</span><span class="s3">(</span><span class="s1">self</span><span class="s3">.</span><span class="s1">alias</span><span class="s3">, </span><span class="s1">self</span><span class="s3">.</span><span class="s1">columns</span><span class="s3">, </span><span class="s1">compiler</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

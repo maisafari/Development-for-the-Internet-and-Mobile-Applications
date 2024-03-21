@@ -1,0 +1,218 @@
+<html>
+<head>
+<title>compilemessages.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #2aacb8;}
+.s5 { color: #7a7e85;}
+.s6 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+compilemessages.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">codecs</span>
+<span class="s0">import </span><span class="s1">concurrent</span><span class="s2">.</span><span class="s1">futures</span>
+<span class="s0">import </span><span class="s1">glob</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">from </span><span class="s1">pathlib </span><span class="s0">import </span><span class="s1">Path</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span><span class="s2">, </span><span class="s1">CommandError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">find_command</span><span class="s2">, </span><span class="s1">is_ignored_path</span><span class="s2">, </span><span class="s1">popen_wrapper</span>
+
+
+<span class="s0">def </span><span class="s1">has_bom</span><span class="s2">(</span><span class="s1">fn</span><span class="s2">):</span>
+    <span class="s0">with </span><span class="s1">fn</span><span class="s2">.</span><span class="s1">open</span><span class="s2">(</span><span class="s3">&quot;rb&quot;</span><span class="s2">) </span><span class="s0">as </span><span class="s1">f</span><span class="s2">:</span>
+        <span class="s1">sample </span><span class="s2">= </span><span class="s1">f</span><span class="s2">.</span><span class="s1">read</span><span class="s2">(</span><span class="s4">4</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">sample</span><span class="s2">.</span><span class="s1">startswith</span><span class="s2">(</span>
+        <span class="s2">(</span><span class="s1">codecs</span><span class="s2">.</span><span class="s1">BOM_UTF8</span><span class="s2">, </span><span class="s1">codecs</span><span class="s2">.</span><span class="s1">BOM_UTF16_LE</span><span class="s2">, </span><span class="s1">codecs</span><span class="s2">.</span><span class="s1">BOM_UTF16_BE</span><span class="s2">)</span>
+    <span class="s2">)</span>
+
+
+<span class="s0">def </span><span class="s1">is_writable</span><span class="s2">(</span><span class="s1">path</span><span class="s2">):</span>
+    <span class="s5"># Known side effect: updating file access/modified time to current time if</span>
+    <span class="s5"># it is writable.</span>
+    <span class="s0">try</span><span class="s2">:</span>
+        <span class="s0">with </span><span class="s1">open</span><span class="s2">(</span><span class="s1">path</span><span class="s2">, </span><span class="s3">&quot;a&quot;</span><span class="s2">):</span>
+            <span class="s1">os</span><span class="s2">.</span><span class="s1">utime</span><span class="s2">(</span><span class="s1">path</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+    <span class="s0">except </span><span class="s1">OSError</span><span class="s2">:</span>
+        <span class="s0">return False</span>
+    <span class="s0">return True</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= </span><span class="s3">&quot;Compiles .po files to .mo files for use with builtin gettext support.&quot;</span>
+
+    <span class="s1">requires_system_checks </span><span class="s2">= []</span>
+
+    <span class="s1">program </span><span class="s2">= </span><span class="s3">&quot;msgfmt&quot;</span>
+    <span class="s1">program_options </span><span class="s2">= [</span><span class="s3">&quot;--check-format&quot;</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--locale&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;-l&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;append&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=[],</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Locale(s) to process (e.g. de_AT). Default is to process all. &quot;</span>
+            <span class="s3">&quot;Can be used multiple times.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--exclude&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;-x&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;append&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=[],</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Locales to exclude. Default is none. Can be used multiple times.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--use-fuzzy&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;-f&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;fuzzy&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Use fuzzy translations.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--ignore&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;-i&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;append&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;ignore_patterns&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=[],</span>
+            <span class="s1">metavar</span><span class="s2">=</span><span class="s3">&quot;PATTERN&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Ignore directories matching this glob-style pattern. &quot;</span>
+            <span class="s3">&quot;Use multiple times to ignore more.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">locale </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;locale&quot;</span><span class="s2">]</span>
+        <span class="s1">exclude </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;exclude&quot;</span><span class="s2">]</span>
+        <span class="s1">ignore_patterns </span><span class="s2">= </span><span class="s1">set</span><span class="s2">(</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;ignore_patterns&quot;</span><span class="s2">])</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;verbosity&quot;</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;fuzzy&quot;</span><span class="s2">]:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">program_options </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">program_options </span><span class="s2">+ [</span><span class="s3">&quot;-f&quot;</span><span class="s2">]</span>
+
+        <span class="s0">if </span><span class="s1">find_command</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">program</span><span class="s2">) </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s3">&quot;Can't find %s. Make sure you have GNU gettext &quot;</span>
+                <span class="s3">&quot;tools 0.15 or newer installed.&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">program</span>
+            <span class="s2">)</span>
+
+        <span class="s1">basedirs </span><span class="s2">= [</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s3">&quot;conf&quot;</span><span class="s2">, </span><span class="s3">&quot;locale&quot;</span><span class="s2">), </span><span class="s3">&quot;locale&quot;</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">environ</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;DJANGO_SETTINGS_MODULE&quot;</span><span class="s2">):</span>
+            <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+
+            <span class="s1">basedirs</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">settings</span><span class="s2">.</span><span class="s1">LOCALE_PATHS</span><span class="s2">)</span>
+
+        <span class="s5"># Walk entire tree, looking for locale directories</span>
+        <span class="s0">for </span><span class="s1">dirpath</span><span class="s2">, </span><span class="s1">dirnames</span><span class="s2">, </span><span class="s1">filenames </span><span class="s0">in </span><span class="s1">os</span><span class="s2">.</span><span class="s1">walk</span><span class="s2">(</span><span class="s3">&quot;.&quot;</span><span class="s2">, </span><span class="s1">topdown</span><span class="s2">=</span><span class="s0">True</span><span class="s2">):</span>
+            <span class="s0">for </span><span class="s1">dirname </span><span class="s0">in </span><span class="s1">dirnames</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">is_ignored_path</span><span class="s2">(</span>
+                    <span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">normpath</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">dirpath</span><span class="s2">, </span><span class="s1">dirname</span><span class="s2">)), </span><span class="s1">ignore_patterns</span>
+                <span class="s2">):</span>
+                    <span class="s1">dirnames</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">(</span><span class="s1">dirname</span><span class="s2">)</span>
+                <span class="s0">elif </span><span class="s1">dirname </span><span class="s2">== </span><span class="s3">&quot;locale&quot;</span><span class="s2">:</span>
+                    <span class="s1">basedirs</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">dirpath</span><span class="s2">, </span><span class="s1">dirname</span><span class="s2">))</span>
+
+        <span class="s5"># Gather existing directories.</span>
+        <span class="s1">basedirs </span><span class="s2">= </span><span class="s1">set</span><span class="s2">(</span><span class="s1">map</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">abspath</span><span class="s2">, </span><span class="s1">filter</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">isdir</span><span class="s2">, </span><span class="s1">basedirs</span><span class="s2">)))</span>
+
+        <span class="s0">if not </span><span class="s1">basedirs</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s3">&quot;This script should be run from the Django Git &quot;</span>
+                <span class="s3">&quot;checkout or your project or app tree, or with &quot;</span>
+                <span class="s3">&quot;the settings module specified.&quot;</span>
+            <span class="s2">)</span>
+
+        <span class="s5"># Build locale list</span>
+        <span class="s1">all_locales </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">basedir </span><span class="s0">in </span><span class="s1">basedirs</span><span class="s2">:</span>
+            <span class="s1">locale_dirs </span><span class="s2">= </span><span class="s1">filter</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">isdir</span><span class="s2">, </span><span class="s1">glob</span><span class="s2">.</span><span class="s1">glob</span><span class="s2">(</span><span class="s3">&quot;%s/*&quot; </span><span class="s2">% </span><span class="s1">basedir</span><span class="s2">))</span>
+            <span class="s1">all_locales</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">map</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">basename</span><span class="s2">, </span><span class="s1">locale_dirs</span><span class="s2">))</span>
+
+        <span class="s5"># Account for excluded locales</span>
+        <span class="s1">locales </span><span class="s2">= </span><span class="s1">locale </span><span class="s0">or </span><span class="s1">all_locales</span>
+        <span class="s1">locales </span><span class="s2">= </span><span class="s1">set</span><span class="s2">(</span><span class="s1">locales</span><span class="s2">).</span><span class="s1">difference</span><span class="s2">(</span><span class="s1">exclude</span><span class="s2">)</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">has_errors </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s0">for </span><span class="s1">basedir </span><span class="s0">in </span><span class="s1">basedirs</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">locales</span><span class="s2">:</span>
+                <span class="s1">dirs </span><span class="s2">= [</span>
+                    <span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">basedir</span><span class="s2">, </span><span class="s1">locale</span><span class="s2">, </span><span class="s3">&quot;LC_MESSAGES&quot;</span><span class="s2">) </span><span class="s0">for </span><span class="s1">locale </span><span class="s0">in </span><span class="s1">locales</span>
+                <span class="s2">]</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">dirs </span><span class="s2">= [</span><span class="s1">basedir</span><span class="s2">]</span>
+            <span class="s1">locations </span><span class="s2">= []</span>
+            <span class="s0">for </span><span class="s1">ldir </span><span class="s0">in </span><span class="s1">dirs</span><span class="s2">:</span>
+                <span class="s0">for </span><span class="s1">dirpath</span><span class="s2">, </span><span class="s1">dirnames</span><span class="s2">, </span><span class="s1">filenames </span><span class="s0">in </span><span class="s1">os</span><span class="s2">.</span><span class="s1">walk</span><span class="s2">(</span><span class="s1">ldir</span><span class="s2">):</span>
+                    <span class="s1">locations</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span>
+                        <span class="s2">(</span><span class="s1">dirpath</span><span class="s2">, </span><span class="s1">f</span><span class="s2">) </span><span class="s0">for </span><span class="s1">f </span><span class="s0">in </span><span class="s1">filenames </span><span class="s0">if </span><span class="s1">f</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s3">&quot;.po&quot;</span><span class="s2">)</span>
+                    <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">locations</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">compile_messages</span><span class="s2">(</span><span class="s1">locations</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">has_errors</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s3">&quot;compilemessages generated one or more errors.&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">compile_messages</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">locations</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Locations is a list of tuples: [(directory, file), ...] 
+        &quot;&quot;&quot;</span>
+        <span class="s0">with </span><span class="s1">concurrent</span><span class="s2">.</span><span class="s1">futures</span><span class="s2">.</span><span class="s1">ThreadPoolExecutor</span><span class="s2">() </span><span class="s0">as </span><span class="s1">executor</span><span class="s2">:</span>
+            <span class="s1">futures </span><span class="s2">= []</span>
+            <span class="s0">for </span><span class="s1">i</span><span class="s2">, (</span><span class="s1">dirpath</span><span class="s2">, </span><span class="s1">f</span><span class="s2">) </span><span class="s0">in </span><span class="s1">enumerate</span><span class="s2">(</span><span class="s1">locations</span><span class="s2">):</span>
+                <span class="s1">po_path </span><span class="s2">= </span><span class="s1">Path</span><span class="s2">(</span><span class="s1">dirpath</span><span class="s2">) / </span><span class="s1">f</span>
+                <span class="s1">mo_path </span><span class="s2">= </span><span class="s1">po_path</span><span class="s2">.</span><span class="s1">with_suffix</span><span class="s2">(</span><span class="s3">&quot;.mo&quot;</span><span class="s2">)</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s0">if </span><span class="s1">mo_path</span><span class="s2">.</span><span class="s1">stat</span><span class="s2">().</span><span class="s1">st_mtime </span><span class="s2">&gt;= </span><span class="s1">po_path</span><span class="s2">.</span><span class="s1">stat</span><span class="s2">().</span><span class="s1">st_mtime</span><span class="s2">:</span>
+                        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt; </span><span class="s4">0</span><span class="s2">:</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                                <span class="s3">&quot;File “%s” is already compiled and up to date.&quot;</span>
+                                <span class="s2">% </span><span class="s1">po_path</span>
+                            <span class="s2">)</span>
+                        <span class="s0">continue</span>
+                <span class="s0">except </span><span class="s1">FileNotFoundError</span><span class="s2">:</span>
+                    <span class="s0">pass</span>
+                <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt; </span><span class="s4">0</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot;processing file %s in %s&quot; </span><span class="s2">% (</span><span class="s1">f</span><span class="s2">, </span><span class="s1">dirpath</span><span class="s2">))</span>
+
+                <span class="s0">if </span><span class="s1">has_bom</span><span class="s2">(</span><span class="s1">po_path</span><span class="s2">):</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">stderr</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                        <span class="s3">&quot;The %s file has a BOM (Byte Order Mark). Django only &quot;</span>
+                        <span class="s3">&quot;supports .po files encoded in UTF-8 and without any BOM.&quot;</span>
+                        <span class="s2">% </span><span class="s1">po_path</span>
+                    <span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">has_errors </span><span class="s2">= </span><span class="s0">True</span>
+                    <span class="s0">continue</span>
+
+                <span class="s5"># Check writability on first location</span>
+                <span class="s0">if </span><span class="s1">i </span><span class="s2">== </span><span class="s4">0 </span><span class="s0">and not </span><span class="s1">is_writable</span><span class="s2">(</span><span class="s1">mo_path</span><span class="s2">):</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">stderr</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                        <span class="s3">&quot;The po files under %s are in a seemingly not writable &quot;</span>
+                        <span class="s3">&quot;location. mo files will not be updated/created.&quot; </span><span class="s2">% </span><span class="s1">dirpath</span>
+                    <span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">has_errors </span><span class="s2">= </span><span class="s0">True</span>
+                    <span class="s0">return</span>
+
+                <span class="s1">args </span><span class="s2">= [</span><span class="s1">self</span><span class="s2">.</span><span class="s1">program</span><span class="s2">, *</span><span class="s1">self</span><span class="s2">.</span><span class="s1">program_options</span><span class="s2">, </span><span class="s3">&quot;-o&quot;</span><span class="s2">, </span><span class="s1">mo_path</span><span class="s2">, </span><span class="s1">po_path</span><span class="s2">]</span>
+                <span class="s1">futures</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">executor</span><span class="s2">.</span><span class="s1">submit</span><span class="s2">(</span><span class="s1">popen_wrapper</span><span class="s2">, </span><span class="s1">args</span><span class="s2">))</span>
+
+            <span class="s0">for </span><span class="s1">future </span><span class="s0">in </span><span class="s1">concurrent</span><span class="s2">.</span><span class="s1">futures</span><span class="s2">.</span><span class="s1">as_completed</span><span class="s2">(</span><span class="s1">futures</span><span class="s2">):</span>
+                <span class="s1">output</span><span class="s2">, </span><span class="s1">errors</span><span class="s2">, </span><span class="s1">status </span><span class="s2">= </span><span class="s1">future</span><span class="s2">.</span><span class="s1">result</span><span class="s2">()</span>
+                <span class="s0">if </span><span class="s1">status</span><span class="s2">:</span>
+                    <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt; </span><span class="s4">0</span><span class="s2">:</span>
+                        <span class="s0">if </span><span class="s1">errors</span><span class="s2">:</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">stderr</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                                <span class="s3">&quot;Execution of %s failed: %s&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">program</span><span class="s2">, </span><span class="s1">errors</span><span class="s2">)</span>
+                            <span class="s2">)</span>
+                        <span class="s0">else</span><span class="s2">:</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">stderr</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s3">&quot;Execution of %s failed&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">program</span><span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">has_errors </span><span class="s2">= </span><span class="s0">True</span>
+</pre>
+</body>
+</html>

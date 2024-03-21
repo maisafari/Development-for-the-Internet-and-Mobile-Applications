@@ -1,0 +1,102 @@
+<html>
+<head>
+<title>change_form.html</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #bcbec4;}
+.s1 { color: #d5b778;}
+.s2 { color: #bababa;}
+.s3 { color: #6aab73;}
+.s4 { color: #56a8f5;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+change_form.html</font>
+</center></td></tr></table>
+<pre><span class="s0">{% extends &quot;admin/base_site.html&quot; %}</span>
+<span class="s0">{% load i18n admin_urls static admin_modify %}</span>
+
+<span class="s0">{% block extrahead %}{{ block.super }}</span>
+<span class="s1">&lt;script </span><span class="s2">src</span><span class="s3">=&quot;{% url 'admin:jsi18n' %}&quot;</span><span class="s1">&gt;&lt;/script&gt;</span>
+<span class="s0">{{ media }}</span>
+<span class="s0">{% endblock %}</span>
+
+<span class="s0">{% block extrastyle %}{{ block.super }}</span><span class="s1">&lt;link </span><span class="s2">rel</span><span class="s3">=&quot;stylesheet&quot; </span><span class="s2">href</span><span class="s3">=&quot;{% static &quot;</span><span class="s2">admin</span><span class="s0">/css/forms.css&quot; %}&quot;&gt;{% endblock %}</span>
+
+<span class="s0">{% block coltype %}colM{% endblock %}</span>
+
+<span class="s0">{% block bodyclass %}{{ block.super }} app-{{ opts.app_label }} model-{{ opts.model_name }} change-form{% endblock %}</span>
+
+<span class="s0">{% if not is_popup %}</span>
+<span class="s0">{% block breadcrumbs %}</span>
+<span class="s1">&lt;div </span><span class="s2">class</span><span class="s3">=&quot;breadcrumbs&quot;</span><span class="s1">&gt;</span>
+<span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url 'admin:index' %}&quot;</span><span class="s1">&gt;</span><span class="s0">{% translate 'Home' %}</span><span class="s1">&lt;/a&gt;</span>
+<span class="s4">&amp;rsaquo; </span><span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url 'admin:app_list' app_label=opts.app_label %}&quot;</span><span class="s1">&gt;</span><span class="s0">{{ opts.app_config.verbose_name }}</span><span class="s1">&lt;/a&gt;</span>
+<span class="s4">&amp;rsaquo; </span><span class="s0">{% if has_view_permission %}</span><span class="s1">&lt;a </span><span class="s2">href</span><span class="s3">=&quot;{% url opts|admin_urlname:'changelist' %}&quot;</span><span class="s1">&gt;</span><span class="s0">{{ opts.verbose_name_plural|capfirst }}</span><span class="s1">&lt;/a&gt;</span><span class="s0">{% else %}{{ opts.verbose_name_plural|capfirst }}{% endif %}</span>
+<span class="s4">&amp;rsaquo; </span><span class="s0">{% if add %}{% blocktranslate with name=opts.verbose_name %}Add {{ name }}{% endblocktranslate %}{% else %}{{ original|truncatewords:&quot;18&quot; }}{% endif %}</span>
+<span class="s1">&lt;/div&gt;</span>
+<span class="s0">{% endblock %}</span>
+<span class="s0">{% endif %}</span>
+
+<span class="s0">{% block content %}</span><span class="s1">&lt;div </span><span class="s2">id</span><span class="s3">=&quot;content-main&quot;</span><span class="s1">&gt;</span>
+<span class="s0">{% block object-tools %}</span>
+<span class="s0">{% if change and not is_popup %}</span>
+  <span class="s1">&lt;ul </span><span class="s2">class</span><span class="s3">=&quot;object-tools&quot;</span><span class="s1">&gt;</span>
+    <span class="s0">{% block object-tools-items %}</span>
+      <span class="s0">{% change_form_object_tools %}</span>
+    <span class="s0">{% endblock %}</span>
+  <span class="s1">&lt;/ul&gt;</span>
+<span class="s0">{% endif %}</span>
+<span class="s0">{% endblock %}</span>
+<span class="s1">&lt;form </span><span class="s2">{% if has_file_field %}enctype</span><span class="s3">=&quot;multipart/form-data&quot; </span><span class="s2">{% endif %}{% if form_url %}action</span><span class="s3">=&quot;{{ form_url }}&quot; </span><span class="s2">{% endif %}method</span><span class="s3">=&quot;post&quot; </span><span class="s2">id</span><span class="s3">=&quot;{{ opts.model_name }}_form&quot; </span><span class="s2">novalidate</span><span class="s1">&gt;</span><span class="s0">{% csrf_token %}{% block form_top %}{% endblock %}</span>
+<span class="s1">&lt;div&gt;</span>
+<span class="s0">{% if is_popup %}</span><span class="s1">&lt;input </span><span class="s2">type</span><span class="s3">=&quot;hidden&quot; </span><span class="s2">name</span><span class="s3">=&quot;{{ is_popup_var }}&quot; </span><span class="s2">value</span><span class="s3">=&quot;1&quot;</span><span class="s1">&gt;</span><span class="s0">{% endif %}</span>
+<span class="s0">{% if to_field %}</span><span class="s1">&lt;input </span><span class="s2">type</span><span class="s3">=&quot;hidden&quot; </span><span class="s2">name</span><span class="s3">=&quot;{{ to_field_var }}&quot; </span><span class="s2">value</span><span class="s3">=&quot;{{ to_field }}&quot;</span><span class="s1">&gt;</span><span class="s0">{% endif %}</span>
+<span class="s0">{% if save_on_top %}{% block submit_buttons_top %}{% submit_row %}{% endblock %}{% endif %}</span>
+<span class="s0">{% if errors %}</span>
+    <span class="s1">&lt;p </span><span class="s2">class</span><span class="s3">=&quot;errornote&quot;</span><span class="s1">&gt;</span>
+    <span class="s0">{% blocktranslate count counter=errors|length %}Please correct the error below.{% plural %}Please correct the errors below.{% endblocktranslate %}</span>
+    <span class="s1">&lt;/p&gt;</span>
+    <span class="s0">{{ adminform.form.non_field_errors }}</span>
+<span class="s0">{% endif %}</span>
+
+<span class="s0">{% block field_sets %}</span>
+<span class="s0">{% for fieldset in adminform %}</span>
+  <span class="s0">{% include &quot;admin/includes/fieldset.html&quot; %}</span>
+<span class="s0">{% endfor %}</span>
+<span class="s0">{% endblock %}</span>
+
+<span class="s0">{% block after_field_sets %}{% endblock %}</span>
+
+<span class="s0">{% block inline_field_sets %}</span>
+<span class="s0">{% for inline_admin_formset in inline_admin_formsets %}</span>
+    <span class="s0">{% include inline_admin_formset.opts.template %}</span>
+<span class="s0">{% endfor %}</span>
+<span class="s0">{% endblock %}</span>
+
+<span class="s0">{% block after_related_objects %}{% endblock %}</span>
+
+<span class="s0">{% block submit_buttons_bottom %}{% submit_row %}{% endblock %}</span>
+
+<span class="s0">{% block admin_change_form_document_ready %}</span>
+    <span class="s1">&lt;script </span><span class="s2">id</span><span class="s3">=&quot;django-admin-form-add-constants&quot;</span>
+            <span class="s2">src</span><span class="s3">=&quot;{% static 'admin/js/change_form.js' %}&quot;</span>
+            <span class="s2">{% if adminform and add %}</span>
+                <span class="s2">data-model-name</span><span class="s3">=&quot;{{ opts.model_name }}&quot;</span>
+            <span class="s2">{% endif %}</span>
+            <span class="s2">async</span><span class="s1">&gt;</span>
+    <span class="s1">&lt;/script&gt;</span>
+<span class="s0">{% endblock %}</span>
+
+<span class="s0">{# JavaScript for prepopulated fields #}</span>
+<span class="s0">{% prepopulated_fields_js %}</span>
+
+<span class="s1">&lt;/div&gt;</span>
+<span class="s1">&lt;/form&gt;&lt;/div&gt;</span>
+<span class="s0">{% endblock %}</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,425 @@
+<html>
+<head>
+<title>templates.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+templates.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">argparse</span>
+<span class="s0">import </span><span class="s1">mimetypes</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">posixpath</span>
+<span class="s0">import </span><span class="s1">shutil</span>
+<span class="s0">import </span><span class="s1">stat</span>
+<span class="s0">import </span><span class="s1">tempfile</span>
+<span class="s0">from </span><span class="s1">importlib</span><span class="s2">.</span><span class="s1">util </span><span class="s0">import </span><span class="s1">find_spec</span>
+<span class="s0">from </span><span class="s1">urllib</span><span class="s2">.</span><span class="s1">request </span><span class="s0">import </span><span class="s1">build_opener</span>
+
+<span class="s0">import </span><span class="s1">django</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span><span class="s2">, </span><span class="s1">CommandError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">find_formatters</span><span class="s2">,</span>
+    <span class="s1">handle_extensions</span><span class="s2">,</span>
+    <span class="s1">run_formatters</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template </span><span class="s0">import </span><span class="s1">Context</span><span class="s2">, </span><span class="s1">Engine</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">archive</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">parse_header_parameters</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">version </span><span class="s0">import </span><span class="s1">get_docs_version</span>
+
+
+<span class="s0">class </span><span class="s1">TemplateCommand</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Copy either a Django application layout template or a Django project 
+    layout template into the specified directory. 
+ 
+    :param style: A color style object (see django.core.management.color). 
+    :param app_or_project: The string 'app' or 'project'. 
+    :param name: The name of the application or project. 
+    :param directory: The directory to which the template should be copied. 
+    :param options: The additional variables passed to project or app templates 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">requires_system_checks </span><span class="s2">= []</span>
+    <span class="s4"># The supported URL schemes</span>
+    <span class="s1">url_schemes </span><span class="s2">= [</span><span class="s5">&quot;http&quot;</span><span class="s2">, </span><span class="s5">&quot;https&quot;</span><span class="s2">, </span><span class="s5">&quot;ftp&quot;</span><span class="s2">]</span>
+    <span class="s4"># Rewrite the following suffixes when determining the target filename.</span>
+    <span class="s1">rewrite_template_suffixes </span><span class="s2">= (</span>
+        <span class="s4"># Allow shipping invalid .py files without byte-compilation.</span>
+        <span class="s2">(</span><span class="s5">&quot;.py-tpl&quot;</span><span class="s2">, </span><span class="s5">&quot;.py&quot;</span><span class="s2">),</span>
+    <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span><span class="s5">&quot;name&quot;</span><span class="s2">, </span><span class="s1">help</span><span class="s2">=</span><span class="s5">&quot;Name of the application or project.&quot;</span><span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s5">&quot;directory&quot;</span><span class="s2">, </span><span class="s1">nargs</span><span class="s2">=</span><span class="s5">&quot;?&quot;</span><span class="s2">, </span><span class="s1">help</span><span class="s2">=</span><span class="s5">&quot;Optional destination directory&quot;</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s5">&quot;--template&quot;</span><span class="s2">, </span><span class="s1">help</span><span class="s2">=</span><span class="s5">&quot;The path or URL to load the template from.&quot;</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s5">&quot;--extension&quot;</span><span class="s2">,</span>
+            <span class="s5">&quot;-e&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s5">&quot;extensions&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s5">&quot;append&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=[</span><span class="s5">&quot;py&quot;</span><span class="s2">],</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s5">'The file extension(s) to render (default: &quot;py&quot;). '</span>
+            <span class="s5">&quot;Separate multiple extensions with commas, or use &quot;</span>
+            <span class="s5">&quot;-e multiple times.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s5">&quot;--name&quot;</span><span class="s2">,</span>
+            <span class="s5">&quot;-n&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s5">&quot;files&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s5">&quot;append&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=[],</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s5">&quot;The file name(s) to render. Separate multiple file names &quot;</span>
+            <span class="s5">&quot;with commas, or use -n multiple times.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s5">&quot;--exclude&quot;</span><span class="s2">,</span>
+            <span class="s5">&quot;-x&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s5">&quot;append&quot;</span><span class="s2">,</span>
+            <span class="s1">default</span><span class="s2">=</span><span class="s1">argparse</span><span class="s2">.</span><span class="s1">SUPPRESS</span><span class="s2">,</span>
+            <span class="s1">nargs</span><span class="s2">=</span><span class="s5">&quot;?&quot;</span><span class="s2">,</span>
+            <span class="s1">const</span><span class="s2">=</span><span class="s5">&quot;&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s5">&quot;The directory name(s) to exclude, in addition to .git and &quot;</span>
+                <span class="s5">&quot;__pycache__. Can be used multiple times.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_or_project</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">target</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">app_or_project </span><span class="s2">= </span><span class="s1">app_or_project</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">a_or_an </span><span class="s2">= </span><span class="s5">&quot;an&quot; </span><span class="s0">if </span><span class="s1">app_or_project </span><span class="s2">== </span><span class="s5">&quot;app&quot; </span><span class="s0">else </span><span class="s5">&quot;a&quot;</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">paths_to_remove </span><span class="s2">= []</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s5">&quot;verbosity&quot;</span><span class="s2">]</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">validate_name</span><span class="s2">(</span><span class="s1">name</span><span class="s2">)</span>
+
+        <span class="s4"># if some directory is given, make sure it's nicely expanded</span>
+        <span class="s0">if </span><span class="s1">target </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">top_dir </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">getcwd</span><span class="s2">(), </span><span class="s1">name</span><span class="s2">)</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">os</span><span class="s2">.</span><span class="s1">makedirs</span><span class="s2">(</span><span class="s1">top_dir</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">FileExistsError</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s5">&quot;'%s' already exists&quot; </span><span class="s2">% </span><span class="s1">top_dir</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">OSError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s1">e</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">top_dir </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">abspath</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">expanduser</span><span class="s2">(</span><span class="s1">target</span><span class="s2">))</span>
+            <span class="s0">if </span><span class="s1">app_or_project </span><span class="s2">== </span><span class="s5">&quot;app&quot;</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">validate_name</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">basename</span><span class="s2">(</span><span class="s1">top_dir</span><span class="s2">), </span><span class="s5">&quot;directory&quot;</span><span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s1">top_dir</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                    <span class="s5">&quot;Destination directory '%s' does not &quot;</span>
+                    <span class="s5">&quot;exist, please create it first.&quot; </span><span class="s2">% </span><span class="s1">top_dir</span>
+                <span class="s2">)</span>
+
+        <span class="s4"># Find formatters, which are external executables, before input</span>
+        <span class="s4"># from the templates can sneak into the path.</span>
+        <span class="s1">formatter_paths </span><span class="s2">= </span><span class="s1">find_formatters</span><span class="s2">()</span>
+
+        <span class="s1">extensions </span><span class="s2">= </span><span class="s1">tuple</span><span class="s2">(</span><span class="s1">handle_extensions</span><span class="s2">(</span><span class="s1">options</span><span class="s2">[</span><span class="s5">&quot;extensions&quot;</span><span class="s2">]))</span>
+        <span class="s1">extra_files </span><span class="s2">= []</span>
+        <span class="s1">excluded_directories </span><span class="s2">= [</span><span class="s5">&quot;.git&quot;</span><span class="s2">, </span><span class="s5">&quot;__pycache__&quot;</span><span class="s2">]</span>
+        <span class="s0">for </span><span class="s1">file </span><span class="s0">in </span><span class="s1">options</span><span class="s2">[</span><span class="s5">&quot;files&quot;</span><span class="s2">]:</span>
+            <span class="s1">extra_files</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">map</span><span class="s2">(</span><span class="s0">lambda </span><span class="s1">x</span><span class="s2">: </span><span class="s1">x</span><span class="s2">.</span><span class="s1">strip</span><span class="s2">(), </span><span class="s1">file</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s5">&quot;,&quot;</span><span class="s2">)))</span>
+        <span class="s0">if </span><span class="s1">exclude </span><span class="s2">:= </span><span class="s1">options</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;exclude&quot;</span><span class="s2">):</span>
+            <span class="s0">for </span><span class="s1">directory </span><span class="s0">in </span><span class="s1">exclude</span><span class="s2">:</span>
+                <span class="s1">excluded_directories</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">directory</span><span class="s2">.</span><span class="s1">strip</span><span class="s2">())</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s6">2</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                <span class="s5">&quot;Rendering %s template files with extensions: %s&quot;</span>
+                <span class="s2">% (</span><span class="s1">app_or_project</span><span class="s2">, </span><span class="s5">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">extensions</span><span class="s2">))</span>
+            <span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                <span class="s5">&quot;Rendering %s template files with filenames: %s&quot;</span>
+                <span class="s2">% (</span><span class="s1">app_or_project</span><span class="s2">, </span><span class="s5">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">extra_files</span><span class="s2">))</span>
+            <span class="s2">)</span>
+        <span class="s1">base_name </span><span class="s2">= </span><span class="s5">&quot;%s_name&quot; </span><span class="s2">% </span><span class="s1">app_or_project</span>
+        <span class="s1">base_subdir </span><span class="s2">= </span><span class="s5">&quot;%s_template&quot; </span><span class="s2">% </span><span class="s1">app_or_project</span>
+        <span class="s1">base_directory </span><span class="s2">= </span><span class="s5">&quot;%s_directory&quot; </span><span class="s2">% </span><span class="s1">app_or_project</span>
+        <span class="s1">camel_case_name </span><span class="s2">= </span><span class="s5">&quot;camel_case_%s_name&quot; </span><span class="s2">% </span><span class="s1">app_or_project</span>
+        <span class="s1">camel_case_value </span><span class="s2">= </span><span class="s5">&quot;&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">x </span><span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">name</span><span class="s2">.</span><span class="s1">title</span><span class="s2">() </span><span class="s0">if </span><span class="s1">x </span><span class="s2">!= </span><span class="s5">&quot;_&quot;</span><span class="s2">)</span>
+
+        <span class="s1">context </span><span class="s2">= </span><span class="s1">Context</span><span class="s2">(</span>
+            <span class="s2">{</span>
+                <span class="s2">**</span><span class="s1">options</span><span class="s2">,</span>
+                <span class="s1">base_name</span><span class="s2">: </span><span class="s1">name</span><span class="s2">,</span>
+                <span class="s1">base_directory</span><span class="s2">: </span><span class="s1">top_dir</span><span class="s2">,</span>
+                <span class="s1">camel_case_name</span><span class="s2">: </span><span class="s1">camel_case_value</span><span class="s2">,</span>
+                <span class="s5">&quot;docs_version&quot;</span><span class="s2">: </span><span class="s1">get_docs_version</span><span class="s2">(),</span>
+                <span class="s5">&quot;django_version&quot;</span><span class="s2">: </span><span class="s1">django</span><span class="s2">.</span><span class="s1">__version__</span><span class="s2">,</span>
+            <span class="s2">},</span>
+            <span class="s1">autoescape</span><span class="s2">=</span><span class="s0">False</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+        <span class="s4"># Setup a stub settings environment for template rendering</span>
+        <span class="s0">if not </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">configured</span><span class="s2">:</span>
+            <span class="s1">settings</span><span class="s2">.</span><span class="s1">configure</span><span class="s2">()</span>
+            <span class="s1">django</span><span class="s2">.</span><span class="s1">setup</span><span class="s2">()</span>
+
+        <span class="s1">template_dir </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">handle_template</span><span class="s2">(</span><span class="s1">options</span><span class="s2">[</span><span class="s5">&quot;template&quot;</span><span class="s2">], </span><span class="s1">base_subdir</span><span class="s2">)</span>
+        <span class="s1">prefix_length </span><span class="s2">= </span><span class="s1">len</span><span class="s2">(</span><span class="s1">template_dir</span><span class="s2">) + </span><span class="s6">1</span>
+
+        <span class="s0">for </span><span class="s1">root</span><span class="s2">, </span><span class="s1">dirs</span><span class="s2">, </span><span class="s1">files </span><span class="s0">in </span><span class="s1">os</span><span class="s2">.</span><span class="s1">walk</span><span class="s2">(</span><span class="s1">template_dir</span><span class="s2">):</span>
+            <span class="s1">path_rest </span><span class="s2">= </span><span class="s1">root</span><span class="s2">[</span><span class="s1">prefix_length</span><span class="s2">:]</span>
+            <span class="s1">relative_dir </span><span class="s2">= </span><span class="s1">path_rest</span><span class="s2">.</span><span class="s1">replace</span><span class="s2">(</span><span class="s1">base_name</span><span class="s2">, </span><span class="s1">name</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">relative_dir</span><span class="s2">:</span>
+                <span class="s1">target_dir </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">top_dir</span><span class="s2">, </span><span class="s1">relative_dir</span><span class="s2">)</span>
+                <span class="s1">os</span><span class="s2">.</span><span class="s1">makedirs</span><span class="s2">(</span><span class="s1">target_dir</span><span class="s2">, </span><span class="s1">exist_ok</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+            <span class="s0">for </span><span class="s1">dirname </span><span class="s0">in </span><span class="s1">dirs</span><span class="s2">[:]:</span>
+                <span class="s0">if </span><span class="s5">&quot;exclude&quot; </span><span class="s0">not in </span><span class="s1">options</span><span class="s2">:</span>
+                    <span class="s0">if </span><span class="s1">dirname</span><span class="s2">.</span><span class="s1">startswith</span><span class="s2">(</span><span class="s5">&quot;.&quot;</span><span class="s2">) </span><span class="s0">or </span><span class="s1">dirname </span><span class="s2">== </span><span class="s5">&quot;__pycache__&quot;</span><span class="s2">:</span>
+                        <span class="s1">dirs</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">(</span><span class="s1">dirname</span><span class="s2">)</span>
+                <span class="s0">elif </span><span class="s1">dirname </span><span class="s0">in </span><span class="s1">excluded_directories</span><span class="s2">:</span>
+                    <span class="s1">dirs</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">(</span><span class="s1">dirname</span><span class="s2">)</span>
+
+            <span class="s0">for </span><span class="s1">filename </span><span class="s0">in </span><span class="s1">files</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">filename</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">((</span><span class="s5">&quot;.pyo&quot;</span><span class="s2">, </span><span class="s5">&quot;.pyc&quot;</span><span class="s2">, </span><span class="s5">&quot;.py.class&quot;</span><span class="s2">)):</span>
+                    <span class="s4"># Ignore some files as they cause various breakages.</span>
+                    <span class="s0">continue</span>
+                <span class="s1">old_path </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">root</span><span class="s2">, </span><span class="s1">filename</span><span class="s2">)</span>
+                <span class="s1">new_path </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span>
+                    <span class="s1">top_dir</span><span class="s2">, </span><span class="s1">relative_dir</span><span class="s2">, </span><span class="s1">filename</span><span class="s2">.</span><span class="s1">replace</span><span class="s2">(</span><span class="s1">base_name</span><span class="s2">, </span><span class="s1">name</span><span class="s2">)</span>
+                <span class="s2">)</span>
+                <span class="s0">for </span><span class="s1">old_suffix</span><span class="s2">, </span><span class="s1">new_suffix </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">rewrite_template_suffixes</span><span class="s2">:</span>
+                    <span class="s0">if </span><span class="s1">new_path</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s1">old_suffix</span><span class="s2">):</span>
+                        <span class="s1">new_path </span><span class="s2">= </span><span class="s1">new_path</span><span class="s2">.</span><span class="s1">removesuffix</span><span class="s2">(</span><span class="s1">old_suffix</span><span class="s2">) + </span><span class="s1">new_suffix</span>
+                        <span class="s0">break  </span><span class="s4"># Only rewrite once</span>
+
+                <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s1">new_path</span><span class="s2">):</span>
+                    <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                        <span class="s5">&quot;%s already exists. Overlaying %s %s into an existing &quot;</span>
+                        <span class="s5">&quot;directory won't replace conflicting files.&quot;</span>
+                        <span class="s2">% (</span>
+                            <span class="s1">new_path</span><span class="s2">,</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">a_or_an</span><span class="s2">,</span>
+                            <span class="s1">app_or_project</span><span class="s2">,</span>
+                        <span class="s2">)</span>
+                    <span class="s2">)</span>
+
+                <span class="s4"># Only render the Python files, as we don't want to</span>
+                <span class="s4"># accidentally render Django templates files</span>
+                <span class="s0">if </span><span class="s1">new_path</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s1">extensions</span><span class="s2">) </span><span class="s0">or </span><span class="s1">filename </span><span class="s0">in </span><span class="s1">extra_files</span><span class="s2">:</span>
+                    <span class="s0">with </span><span class="s1">open</span><span class="s2">(</span><span class="s1">old_path</span><span class="s2">, </span><span class="s1">encoding</span><span class="s2">=</span><span class="s5">&quot;utf-8&quot;</span><span class="s2">) </span><span class="s0">as </span><span class="s1">template_file</span><span class="s2">:</span>
+                        <span class="s1">content </span><span class="s2">= </span><span class="s1">template_file</span><span class="s2">.</span><span class="s1">read</span><span class="s2">()</span>
+                    <span class="s1">template </span><span class="s2">= </span><span class="s1">Engine</span><span class="s2">().</span><span class="s1">from_string</span><span class="s2">(</span><span class="s1">content</span><span class="s2">)</span>
+                    <span class="s1">content </span><span class="s2">= </span><span class="s1">template</span><span class="s2">.</span><span class="s1">render</span><span class="s2">(</span><span class="s1">context</span><span class="s2">)</span>
+                    <span class="s0">with </span><span class="s1">open</span><span class="s2">(</span><span class="s1">new_path</span><span class="s2">, </span><span class="s5">&quot;w&quot;</span><span class="s2">, </span><span class="s1">encoding</span><span class="s2">=</span><span class="s5">&quot;utf-8&quot;</span><span class="s2">) </span><span class="s0">as </span><span class="s1">new_file</span><span class="s2">:</span>
+                        <span class="s1">new_file</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">content</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">shutil</span><span class="s2">.</span><span class="s1">copyfile</span><span class="s2">(</span><span class="s1">old_path</span><span class="s2">, </span><span class="s1">new_path</span><span class="s2">)</span>
+
+                <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s6">2</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s5">&quot;Creating %s&quot; </span><span class="s2">% </span><span class="s1">new_path</span><span class="s2">)</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">apply_umask</span><span class="s2">(</span><span class="s1">old_path</span><span class="s2">, </span><span class="s1">new_path</span><span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">make_writeable</span><span class="s2">(</span><span class="s1">new_path</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">OSError</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">stderr</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span>
+                        <span class="s5">&quot;Notice: Couldn't set permission bits on %s. You're &quot;</span>
+                        <span class="s5">&quot;probably using an uncommon filesystem setup. No &quot;</span>
+                        <span class="s5">&quot;problem.&quot; </span><span class="s2">% </span><span class="s1">new_path</span><span class="s2">,</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">NOTICE</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">paths_to_remove</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s6">2</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s5">&quot;Cleaning up temporary files.&quot;</span><span class="s2">)</span>
+            <span class="s0">for </span><span class="s1">path_to_remove </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">paths_to_remove</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">isfile</span><span class="s2">(</span><span class="s1">path_to_remove</span><span class="s2">):</span>
+                    <span class="s1">os</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">(</span><span class="s1">path_to_remove</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">shutil</span><span class="s2">.</span><span class="s1">rmtree</span><span class="s2">(</span><span class="s1">path_to_remove</span><span class="s2">)</span>
+
+        <span class="s1">run_formatters</span><span class="s2">([</span><span class="s1">top_dir</span><span class="s2">], **</span><span class="s1">formatter_paths</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle_template</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template</span><span class="s2">, </span><span class="s1">subdir</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Determine where the app or project templates are. 
+        Use django.__path__[0] as the default because the Django install 
+        directory isn't known. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">template </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">django</span><span class="s2">.</span><span class="s1">__path__</span><span class="s2">[</span><span class="s6">0</span><span class="s2">], </span><span class="s5">&quot;conf&quot;</span><span class="s2">, </span><span class="s1">subdir</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">template </span><span class="s2">= </span><span class="s1">template</span><span class="s2">.</span><span class="s1">removeprefix</span><span class="s2">(</span><span class="s5">&quot;file://&quot;</span><span class="s2">)</span>
+            <span class="s1">expanded_template </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">expanduser</span><span class="s2">(</span><span class="s1">template</span><span class="s2">)</span>
+            <span class="s1">expanded_template </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">normpath</span><span class="s2">(</span><span class="s1">expanded_template</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">isdir</span><span class="s2">(</span><span class="s1">expanded_template</span><span class="s2">):</span>
+                <span class="s0">return </span><span class="s1">expanded_template</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_url</span><span class="s2">(</span><span class="s1">template</span><span class="s2">):</span>
+                <span class="s4"># downloads the file and returns the path</span>
+                <span class="s1">absolute_path </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">download</span><span class="s2">(</span><span class="s1">template</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">absolute_path </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">abspath</span><span class="s2">(</span><span class="s1">expanded_template</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">exists</span><span class="s2">(</span><span class="s1">absolute_path</span><span class="s2">):</span>
+                <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">extract</span><span class="s2">(</span><span class="s1">absolute_path</span><span class="s2">)</span>
+
+        <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+            <span class="s5">&quot;couldn't handle %s template %s.&quot; </span><span class="s2">% (</span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_or_project</span><span class="s2">, </span><span class="s1">template</span><span class="s2">)</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">validate_name</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">, </span><span class="s1">name_or_dir</span><span class="s2">=</span><span class="s5">&quot;name&quot;</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">name </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s5">&quot;you must provide {an} {app} name&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span>
+                    <span class="s1">an</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">a_or_an</span><span class="s2">,</span>
+                    <span class="s1">app</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_or_project</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s4"># Check it's a valid directory name.</span>
+        <span class="s0">if not </span><span class="s1">name</span><span class="s2">.</span><span class="s1">isidentifier</span><span class="s2">():</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s5">&quot;'{name}' is not a valid {app} {type}. Please make sure the &quot;</span>
+                <span class="s5">&quot;{type} is a valid identifier.&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span>
+                    <span class="s1">name</span><span class="s2">=</span><span class="s1">name</span><span class="s2">,</span>
+                    <span class="s1">app</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_or_project</span><span class="s2">,</span>
+                    <span class="s1">type</span><span class="s2">=</span><span class="s1">name_or_dir</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+        <span class="s4"># Check that __spec__ doesn't exist.</span>
+        <span class="s0">if </span><span class="s1">find_spec</span><span class="s2">(</span><span class="s1">name</span><span class="s2">) </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s5">&quot;'{name}' conflicts with the name of an existing Python &quot;</span>
+                <span class="s5">&quot;module and cannot be used as {an} {app} {type}. Please try &quot;</span>
+                <span class="s5">&quot;another {type}.&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span>
+                    <span class="s1">name</span><span class="s2">=</span><span class="s1">name</span><span class="s2">,</span>
+                    <span class="s1">an</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">a_or_an</span><span class="s2">,</span>
+                    <span class="s1">app</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_or_project</span><span class="s2">,</span>
+                    <span class="s1">type</span><span class="s2">=</span><span class="s1">name_or_dir</span><span class="s2">,</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">download</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">url</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Download the given URL and return the file name. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s0">def </span><span class="s1">cleanup_url</span><span class="s2">(</span><span class="s1">url</span><span class="s2">):</span>
+            <span class="s1">tmp </span><span class="s2">= </span><span class="s1">url</span><span class="s2">.</span><span class="s1">rstrip</span><span class="s2">(</span><span class="s5">&quot;/&quot;</span><span class="s2">)</span>
+            <span class="s1">filename </span><span class="s2">= </span><span class="s1">tmp</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s5">&quot;/&quot;</span><span class="s2">)[-</span><span class="s6">1</span><span class="s2">]</span>
+            <span class="s0">if </span><span class="s1">url</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s5">&quot;/&quot;</span><span class="s2">):</span>
+                <span class="s1">display_url </span><span class="s2">= </span><span class="s1">tmp </span><span class="s2">+ </span><span class="s5">&quot;/&quot;</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">display_url </span><span class="s2">= </span><span class="s1">url</span>
+            <span class="s0">return </span><span class="s1">filename</span><span class="s2">, </span><span class="s1">display_url</span>
+
+        <span class="s1">prefix </span><span class="s2">= </span><span class="s5">&quot;django_%s_template_&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_or_project</span>
+        <span class="s1">tempdir </span><span class="s2">= </span><span class="s1">tempfile</span><span class="s2">.</span><span class="s1">mkdtemp</span><span class="s2">(</span><span class="s1">prefix</span><span class="s2">=</span><span class="s1">prefix</span><span class="s2">, </span><span class="s1">suffix</span><span class="s2">=</span><span class="s5">&quot;_download&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">paths_to_remove</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">tempdir</span><span class="s2">)</span>
+        <span class="s1">filename</span><span class="s2">, </span><span class="s1">display_url </span><span class="s2">= </span><span class="s1">cleanup_url</span><span class="s2">(</span><span class="s1">url</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s6">2</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s5">&quot;Downloading %s&quot; </span><span class="s2">% </span><span class="s1">display_url</span><span class="s2">)</span>
+
+        <span class="s1">the_path </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">tempdir</span><span class="s2">, </span><span class="s1">filename</span><span class="s2">)</span>
+        <span class="s1">opener </span><span class="s2">= </span><span class="s1">build_opener</span><span class="s2">()</span>
+        <span class="s1">opener</span><span class="s2">.</span><span class="s1">addheaders </span><span class="s2">= [(</span><span class="s5">&quot;User-Agent&quot;</span><span class="s2">, </span><span class="s5">f&quot;Django/</span><span class="s0">{</span><span class="s1">django</span><span class="s2">.</span><span class="s1">__version__</span><span class="s0">}</span><span class="s5">&quot;</span><span class="s2">)]</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">with </span><span class="s1">opener</span><span class="s2">.</span><span class="s1">open</span><span class="s2">(</span><span class="s1">url</span><span class="s2">) </span><span class="s0">as </span><span class="s1">source</span><span class="s2">, </span><span class="s1">open</span><span class="s2">(</span><span class="s1">the_path</span><span class="s2">, </span><span class="s5">&quot;wb&quot;</span><span class="s2">) </span><span class="s0">as </span><span class="s1">target</span><span class="s2">:</span>
+                <span class="s1">headers </span><span class="s2">= </span><span class="s1">source</span><span class="s2">.</span><span class="s1">info</span><span class="s2">()</span>
+                <span class="s1">target</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">source</span><span class="s2">.</span><span class="s1">read</span><span class="s2">())</span>
+        <span class="s0">except </span><span class="s1">OSError </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s5">&quot;couldn't download URL %s to %s: %s&quot; </span><span class="s2">% (</span><span class="s1">url</span><span class="s2">, </span><span class="s1">filename</span><span class="s2">, </span><span class="s1">e</span><span class="s2">)</span>
+            <span class="s2">)</span>
+
+        <span class="s1">used_name </span><span class="s2">= </span><span class="s1">the_path</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s5">&quot;/&quot;</span><span class="s2">)[-</span><span class="s6">1</span><span class="s2">]</span>
+
+        <span class="s4"># Trying to get better name from response headers</span>
+        <span class="s1">content_disposition </span><span class="s2">= </span><span class="s1">headers</span><span class="s2">[</span><span class="s5">&quot;content-disposition&quot;</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">content_disposition</span><span class="s2">:</span>
+            <span class="s1">_</span><span class="s2">, </span><span class="s1">params </span><span class="s2">= </span><span class="s1">parse_header_parameters</span><span class="s2">(</span><span class="s1">content_disposition</span><span class="s2">)</span>
+            <span class="s1">guessed_filename </span><span class="s2">= </span><span class="s1">params</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;filename&quot;</span><span class="s2">) </span><span class="s0">or </span><span class="s1">used_name</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">guessed_filename </span><span class="s2">= </span><span class="s1">used_name</span>
+
+        <span class="s4"># Falling back to content type guessing</span>
+        <span class="s1">ext </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">splitext</span><span class="s2">(</span><span class="s1">guessed_filename</span><span class="s2">)[</span><span class="s6">1</span><span class="s2">]</span>
+        <span class="s1">content_type </span><span class="s2">= </span><span class="s1">headers</span><span class="s2">[</span><span class="s5">&quot;content-type&quot;</span><span class="s2">]</span>
+        <span class="s0">if not </span><span class="s1">ext </span><span class="s0">and </span><span class="s1">content_type</span><span class="s2">:</span>
+            <span class="s1">ext </span><span class="s2">= </span><span class="s1">mimetypes</span><span class="s2">.</span><span class="s1">guess_extension</span><span class="s2">(</span><span class="s1">content_type</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">ext</span><span class="s2">:</span>
+                <span class="s1">guessed_filename </span><span class="s2">+= </span><span class="s1">ext</span>
+
+        <span class="s4"># Move the temporary file to a filename that has better</span>
+        <span class="s4"># chances of being recognized by the archive utils</span>
+        <span class="s0">if </span><span class="s1">used_name </span><span class="s2">!= </span><span class="s1">guessed_filename</span><span class="s2">:</span>
+            <span class="s1">guessed_path </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">tempdir</span><span class="s2">, </span><span class="s1">guessed_filename</span><span class="s2">)</span>
+            <span class="s1">shutil</span><span class="s2">.</span><span class="s1">move</span><span class="s2">(</span><span class="s1">the_path</span><span class="s2">, </span><span class="s1">guessed_path</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">guessed_path</span>
+
+        <span class="s4"># Giving up</span>
+        <span class="s0">return </span><span class="s1">the_path</span>
+
+    <span class="s0">def </span><span class="s1">splitext</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">the_path</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Like os.path.splitext, but takes off .tar, too 
+        &quot;&quot;&quot;</span>
+        <span class="s1">base</span><span class="s2">, </span><span class="s1">ext </span><span class="s2">= </span><span class="s1">posixpath</span><span class="s2">.</span><span class="s1">splitext</span><span class="s2">(</span><span class="s1">the_path</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">base</span><span class="s2">.</span><span class="s1">lower</span><span class="s2">().</span><span class="s1">endswith</span><span class="s2">(</span><span class="s5">&quot;.tar&quot;</span><span class="s2">):</span>
+            <span class="s1">ext </span><span class="s2">= </span><span class="s1">base</span><span class="s2">[-</span><span class="s6">4</span><span class="s2">:] + </span><span class="s1">ext</span>
+            <span class="s1">base </span><span class="s2">= </span><span class="s1">base</span><span class="s2">[:-</span><span class="s6">4</span><span class="s2">]</span>
+        <span class="s0">return </span><span class="s1">base</span><span class="s2">, </span><span class="s1">ext</span>
+
+    <span class="s0">def </span><span class="s1">extract</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">filename</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Extract the given file to a temporary directory and return 
+        the path of the directory with the extracted content. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">prefix </span><span class="s2">= </span><span class="s5">&quot;django_%s_template_&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_or_project</span>
+        <span class="s1">tempdir </span><span class="s2">= </span><span class="s1">tempfile</span><span class="s2">.</span><span class="s1">mkdtemp</span><span class="s2">(</span><span class="s1">prefix</span><span class="s2">=</span><span class="s1">prefix</span><span class="s2">, </span><span class="s1">suffix</span><span class="s2">=</span><span class="s5">&quot;_extract&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">paths_to_remove</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">tempdir</span><span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s6">2</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s5">&quot;Extracting %s&quot; </span><span class="s2">% </span><span class="s1">filename</span><span class="s2">)</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">archive</span><span class="s2">.</span><span class="s1">extract</span><span class="s2">(</span><span class="s1">filename</span><span class="s2">, </span><span class="s1">tempdir</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">tempdir</span>
+        <span class="s0">except </span><span class="s2">(</span><span class="s1">archive</span><span class="s2">.</span><span class="s1">ArchiveException</span><span class="s2">, </span><span class="s1">OSError</span><span class="s2">) </span><span class="s0">as </span><span class="s1">e</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s5">&quot;couldn't extract file %s to %s: %s&quot; </span><span class="s2">% (</span><span class="s1">filename</span><span class="s2">, </span><span class="s1">tempdir</span><span class="s2">, </span><span class="s1">e</span><span class="s2">)</span>
+            <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">is_url</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">template</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot;Return True if the name looks like a URL.&quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s5">&quot;:&quot; </span><span class="s0">not in </span><span class="s1">template</span><span class="s2">:</span>
+            <span class="s0">return False</span>
+        <span class="s1">scheme </span><span class="s2">= </span><span class="s1">template</span><span class="s2">.</span><span class="s1">split</span><span class="s2">(</span><span class="s5">&quot;:&quot;</span><span class="s2">, </span><span class="s6">1</span><span class="s2">)[</span><span class="s6">0</span><span class="s2">].</span><span class="s1">lower</span><span class="s2">()</span>
+        <span class="s0">return </span><span class="s1">scheme </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">url_schemes</span>
+
+    <span class="s0">def </span><span class="s1">apply_umask</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">old_path</span><span class="s2">, </span><span class="s1">new_path</span><span class="s2">):</span>
+        <span class="s1">current_umask </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">umask</span><span class="s2">(</span><span class="s6">0</span><span class="s2">)</span>
+        <span class="s1">os</span><span class="s2">.</span><span class="s1">umask</span><span class="s2">(</span><span class="s1">current_umask</span><span class="s2">)</span>
+        <span class="s1">current_mode </span><span class="s2">= </span><span class="s1">stat</span><span class="s2">.</span><span class="s1">S_IMODE</span><span class="s2">(</span><span class="s1">os</span><span class="s2">.</span><span class="s1">stat</span><span class="s2">(</span><span class="s1">old_path</span><span class="s2">).</span><span class="s1">st_mode</span><span class="s2">)</span>
+        <span class="s1">os</span><span class="s2">.</span><span class="s1">chmod</span><span class="s2">(</span><span class="s1">new_path</span><span class="s2">, </span><span class="s1">current_mode </span><span class="s2">&amp; ~</span><span class="s1">current_umask</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">make_writeable</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">filename</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Make sure that the file is writeable. 
+        Useful if our source is read-only. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if not </span><span class="s1">os</span><span class="s2">.</span><span class="s1">access</span><span class="s2">(</span><span class="s1">filename</span><span class="s2">, </span><span class="s1">os</span><span class="s2">.</span><span class="s1">W_OK</span><span class="s2">):</span>
+            <span class="s1">st </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">stat</span><span class="s2">(</span><span class="s1">filename</span><span class="s2">)</span>
+            <span class="s1">new_permissions </span><span class="s2">= </span><span class="s1">stat</span><span class="s2">.</span><span class="s1">S_IMODE</span><span class="s2">(</span><span class="s1">st</span><span class="s2">.</span><span class="s1">st_mode</span><span class="s2">) | </span><span class="s1">stat</span><span class="s2">.</span><span class="s1">S_IWUSR</span>
+            <span class="s1">os</span><span class="s2">.</span><span class="s1">chmod</span><span class="s2">(</span><span class="s1">filename</span><span class="s2">, </span><span class="s1">new_permissions</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

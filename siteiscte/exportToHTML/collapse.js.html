@@ -1,0 +1,65 @@
+<html>
+<head>
+<title>collapse.js</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #7a7e85;}
+.s1 { color: #bcbec4;}
+.s2 { color: #6aab73;}
+.s3 { color: #bcbec4;}
+.s4 { color: #cf8e6d;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+collapse.js</font>
+</center></td></tr></table>
+<pre><span class="s0">/*global gettext*/</span>
+<span class="s2">'use strict'</span><span class="s3">;</span>
+<span class="s3">{</span>
+    <span class="s1">window</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'load'</span><span class="s3">, </span><span class="s4">function</span><span class="s3">() {</span>
+        <span class="s0">// Add anchor tag for Show/Hide link</span>
+        <span class="s4">const </span><span class="s1">fieldsets </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">querySelectorAll</span><span class="s3">(</span><span class="s2">'fieldset.collapse'</span><span class="s3">);</span>
+        <span class="s4">for </span><span class="s3">(</span><span class="s4">const </span><span class="s3">[</span><span class="s1">i</span><span class="s3">, </span><span class="s1">elem</span><span class="s3">] </span><span class="s1">of fieldsets</span><span class="s3">.</span><span class="s1">entries</span><span class="s3">()) {</span>
+            <span class="s0">// Don't hide if fields in this fieldset have errors</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">elem</span><span class="s3">.</span><span class="s1">querySelectorAll</span><span class="s3">(</span><span class="s2">'div.errors, ul.errorlist'</span><span class="s3">).</span><span class="s1">length </span><span class="s3">=== </span><span class="s5">0</span><span class="s3">) {</span>
+                <span class="s1">elem</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">add</span><span class="s3">(</span><span class="s2">'collapsed'</span><span class="s3">);</span>
+                <span class="s4">const </span><span class="s1">h2 </span><span class="s3">= </span><span class="s1">elem</span><span class="s3">.</span><span class="s1">querySelector</span><span class="s3">(</span><span class="s2">'h2'</span><span class="s3">);</span>
+                <span class="s4">const </span><span class="s1">link </span><span class="s3">= </span><span class="s1">document</span><span class="s3">.</span><span class="s1">createElement</span><span class="s3">(</span><span class="s2">'a'</span><span class="s3">);</span>
+                <span class="s1">link</span><span class="s3">.</span><span class="s1">id </span><span class="s3">= </span><span class="s2">'fieldsetcollapser' </span><span class="s3">+ </span><span class="s1">i</span><span class="s3">;</span>
+                <span class="s1">link</span><span class="s3">.</span><span class="s1">className </span><span class="s3">= </span><span class="s2">'collapse-toggle'</span><span class="s3">;</span>
+                <span class="s1">link</span><span class="s3">.</span><span class="s1">href </span><span class="s3">= </span><span class="s2">'#'</span><span class="s3">;</span>
+                <span class="s1">link</span><span class="s3">.</span><span class="s1">textContent </span><span class="s3">= </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Show'</span><span class="s3">);</span>
+                <span class="s1">h2</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">createTextNode</span><span class="s3">(</span><span class="s2">' ('</span><span class="s3">));</span>
+                <span class="s1">h2</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">link</span><span class="s3">);</span>
+                <span class="s1">h2</span><span class="s3">.</span><span class="s1">appendChild</span><span class="s3">(</span><span class="s1">document</span><span class="s3">.</span><span class="s1">createTextNode</span><span class="s3">(</span><span class="s2">')'</span><span class="s3">));</span>
+            <span class="s3">}</span>
+        <span class="s3">}</span>
+        <span class="s0">// Add toggle to hide/show anchor tag</span>
+        <span class="s4">const </span><span class="s1">toggleFunc </span><span class="s3">= </span><span class="s4">function</span><span class="s3">(</span><span class="s1">ev</span><span class="s3">) {</span>
+            <span class="s4">if </span><span class="s3">(</span><span class="s1">ev</span><span class="s3">.</span><span class="s1">target</span><span class="s3">.</span><span class="s1">matches</span><span class="s3">(</span><span class="s2">'.collapse-toggle'</span><span class="s3">)) {</span>
+                <span class="s1">ev</span><span class="s3">.</span><span class="s1">preventDefault</span><span class="s3">();</span>
+                <span class="s1">ev</span><span class="s3">.</span><span class="s1">stopPropagation</span><span class="s3">();</span>
+                <span class="s4">const </span><span class="s1">fieldset </span><span class="s3">= </span><span class="s1">ev</span><span class="s3">.</span><span class="s1">target</span><span class="s3">.</span><span class="s1">closest</span><span class="s3">(</span><span class="s2">'fieldset'</span><span class="s3">);</span>
+                <span class="s4">if </span><span class="s3">(</span><span class="s1">fieldset</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">contains</span><span class="s3">(</span><span class="s2">'collapsed'</span><span class="s3">)) {</span>
+                    <span class="s0">// Show</span>
+                    <span class="s1">ev</span><span class="s3">.</span><span class="s1">target</span><span class="s3">.</span><span class="s1">textContent </span><span class="s3">= </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Hide'</span><span class="s3">);</span>
+                    <span class="s1">fieldset</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">remove</span><span class="s3">(</span><span class="s2">'collapsed'</span><span class="s3">);</span>
+                <span class="s3">} </span><span class="s4">else </span><span class="s3">{</span>
+                    <span class="s0">// Hide</span>
+                    <span class="s1">ev</span><span class="s3">.</span><span class="s1">target</span><span class="s3">.</span><span class="s1">textContent </span><span class="s3">= </span><span class="s1">gettext</span><span class="s3">(</span><span class="s2">'Show'</span><span class="s3">);</span>
+                    <span class="s1">fieldset</span><span class="s3">.</span><span class="s1">classList</span><span class="s3">.</span><span class="s1">add</span><span class="s3">(</span><span class="s2">'collapsed'</span><span class="s3">);</span>
+                <span class="s3">}</span>
+            <span class="s3">}</span>
+        <span class="s3">};</span>
+        <span class="s1">document</span><span class="s3">.</span><span class="s1">querySelectorAll</span><span class="s3">(</span><span class="s2">'fieldset.module'</span><span class="s3">).</span><span class="s1">forEach</span><span class="s3">(</span><span class="s4">function</span><span class="s3">(</span><span class="s1">el</span><span class="s3">) {</span>
+            <span class="s1">el</span><span class="s3">.</span><span class="s1">addEventListener</span><span class="s3">(</span><span class="s2">'click'</span><span class="s3">, </span><span class="s1">toggleFunc</span><span class="s3">);</span>
+        <span class="s3">});</span>
+    <span class="s3">});</span>
+<span class="s3">}</span>
+</pre>
+</body>
+</html>

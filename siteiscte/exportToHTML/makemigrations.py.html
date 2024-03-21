@@ -1,0 +1,538 @@
+<html>
+<head>
+<title>makemigrations.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+.s6 { color: #5f826b; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+makemigrations.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+<span class="s0">from </span><span class="s1">itertools </span><span class="s0">import </span><span class="s1">takewhile</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">BaseCommand</span><span class="s2">, </span><span class="s1">CommandError</span><span class="s2">, </span><span class="s1">no_translations</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">run_formatters</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db </span><span class="s0">import </span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">, </span><span class="s1">OperationalError</span><span class="s2">, </span><span class="s1">connections</span><span class="s2">, </span><span class="s1">router</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations </span><span class="s0">import </span><span class="s1">Migration</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">autodetector </span><span class="s0">import </span><span class="s1">MigrationAutodetector</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">loader </span><span class="s0">import </span><span class="s1">MigrationLoader</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">migration </span><span class="s0">import </span><span class="s1">SwappableTuple</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">optimizer </span><span class="s0">import </span><span class="s1">MigrationOptimizer</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">questioner </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">InteractiveMigrationQuestioner</span><span class="s2">,</span>
+    <span class="s1">MigrationQuestioner</span><span class="s2">,</span>
+    <span class="s1">NonInteractiveMigrationQuestioner</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">state </span><span class="s0">import </span><span class="s1">ProjectState</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">utils </span><span class="s0">import </span><span class="s1">get_migration_name_timestamp</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">migrations</span><span class="s2">.</span><span class="s1">writer </span><span class="s0">import </span><span class="s1">MigrationWriter</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= </span><span class="s3">&quot;Creates new migration(s) for apps.&quot;</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;args&quot;</span><span class="s2">,</span>
+            <span class="s1">metavar</span><span class="s2">=</span><span class="s3">&quot;app_label&quot;</span><span class="s2">,</span>
+            <span class="s1">nargs</span><span class="s2">=</span><span class="s3">&quot;*&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Specify the app label(s) to create migrations for.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--dry-run&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Just show what migrations would be made; don't actually write them.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--merge&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Enable fixing of migration conflicts.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--empty&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Create an empty migration.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--noinput&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--no-input&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_false&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;interactive&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Tells Django to NOT prompt the user for input of any kind.&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;-n&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--name&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Use this name for migration file(s).&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--no-header&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_false&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;include_header&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=</span><span class="s3">&quot;Do not add header comments to new migration file(s).&quot;</span><span class="s2">,</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--check&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;check_changes&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Exit with a non-zero status if model changes are missing migrations &quot;</span>
+                <span class="s3">&quot;and don't actually write them. Implies --dry-run.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--scriptable&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;scriptable&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Divert log output and input prompts to stderr, writing only &quot;</span>
+                <span class="s3">&quot;paths of generated migration files to stdout.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--update&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">dest</span><span class="s2">=</span><span class="s3">&quot;update&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Merge model changes into the latest migration and optimize the &quot;</span>
+                <span class="s3">&quot;resulting operations.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">log_output</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">stderr </span><span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">scriptable </span><span class="s0">else </span><span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span>
+
+    <span class="s0">def </span><span class="s1">log</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">msg</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">log_output</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">msg</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">no_translations</span>
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, *</span><span class="s1">app_labels</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">written_files </span><span class="s2">= []</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;verbosity&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">interactive </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;interactive&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">dry_run </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;dry_run&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">merge </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;merge&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">empty </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;empty&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">migration_name </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;name&quot;</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration_name </span><span class="s0">and not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration_name</span><span class="s2">.</span><span class="s1">isidentifier</span><span class="s2">():</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s3">&quot;The migration name must be a valid Python identifier.&quot;</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">include_header </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;include_header&quot;</span><span class="s2">]</span>
+        <span class="s1">check_changes </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;check_changes&quot;</span><span class="s2">]</span>
+        <span class="s0">if </span><span class="s1">check_changes</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">dry_run </span><span class="s2">= </span><span class="s0">True</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">scriptable </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;scriptable&quot;</span><span class="s2">]</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">update </span><span class="s2">= </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;update&quot;</span><span class="s2">]</span>
+        <span class="s4"># If logs and prompts are diverted to stderr, remove the ERROR style.</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">scriptable</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">stderr</span><span class="s2">.</span><span class="s1">style_func </span><span class="s2">= </span><span class="s0">None</span>
+
+        <span class="s4"># Make sure the app they asked for exists</span>
+        <span class="s1">app_labels </span><span class="s2">= </span><span class="s1">set</span><span class="s2">(</span><span class="s1">app_labels</span><span class="s2">)</span>
+        <span class="s1">has_bad_labels </span><span class="s2">= </span><span class="s0">False</span>
+        <span class="s0">for </span><span class="s1">app_label </span><span class="s0">in </span><span class="s1">app_labels</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_config</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">LookupError </span><span class="s0">as </span><span class="s1">err</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">stderr</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">str</span><span class="s2">(</span><span class="s1">err</span><span class="s2">))</span>
+                <span class="s1">has_bad_labels </span><span class="s2">= </span><span class="s0">True</span>
+        <span class="s0">if </span><span class="s1">has_bad_labels</span><span class="s2">:</span>
+            <span class="s1">sys</span><span class="s2">.</span><span class="s1">exit</span><span class="s2">(</span><span class="s5">2</span><span class="s2">)</span>
+
+        <span class="s4"># Load the current graph state. Pass in None for the connection so</span>
+        <span class="s4"># the loader doesn't try to resolve replaced migrations from DB.</span>
+        <span class="s1">loader </span><span class="s2">= </span><span class="s1">MigrationLoader</span><span class="s2">(</span><span class="s0">None</span><span class="s2">, </span><span class="s1">ignore_no_migrations</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+
+        <span class="s4"># Raise an error if any migrations are applied before their dependencies.</span>
+        <span class="s1">consistency_check_labels </span><span class="s2">= {</span><span class="s1">config</span><span class="s2">.</span><span class="s1">label </span><span class="s0">for </span><span class="s1">config </span><span class="s0">in </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_configs</span><span class="s2">()}</span>
+        <span class="s4"># Non-default databases are only checked if database routers used.</span>
+        <span class="s1">aliases_to_check </span><span class="s2">= (</span>
+            <span class="s1">connections </span><span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DATABASE_ROUTERS </span><span class="s0">else </span><span class="s2">[</span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">]</span>
+        <span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">alias </span><span class="s0">in </span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">aliases_to_check</span><span class="s2">):</span>
+            <span class="s1">connection </span><span class="s2">= </span><span class="s1">connections</span><span class="s2">[</span><span class="s1">alias</span><span class="s2">]</span>
+            <span class="s0">if </span><span class="s1">connection</span><span class="s2">.</span><span class="s1">settings_dict</span><span class="s2">[</span><span class="s3">&quot;ENGINE&quot;</span><span class="s2">] != </span><span class="s3">&quot;django.db.backends.dummy&quot; </span><span class="s0">and </span><span class="s1">any</span><span class="s2">(</span>
+                <span class="s4"># At least one model must be migrated to the database.</span>
+                <span class="s1">router</span><span class="s2">.</span><span class="s1">allow_migrate</span><span class="s2">(</span>
+                    <span class="s1">connection</span><span class="s2">.</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model_name</span><span class="s2">=</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">object_name</span>
+                <span class="s2">)</span>
+                <span class="s0">for </span><span class="s1">app_label </span><span class="s0">in </span><span class="s1">consistency_check_labels</span>
+                <span class="s0">for </span><span class="s1">model </span><span class="s0">in </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_config</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">).</span><span class="s1">get_models</span><span class="s2">()</span>
+            <span class="s2">):</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">loader</span><span class="s2">.</span><span class="s1">check_consistent_history</span><span class="s2">(</span><span class="s1">connection</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">OperationalError </span><span class="s0">as </span><span class="s1">error</span><span class="s2">:</span>
+                    <span class="s1">warnings</span><span class="s2">.</span><span class="s1">warn</span><span class="s2">(</span>
+                        <span class="s3">&quot;Got an error checking a consistent migration history &quot;</span>
+                        <span class="s3">&quot;performed for database connection '%s': %s&quot; </span><span class="s2">% (</span><span class="s1">alias</span><span class="s2">, </span><span class="s1">error</span><span class="s2">),</span>
+                        <span class="s1">RuntimeWarning</span><span class="s2">,</span>
+                    <span class="s2">)</span>
+        <span class="s4"># Before anything else, see if there's conflicting apps and drop out</span>
+        <span class="s4"># hard if there are any and they don't want to merge</span>
+        <span class="s1">conflicts </span><span class="s2">= </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">detect_conflicts</span><span class="s2">()</span>
+
+        <span class="s4"># If app_labels is specified, filter out conflicting migrations for</span>
+        <span class="s4"># unspecified apps.</span>
+        <span class="s0">if </span><span class="s1">app_labels</span><span class="s2">:</span>
+            <span class="s1">conflicts </span><span class="s2">= {</span>
+                <span class="s1">app_label</span><span class="s2">: </span><span class="s1">conflict</span>
+                <span class="s0">for </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">conflict </span><span class="s0">in </span><span class="s1">conflicts</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()</span>
+                <span class="s0">if </span><span class="s1">app_label </span><span class="s0">in </span><span class="s1">app_labels</span>
+            <span class="s2">}</span>
+
+        <span class="s0">if </span><span class="s1">conflicts </span><span class="s0">and not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">merge</span><span class="s2">:</span>
+            <span class="s1">name_str </span><span class="s2">= </span><span class="s3">&quot;; &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span>
+                <span class="s3">&quot;%s in %s&quot; </span><span class="s2">% (</span><span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">names</span><span class="s2">), </span><span class="s1">app</span><span class="s2">) </span><span class="s0">for </span><span class="s1">app</span><span class="s2">, </span><span class="s1">names </span><span class="s0">in </span><span class="s1">conflicts</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()</span>
+            <span class="s2">)</span>
+            <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                <span class="s3">&quot;Conflicting migrations detected; multiple leaf nodes in the &quot;</span>
+                <span class="s3">&quot;migration graph: (%s).</span><span class="s0">\n</span><span class="s3">To fix them run &quot;</span>
+                <span class="s3">&quot;'python manage.py makemigrations --merge'&quot; </span><span class="s2">% </span><span class="s1">name_str</span>
+            <span class="s2">)</span>
+
+        <span class="s4"># If they want to merge and there's nothing to merge, then politely exit</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">merge </span><span class="s0">and not </span><span class="s1">conflicts</span><span class="s2">:</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s3">&quot;No conflicts detected to merge.&quot;</span><span class="s2">)</span>
+            <span class="s0">return</span>
+
+        <span class="s4"># If they want to merge and there is something to merge, then</span>
+        <span class="s4"># divert into the merge code</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">merge </span><span class="s0">and </span><span class="s1">conflicts</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">handle_merge</span><span class="s2">(</span><span class="s1">loader</span><span class="s2">, </span><span class="s1">conflicts</span><span class="s2">)</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">interactive</span><span class="s2">:</span>
+            <span class="s1">questioner </span><span class="s2">= </span><span class="s1">InteractiveMigrationQuestioner</span><span class="s2">(</span>
+                <span class="s1">specified_apps</span><span class="s2">=</span><span class="s1">app_labels</span><span class="s2">,</span>
+                <span class="s1">dry_run</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">dry_run</span><span class="s2">,</span>
+                <span class="s1">prompt_output</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">log_output</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">questioner </span><span class="s2">= </span><span class="s1">NonInteractiveMigrationQuestioner</span><span class="s2">(</span>
+                <span class="s1">specified_apps</span><span class="s2">=</span><span class="s1">app_labels</span><span class="s2">,</span>
+                <span class="s1">dry_run</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">dry_run</span><span class="s2">,</span>
+                <span class="s1">verbosity</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity</span><span class="s2">,</span>
+                <span class="s1">log</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">,</span>
+            <span class="s2">)</span>
+        <span class="s4"># Set up autodetector</span>
+        <span class="s1">autodetector </span><span class="s2">= </span><span class="s1">MigrationAutodetector</span><span class="s2">(</span>
+            <span class="s1">loader</span><span class="s2">.</span><span class="s1">project_state</span><span class="s2">(),</span>
+            <span class="s1">ProjectState</span><span class="s2">.</span><span class="s1">from_apps</span><span class="s2">(</span><span class="s1">apps</span><span class="s2">),</span>
+            <span class="s1">questioner</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+        <span class="s4"># If they want to make an empty migration, make one for each app</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">empty</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">app_labels</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                    <span class="s3">&quot;You must supply at least one app label when using --empty.&quot;</span>
+                <span class="s2">)</span>
+            <span class="s4"># Make a fake changes() result we can pass to arrange_for_graph</span>
+            <span class="s1">changes </span><span class="s2">= {</span><span class="s1">app</span><span class="s2">: [</span><span class="s1">Migration</span><span class="s2">(</span><span class="s3">&quot;custom&quot;</span><span class="s2">, </span><span class="s1">app</span><span class="s2">)] </span><span class="s0">for </span><span class="s1">app </span><span class="s0">in </span><span class="s1">app_labels</span><span class="s2">}</span>
+            <span class="s1">changes </span><span class="s2">= </span><span class="s1">autodetector</span><span class="s2">.</span><span class="s1">arrange_for_graph</span><span class="s2">(</span>
+                <span class="s1">changes</span><span class="s2">=</span><span class="s1">changes</span><span class="s2">,</span>
+                <span class="s1">graph</span><span class="s2">=</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">,</span>
+                <span class="s1">migration_name</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration_name</span><span class="s2">,</span>
+            <span class="s2">)</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">write_migration_files</span><span class="s2">(</span><span class="s1">changes</span><span class="s2">)</span>
+            <span class="s0">return</span>
+
+        <span class="s4"># Detect changes</span>
+        <span class="s1">changes </span><span class="s2">= </span><span class="s1">autodetector</span><span class="s2">.</span><span class="s1">changes</span><span class="s2">(</span>
+            <span class="s1">graph</span><span class="s2">=</span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">,</span>
+            <span class="s1">trim_to_apps</span><span class="s2">=</span><span class="s1">app_labels </span><span class="s0">or None</span><span class="s2">,</span>
+            <span class="s1">convert_apps</span><span class="s2">=</span><span class="s1">app_labels </span><span class="s0">or None</span><span class="s2">,</span>
+            <span class="s1">migration_name</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration_name</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+        <span class="s0">if not </span><span class="s1">changes</span><span class="s2">:</span>
+            <span class="s4"># No changes? Tell them.</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s5">1</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">app_labels</span><span class="s2">:</span>
+                    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">app_labels</span><span class="s2">) == </span><span class="s5">1</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s3">&quot;No changes detected in app '%s'&quot; </span><span class="s2">% </span><span class="s1">app_labels</span><span class="s2">.</span><span class="s1">pop</span><span class="s2">())</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span>
+                            <span class="s3">&quot;No changes detected in apps '%s'&quot;</span>
+                            <span class="s2">% (</span><span class="s3">&quot;', '&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">app_labels</span><span class="s2">))</span>
+                        <span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s3">&quot;No changes detected&quot;</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">update</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">write_to_last_migration_files</span><span class="s2">(</span><span class="s1">changes</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">write_migration_files</span><span class="s2">(</span><span class="s1">changes</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">check_changes</span><span class="s2">:</span>
+                <span class="s1">sys</span><span class="s2">.</span><span class="s1">exit</span><span class="s2">(</span><span class="s5">1</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">write_to_last_migration_files</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">changes</span><span class="s2">):</span>
+        <span class="s1">loader </span><span class="s2">= </span><span class="s1">MigrationLoader</span><span class="s2">(</span><span class="s1">connections</span><span class="s2">[</span><span class="s1">DEFAULT_DB_ALIAS</span><span class="s2">])</span>
+        <span class="s1">new_changes </span><span class="s2">= {}</span>
+        <span class="s1">update_previous_migration_paths </span><span class="s2">= {}</span>
+        <span class="s0">for </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">app_migrations </span><span class="s0">in </span><span class="s1">changes</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s4"># Find last migration.</span>
+            <span class="s1">leaf_migration_nodes </span><span class="s2">= </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">leaf_nodes</span><span class="s2">(</span><span class="s1">app</span><span class="s2">=</span><span class="s1">app_label</span><span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">leaf_migration_nodes</span><span class="s2">) == </span><span class="s5">0</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                    <span class="s3">f&quot;App </span><span class="s0">{</span><span class="s1">app_label</span><span class="s0">} </span><span class="s3">has no migration, cannot update last migration.&quot;</span>
+                <span class="s2">)</span>
+            <span class="s1">leaf_migration_node </span><span class="s2">= </span><span class="s1">leaf_migration_nodes</span><span class="s2">[</span><span class="s5">0</span><span class="s2">]</span>
+            <span class="s4"># Multiple leaf nodes have already been checked earlier in command.</span>
+            <span class="s1">leaf_migration </span><span class="s2">= </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">nodes</span><span class="s2">[</span><span class="s1">leaf_migration_node</span><span class="s2">]</span>
+            <span class="s4"># Updated migration cannot be a squash migration, a dependency of</span>
+            <span class="s4"># another migration, and cannot be already applied.</span>
+            <span class="s0">if </span><span class="s1">leaf_migration</span><span class="s2">.</span><span class="s1">replaces</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                    <span class="s3">f&quot;Cannot update squash migration '</span><span class="s0">{</span><span class="s1">leaf_migration</span><span class="s0">}</span><span class="s3">'.&quot;</span>
+                <span class="s2">)</span>
+            <span class="s0">if </span><span class="s1">leaf_migration_node </span><span class="s0">in </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">applied_migrations</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                    <span class="s3">f&quot;Cannot update applied migration '</span><span class="s0">{</span><span class="s1">leaf_migration</span><span class="s0">}</span><span class="s3">'.&quot;</span>
+                <span class="s2">)</span>
+            <span class="s1">depending_migrations </span><span class="s2">= [</span>
+                <span class="s1">migration</span>
+                <span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">disk_migrations</span><span class="s2">.</span><span class="s1">values</span><span class="s2">()</span>
+                <span class="s0">if </span><span class="s1">leaf_migration_node </span><span class="s0">in </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">dependencies</span>
+            <span class="s2">]</span>
+            <span class="s0">if </span><span class="s1">depending_migrations</span><span class="s2">:</span>
+                <span class="s1">formatted_migrations </span><span class="s2">= </span><span class="s3">&quot;, &quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span>
+                    <span class="s2">[</span><span class="s3">f&quot;'</span><span class="s0">{</span><span class="s1">migration</span><span class="s0">}</span><span class="s3">'&quot; </span><span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">depending_migrations</span><span class="s2">]</span>
+                <span class="s2">)</span>
+                <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span>
+                    <span class="s3">f&quot;Cannot update migration '</span><span class="s0">{</span><span class="s1">leaf_migration</span><span class="s0">}</span><span class="s3">' that migrations &quot;</span>
+                    <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">formatted_migrations</span><span class="s0">} </span><span class="s3">depend on.&quot;</span>
+                <span class="s2">)</span>
+            <span class="s4"># Build new migration.</span>
+            <span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">app_migrations</span><span class="s2">:</span>
+                <span class="s1">leaf_migration</span><span class="s2">.</span><span class="s1">operations</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">operations</span><span class="s2">)</span>
+
+                <span class="s0">for </span><span class="s1">dependency </span><span class="s0">in </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">dependencies</span><span class="s2">:</span>
+                    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">dependency</span><span class="s2">, </span><span class="s1">SwappableTuple</span><span class="s2">):</span>
+                        <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">AUTH_USER_MODEL </span><span class="s2">== </span><span class="s1">dependency</span><span class="s2">.</span><span class="s1">setting</span><span class="s2">:</span>
+                            <span class="s1">leaf_migration</span><span class="s2">.</span><span class="s1">dependencies</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span>
+                                <span class="s2">(</span><span class="s3">&quot;__setting__&quot;</span><span class="s2">, </span><span class="s3">&quot;AUTH_USER_MODEL&quot;</span><span class="s2">)</span>
+                            <span class="s2">)</span>
+                        <span class="s0">else</span><span class="s2">:</span>
+                            <span class="s1">leaf_migration</span><span class="s2">.</span><span class="s1">dependencies</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">dependency</span><span class="s2">)</span>
+                    <span class="s0">elif </span><span class="s1">dependency</span><span class="s2">[</span><span class="s5">0</span><span class="s2">] != </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">:</span>
+                        <span class="s1">leaf_migration</span><span class="s2">.</span><span class="s1">dependencies</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">dependency</span><span class="s2">)</span>
+            <span class="s4"># Optimize migration.</span>
+            <span class="s1">optimizer </span><span class="s2">= </span><span class="s1">MigrationOptimizer</span><span class="s2">()</span>
+            <span class="s1">leaf_migration</span><span class="s2">.</span><span class="s1">operations </span><span class="s2">= </span><span class="s1">optimizer</span><span class="s2">.</span><span class="s1">optimize</span><span class="s2">(</span>
+                <span class="s1">leaf_migration</span><span class="s2">.</span><span class="s1">operations</span><span class="s2">, </span><span class="s1">app_label</span>
+            <span class="s2">)</span>
+            <span class="s4"># Update name.</span>
+            <span class="s1">previous_migration_path </span><span class="s2">= </span><span class="s1">MigrationWriter</span><span class="s2">(</span><span class="s1">leaf_migration</span><span class="s2">).</span><span class="s1">path</span>
+            <span class="s1">name_fragment </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration_name </span><span class="s0">or </span><span class="s1">leaf_migration</span><span class="s2">.</span><span class="s1">suggest_name</span><span class="s2">()</span>
+            <span class="s1">suggested_name </span><span class="s2">= </span><span class="s1">leaf_migration</span><span class="s2">.</span><span class="s1">name</span><span class="s2">[:</span><span class="s5">4</span><span class="s2">] + </span><span class="s3">f&quot;_</span><span class="s0">{</span><span class="s1">name_fragment</span><span class="s0">}</span><span class="s3">&quot;</span>
+            <span class="s0">if </span><span class="s1">leaf_migration</span><span class="s2">.</span><span class="s1">name </span><span class="s2">== </span><span class="s1">suggested_name</span><span class="s2">:</span>
+                <span class="s1">new_name </span><span class="s2">= </span><span class="s1">leaf_migration</span><span class="s2">.</span><span class="s1">name </span><span class="s2">+ </span><span class="s3">&quot;_updated&quot;</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">new_name </span><span class="s2">= </span><span class="s1">suggested_name</span>
+            <span class="s1">leaf_migration</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">new_name</span>
+            <span class="s4"># Register overridden migration.</span>
+            <span class="s1">new_changes</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">] = [</span><span class="s1">leaf_migration</span><span class="s2">]</span>
+            <span class="s1">update_previous_migration_paths</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">] = </span><span class="s1">previous_migration_path</span>
+
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">write_migration_files</span><span class="s2">(</span><span class="s1">new_changes</span><span class="s2">, </span><span class="s1">update_previous_migration_paths</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">write_migration_files</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">changes</span><span class="s2">, </span><span class="s1">update_previous_migration_paths</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Take a changes dict and write them out as migration files. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">directory_created </span><span class="s2">= {}</span>
+        <span class="s0">for </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">app_migrations </span><span class="s0">in </span><span class="s1">changes</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s5">1</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">MIGRATE_HEADING</span><span class="s2">(</span><span class="s3">&quot;Migrations for '%s':&quot; </span><span class="s2">% </span><span class="s1">app_label</span><span class="s2">))</span>
+            <span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">app_migrations</span><span class="s2">:</span>
+                <span class="s4"># Describe the migration</span>
+                <span class="s1">writer </span><span class="s2">= </span><span class="s1">MigrationWriter</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">include_header</span><span class="s2">)</span>
+                <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt;= </span><span class="s5">1</span><span class="s2">:</span>
+                    <span class="s4"># Display a relative path if it's below the current working</span>
+                    <span class="s4"># directory, or an absolute path otherwise.</span>
+                    <span class="s1">migration_string </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_relative_path</span><span class="s2">(</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">path</span><span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s3">&quot;  %s</span><span class="s0">\n</span><span class="s3">&quot; </span><span class="s2">% </span><span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">MIGRATE_LABEL</span><span class="s2">(</span><span class="s1">migration_string</span><span class="s2">))</span>
+                    <span class="s0">for </span><span class="s1">operation </span><span class="s0">in </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">operations</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s3">&quot;    - %s&quot; </span><span class="s2">% </span><span class="s1">operation</span><span class="s2">.</span><span class="s1">describe</span><span class="s2">())</span>
+                    <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">scriptable</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">migration_string</span><span class="s2">)</span>
+                <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">dry_run</span><span class="s2">:</span>
+                    <span class="s4"># Write the migrations file to the disk.</span>
+                    <span class="s1">migrations_directory </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">dirname</span><span class="s2">(</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">path</span><span class="s2">)</span>
+                    <span class="s0">if not </span><span class="s1">directory_created</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">):</span>
+                        <span class="s1">os</span><span class="s2">.</span><span class="s1">makedirs</span><span class="s2">(</span><span class="s1">migrations_directory</span><span class="s2">, </span><span class="s1">exist_ok</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+                        <span class="s1">init_path </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">migrations_directory</span><span class="s2">, </span><span class="s3">&quot;__init__.py&quot;</span><span class="s2">)</span>
+                        <span class="s0">if not </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">isfile</span><span class="s2">(</span><span class="s1">init_path</span><span class="s2">):</span>
+                            <span class="s1">open</span><span class="s2">(</span><span class="s1">init_path</span><span class="s2">, </span><span class="s3">&quot;w&quot;</span><span class="s2">).</span><span class="s1">close</span><span class="s2">()</span>
+                        <span class="s4"># We just do this once per app</span>
+                        <span class="s1">directory_created</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">] = </span><span class="s0">True</span>
+                    <span class="s1">migration_string </span><span class="s2">= </span><span class="s1">writer</span><span class="s2">.</span><span class="s1">as_string</span><span class="s2">()</span>
+                    <span class="s0">with </span><span class="s1">open</span><span class="s2">(</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">path</span><span class="s2">, </span><span class="s3">&quot;w&quot;</span><span class="s2">, </span><span class="s1">encoding</span><span class="s2">=</span><span class="s3">&quot;utf-8&quot;</span><span class="s2">) </span><span class="s0">as </span><span class="s1">fh</span><span class="s2">:</span>
+                        <span class="s1">fh</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">migration_string</span><span class="s2">)</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">written_files</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">path</span><span class="s2">)</span>
+                    <span class="s0">if </span><span class="s1">update_previous_migration_paths</span><span class="s2">:</span>
+                        <span class="s1">prev_path </span><span class="s2">= </span><span class="s1">update_previous_migration_paths</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">]</span>
+                        <span class="s1">rel_prev_path </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_relative_path</span><span class="s2">(</span><span class="s1">prev_path</span><span class="s2">)</span>
+                        <span class="s0">if </span><span class="s1">writer</span><span class="s2">.</span><span class="s1">needs_manual_porting</span><span class="s2">:</span>
+                            <span class="s1">migration_path </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_relative_path</span><span class="s2">(</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">path</span><span class="s2">)</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span>
+                                <span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">WARNING</span><span class="s2">(</span>
+                                    <span class="s3">f&quot;Updated migration </span><span class="s0">{</span><span class="s1">migration_path</span><span class="s0">} </span><span class="s3">requires &quot;</span>
+                                    <span class="s3">f&quot;manual porting.</span><span class="s0">\n</span><span class="s3">&quot;</span>
+                                    <span class="s3">f&quot;Previous migration </span><span class="s0">{</span><span class="s1">rel_prev_path</span><span class="s0">} </span><span class="s3">was kept and &quot;</span>
+                                    <span class="s3">f&quot;must be deleted after porting functions manually.&quot;</span>
+                                <span class="s2">)</span>
+                            <span class="s2">)</span>
+                        <span class="s0">else</span><span class="s2">:</span>
+                            <span class="s1">os</span><span class="s2">.</span><span class="s1">remove</span><span class="s2">(</span><span class="s1">prev_path</span><span class="s2">)</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s3">f&quot;Deleted </span><span class="s0">{</span><span class="s1">rel_prev_path</span><span class="s0">}</span><span class="s3">&quot;</span><span class="s2">)</span>
+                <span class="s0">elif </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">== </span><span class="s5">3</span><span class="s2">:</span>
+                    <span class="s4"># Alternatively, makemigrations --dry-run --verbosity 3</span>
+                    <span class="s4"># will log the migrations rather than saving the file to</span>
+                    <span class="s4"># the disk.</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">MIGRATE_HEADING</span><span class="s2">(</span>
+                            <span class="s3">&quot;Full migrations file '%s':&quot; </span><span class="s2">% </span><span class="s1">writer</span><span class="s2">.</span><span class="s1">filename</span>
+                        <span class="s2">)</span>
+                    <span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">as_string</span><span class="s2">())</span>
+        <span class="s1">run_formatters</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">written_files</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">staticmethod</span>
+    <span class="s0">def </span><span class="s1">get_relative_path</span><span class="s2">(</span><span class="s1">path</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">migration_string </span><span class="s2">= </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">relpath</span><span class="s2">(</span><span class="s1">path</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">ValueError</span><span class="s2">:</span>
+            <span class="s1">migration_string </span><span class="s2">= </span><span class="s1">path</span>
+        <span class="s0">if </span><span class="s1">migration_string</span><span class="s2">.</span><span class="s1">startswith</span><span class="s2">(</span><span class="s3">&quot;..&quot;</span><span class="s2">):</span>
+            <span class="s1">migration_string </span><span class="s2">= </span><span class="s1">path</span>
+        <span class="s0">return </span><span class="s1">migration_string</span>
+
+    <span class="s0">def </span><span class="s1">handle_merge</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">loader</span><span class="s2">, </span><span class="s1">conflicts</span><span class="s2">):</span>
+        <span class="s6">&quot;&quot;&quot; 
+        Handles merging together conflicted migrations interactively, 
+        if it's safe; otherwise, advises on how to fix it. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">interactive</span><span class="s2">:</span>
+            <span class="s1">questioner </span><span class="s2">= </span><span class="s1">InteractiveMigrationQuestioner</span><span class="s2">(</span><span class="s1">prompt_output</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">log_output</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">questioner </span><span class="s2">= </span><span class="s1">MigrationQuestioner</span><span class="s2">(</span><span class="s1">defaults</span><span class="s2">={</span><span class="s3">&quot;ask_merge&quot;</span><span class="s2">: </span><span class="s0">True</span><span class="s2">})</span>
+
+        <span class="s0">for </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">migration_names </span><span class="s0">in </span><span class="s1">conflicts</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s4"># Grab out the migrations in question, and work out their</span>
+            <span class="s4"># common ancestor.</span>
+            <span class="s1">merge_migrations </span><span class="s2">= []</span>
+            <span class="s0">for </span><span class="s1">migration_name </span><span class="s0">in </span><span class="s1">migration_names</span><span class="s2">:</span>
+                <span class="s1">migration </span><span class="s2">= </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">get_migration</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">migration_name</span><span class="s2">)</span>
+                <span class="s1">migration</span><span class="s2">.</span><span class="s1">ancestry </span><span class="s2">= [</span>
+                    <span class="s1">mig</span>
+                    <span class="s0">for </span><span class="s1">mig </span><span class="s0">in </span><span class="s1">loader</span><span class="s2">.</span><span class="s1">graph</span><span class="s2">.</span><span class="s1">forwards_plan</span><span class="s2">((</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">migration_name</span><span class="s2">))</span>
+                    <span class="s0">if </span><span class="s1">mig</span><span class="s2">[</span><span class="s5">0</span><span class="s2">] == </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">app_label</span>
+                <span class="s2">]</span>
+                <span class="s1">merge_migrations</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">)</span>
+
+            <span class="s0">def </span><span class="s1">all_items_equal</span><span class="s2">(</span><span class="s1">seq</span><span class="s2">):</span>
+                <span class="s0">return </span><span class="s1">all</span><span class="s2">(</span><span class="s1">item </span><span class="s2">== </span><span class="s1">seq</span><span class="s2">[</span><span class="s5">0</span><span class="s2">] </span><span class="s0">for </span><span class="s1">item </span><span class="s0">in </span><span class="s1">seq</span><span class="s2">[</span><span class="s5">1</span><span class="s2">:])</span>
+
+            <span class="s1">merge_migrations_generations </span><span class="s2">= </span><span class="s1">zip</span><span class="s2">(*(</span><span class="s1">m</span><span class="s2">.</span><span class="s1">ancestry </span><span class="s0">for </span><span class="s1">m </span><span class="s0">in </span><span class="s1">merge_migrations</span><span class="s2">))</span>
+            <span class="s1">common_ancestor_count </span><span class="s2">= </span><span class="s1">sum</span><span class="s2">(</span>
+                <span class="s5">1</span>
+                <span class="s0">for </span><span class="s1">common_ancestor_generation </span><span class="s0">in </span><span class="s1">takewhile</span><span class="s2">(</span>
+                    <span class="s1">all_items_equal</span><span class="s2">, </span><span class="s1">merge_migrations_generations</span>
+                <span class="s2">)</span>
+            <span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">common_ancestor_count</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span><span class="s2">(</span>
+                    <span class="s3">&quot;Could not find common ancestor of %s&quot; </span><span class="s2">% </span><span class="s1">migration_names</span>
+                <span class="s2">)</span>
+            <span class="s4"># Now work out the operations along each divergent branch</span>
+            <span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">merge_migrations</span><span class="s2">:</span>
+                <span class="s1">migration</span><span class="s2">.</span><span class="s1">branch </span><span class="s2">= </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">ancestry</span><span class="s2">[</span><span class="s1">common_ancestor_count</span><span class="s2">:]</span>
+                <span class="s1">migrations_ops </span><span class="s2">= (</span>
+                    <span class="s1">loader</span><span class="s2">.</span><span class="s1">get_migration</span><span class="s2">(</span><span class="s1">node_app</span><span class="s2">, </span><span class="s1">node_name</span><span class="s2">).</span><span class="s1">operations</span>
+                    <span class="s0">for </span><span class="s1">node_app</span><span class="s2">, </span><span class="s1">node_name </span><span class="s0">in </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">branch</span>
+                <span class="s2">)</span>
+                <span class="s1">migration</span><span class="s2">.</span><span class="s1">merged_operations </span><span class="s2">= </span><span class="s1">sum</span><span class="s2">(</span><span class="s1">migrations_ops</span><span class="s2">, [])</span>
+            <span class="s4"># In future, this could use some of the Optimizer code</span>
+            <span class="s4"># (can_optimize_through) to automatically see if they're</span>
+            <span class="s4"># mergeable. For now, we always just prompt the user.</span>
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt; </span><span class="s5">0</span><span class="s2">:</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">MIGRATE_HEADING</span><span class="s2">(</span><span class="s3">&quot;Merging %s&quot; </span><span class="s2">% </span><span class="s1">app_label</span><span class="s2">))</span>
+                <span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">merge_migrations</span><span class="s2">:</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">MIGRATE_LABEL</span><span class="s2">(</span><span class="s3">&quot;  Branch %s&quot; </span><span class="s2">% </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">name</span><span class="s2">))</span>
+                    <span class="s0">for </span><span class="s1">operation </span><span class="s0">in </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">merged_operations</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s3">&quot;    - %s&quot; </span><span class="s2">% </span><span class="s1">operation</span><span class="s2">.</span><span class="s1">describe</span><span class="s2">())</span>
+            <span class="s0">if </span><span class="s1">questioner</span><span class="s2">.</span><span class="s1">ask_merge</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">):</span>
+                <span class="s4"># If they still want to merge it, then write out an empty</span>
+                <span class="s4"># file depending on the migrations needing merging.</span>
+                <span class="s1">numbers </span><span class="s2">= [</span>
+                    <span class="s1">MigrationAutodetector</span><span class="s2">.</span><span class="s1">parse_number</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+                    <span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">merge_migrations</span>
+                <span class="s2">]</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">biggest_number </span><span class="s2">= </span><span class="s1">max</span><span class="s2">(</span><span class="s1">x </span><span class="s0">for </span><span class="s1">x </span><span class="s0">in </span><span class="s1">numbers </span><span class="s0">if </span><span class="s1">x </span><span class="s0">is not None</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">ValueError</span><span class="s2">:</span>
+                    <span class="s1">biggest_number </span><span class="s2">= </span><span class="s5">1</span>
+                <span class="s1">subclass </span><span class="s2">= </span><span class="s1">type</span><span class="s2">(</span>
+                    <span class="s3">&quot;Migration&quot;</span><span class="s2">,</span>
+                    <span class="s2">(</span><span class="s1">Migration</span><span class="s2">,),</span>
+                    <span class="s2">{</span>
+                        <span class="s3">&quot;dependencies&quot;</span><span class="s2">: [</span>
+                            <span class="s2">(</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">migration</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+                            <span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">merge_migrations</span>
+                        <span class="s2">],</span>
+                    <span class="s2">},</span>
+                <span class="s2">)</span>
+                <span class="s1">parts </span><span class="s2">= [</span><span class="s3">&quot;%04i&quot; </span><span class="s2">% (</span><span class="s1">biggest_number </span><span class="s2">+ </span><span class="s5">1</span><span class="s2">)]</span>
+                <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration_name</span><span class="s2">:</span>
+                    <span class="s1">parts</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">migration_name</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">parts</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s3">&quot;merge&quot;</span><span class="s2">)</span>
+                    <span class="s1">leaf_names </span><span class="s2">= </span><span class="s3">&quot;_&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span>
+                        <span class="s1">sorted</span><span class="s2">(</span><span class="s1">migration</span><span class="s2">.</span><span class="s1">name </span><span class="s0">for </span><span class="s1">migration </span><span class="s0">in </span><span class="s1">merge_migrations</span><span class="s2">)</span>
+                    <span class="s2">)</span>
+                    <span class="s0">if </span><span class="s1">len</span><span class="s2">(</span><span class="s1">leaf_names</span><span class="s2">) &gt; </span><span class="s5">47</span><span class="s2">:</span>
+                        <span class="s1">parts</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">get_migration_name_timestamp</span><span class="s2">())</span>
+                    <span class="s0">else</span><span class="s2">:</span>
+                        <span class="s1">parts</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">leaf_names</span><span class="s2">)</span>
+                <span class="s1">migration_name </span><span class="s2">= </span><span class="s3">&quot;_&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">parts</span><span class="s2">)</span>
+                <span class="s1">new_migration </span><span class="s2">= </span><span class="s1">subclass</span><span class="s2">(</span><span class="s1">migration_name</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">)</span>
+                <span class="s1">writer </span><span class="s2">= </span><span class="s1">MigrationWriter</span><span class="s2">(</span><span class="s1">new_migration</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">include_header</span><span class="s2">)</span>
+
+                <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">dry_run</span><span class="s2">:</span>
+                    <span class="s4"># Write the merge migrations file to the disk</span>
+                    <span class="s0">with </span><span class="s1">open</span><span class="s2">(</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">path</span><span class="s2">, </span><span class="s3">&quot;w&quot;</span><span class="s2">, </span><span class="s1">encoding</span><span class="s2">=</span><span class="s3">&quot;utf-8&quot;</span><span class="s2">) </span><span class="s0">as </span><span class="s1">fh</span><span class="s2">:</span>
+                        <span class="s1">fh</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">as_string</span><span class="s2">())</span>
+                    <span class="s1">run_formatters</span><span class="s2">([</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">path</span><span class="s2">])</span>
+                    <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">&gt; </span><span class="s5">0</span><span class="s2">:</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s3">&quot;</span><span class="s0">\n</span><span class="s3">Created new merge migration %s&quot; </span><span class="s2">% </span><span class="s1">writer</span><span class="s2">.</span><span class="s1">path</span><span class="s2">)</span>
+                        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">scriptable</span><span class="s2">:</span>
+                            <span class="s1">self</span><span class="s2">.</span><span class="s1">stdout</span><span class="s2">.</span><span class="s1">write</span><span class="s2">(</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">path</span><span class="s2">)</span>
+                <span class="s0">elif </span><span class="s1">self</span><span class="s2">.</span><span class="s1">verbosity </span><span class="s2">== </span><span class="s5">3</span><span class="s2">:</span>
+                    <span class="s4"># Alternatively, makemigrations --merge --dry-run --verbosity 3</span>
+                    <span class="s4"># will log the merge migrations rather than saving the file</span>
+                    <span class="s4"># to the disk.</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span>
+                        <span class="s1">self</span><span class="s2">.</span><span class="s1">style</span><span class="s2">.</span><span class="s1">MIGRATE_HEADING</span><span class="s2">(</span>
+                            <span class="s3">&quot;Full merge migrations file '%s':&quot; </span><span class="s2">% </span><span class="s1">writer</span><span class="s2">.</span><span class="s1">filename</span>
+                        <span class="s2">)</span>
+                    <span class="s2">)</span>
+                    <span class="s1">self</span><span class="s2">.</span><span class="s1">log</span><span class="s2">(</span><span class="s1">writer</span><span class="s2">.</span><span class="s1">as_string</span><span class="s2">())</span>
+</pre>
+</body>
+</html>

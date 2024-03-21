@@ -1,0 +1,57 @@
+<html>
+<head>
+<title>misc.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #6aab73;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+misc.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot; 
+ This module is for the miscellaneous GEOS routines, particularly the 
+ ones that return the area, distance, and length. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">ctypes </span><span class="s2">import </span><span class="s1">POINTER</span><span class="s3">, </span><span class="s1">c_double</span><span class="s3">, </span><span class="s1">c_int</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">libgeos </span><span class="s2">import </span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOSFuncFactory</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">prototypes</span><span class="s3">.</span><span class="s1">errcheck </span><span class="s2">import </span><span class="s1">check_dbl</span><span class="s3">, </span><span class="s1">check_string</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">contrib</span><span class="s3">.</span><span class="s1">gis</span><span class="s3">.</span><span class="s1">geos</span><span class="s3">.</span><span class="s1">prototypes</span><span class="s3">.</span><span class="s1">geom </span><span class="s2">import </span><span class="s1">geos_char_p</span>
+
+<span class="s1">__all__ </span><span class="s3">= [</span><span class="s4">&quot;geos_area&quot;</span><span class="s3">, </span><span class="s4">&quot;geos_distance&quot;</span><span class="s3">, </span><span class="s4">&quot;geos_length&quot;</span><span class="s3">, </span><span class="s4">&quot;geos_isvalidreason&quot;</span><span class="s3">]</span>
+
+
+<span class="s2">class </span><span class="s1">DblFromGeom</span><span class="s3">(</span><span class="s1">GEOSFuncFactory</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Argument is a Geometry, return type is double that is passed 
+    in by reference as the last argument. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">restype </span><span class="s3">= </span><span class="s1">c_int  </span><span class="s5"># Status code returned</span>
+    <span class="s1">errcheck </span><span class="s3">= </span><span class="s1">staticmethod</span><span class="s3">(</span><span class="s1">check_dbl</span><span class="s3">)</span>
+
+
+<span class="s5"># ### ctypes prototypes ###</span>
+
+<span class="s5"># Area, distance, and length prototypes.</span>
+<span class="s1">geos_area </span><span class="s3">= </span><span class="s1">DblFromGeom</span><span class="s3">(</span><span class="s4">&quot;GEOSArea&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">)])</span>
+<span class="s1">geos_distance </span><span class="s3">= </span><span class="s1">DblFromGeom</span><span class="s3">(</span>
+    <span class="s4">&quot;GEOSDistance&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">)]</span>
+<span class="s3">)</span>
+<span class="s1">geos_length </span><span class="s3">= </span><span class="s1">DblFromGeom</span><span class="s3">(</span><span class="s4">&quot;GEOSLength&quot;</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">, </span><span class="s1">POINTER</span><span class="s3">(</span><span class="s1">c_double</span><span class="s3">)])</span>
+<span class="s1">geos_isvalidreason </span><span class="s3">= </span><span class="s1">GEOSFuncFactory</span><span class="s3">(</span>
+    <span class="s4">&quot;GEOSisValidReason&quot;</span><span class="s3">, </span><span class="s1">restype</span><span class="s3">=</span><span class="s1">geos_char_p</span><span class="s3">, </span><span class="s1">errcheck</span><span class="s3">=</span><span class="s1">check_string</span><span class="s3">, </span><span class="s1">argtypes</span><span class="s3">=[</span><span class="s1">GEOM_PTR</span><span class="s3">]</span>
+<span class="s3">)</span>
+</pre>
+</body>
+</html>

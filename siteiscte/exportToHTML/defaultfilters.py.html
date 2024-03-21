@@ -1,0 +1,1017 @@
+<html>
+<head>
+<title>defaultfilters.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #5f826b; font-style: italic;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #bcbec4;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+defaultfilters.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Default variable filters.&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">random </span><span class="s2">as </span><span class="s1">random_module</span>
+<span class="s2">import </span><span class="s1">re</span>
+<span class="s2">import </span><span class="s1">types</span>
+<span class="s2">import </span><span class="s1">warnings</span>
+<span class="s2">from </span><span class="s1">decimal </span><span class="s2">import </span><span class="s1">ROUND_HALF_UP</span><span class="s3">, </span><span class="s1">Context</span><span class="s3">, </span><span class="s1">Decimal</span><span class="s3">, </span><span class="s1">InvalidOperation</span><span class="s3">, </span><span class="s1">getcontext</span>
+<span class="s2">from </span><span class="s1">functools </span><span class="s2">import </span><span class="s1">wraps</span>
+<span class="s2">from </span><span class="s1">inspect </span><span class="s2">import </span><span class="s1">unwrap</span>
+<span class="s2">from </span><span class="s1">operator </span><span class="s2">import </span><span class="s1">itemgetter</span>
+<span class="s2">from </span><span class="s1">pprint </span><span class="s2">import </span><span class="s1">pformat</span>
+<span class="s2">from </span><span class="s1">urllib</span><span class="s3">.</span><span class="s1">parse </span><span class="s2">import </span><span class="s1">quote</span>
+
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils </span><span class="s2">import </span><span class="s1">formats</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">dateformat </span><span class="s2">import </span><span class="s1">format</span><span class="s3">, </span><span class="s1">time_format</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">deprecation </span><span class="s2">import </span><span class="s1">RemovedInDjango51Warning</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">encoding </span><span class="s2">import </span><span class="s1">iri_to_uri</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">html </span><span class="s2">import </span><span class="s1">avoid_wrapping</span><span class="s3">, </span><span class="s1">conditional_escape</span><span class="s3">, </span><span class="s1">escape</span><span class="s3">, </span><span class="s1">escapejs</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">html </span><span class="s2">import </span><span class="s1">json_script </span><span class="s2">as </span><span class="s1">_json_script</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">html </span><span class="s2">import </span><span class="s1">linebreaks</span><span class="s3">, </span><span class="s1">strip_tags</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">html </span><span class="s2">import </span><span class="s1">urlize </span><span class="s2">as </span><span class="s1">_urlize</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">safestring </span><span class="s2">import </span><span class="s1">SafeData</span><span class="s3">, </span><span class="s1">mark_safe</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">text </span><span class="s2">import </span><span class="s1">Truncator</span><span class="s3">, </span><span class="s1">normalize_newlines</span><span class="s3">, </span><span class="s1">phone2numeric</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">text </span><span class="s2">import </span><span class="s1">slugify </span><span class="s2">as </span><span class="s1">_slugify</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">text </span><span class="s2">import </span><span class="s1">wrap</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">timesince </span><span class="s2">import </span><span class="s1">timesince</span><span class="s3">, </span><span class="s1">timeuntil</span>
+<span class="s2">from </span><span class="s1">django</span><span class="s3">.</span><span class="s1">utils</span><span class="s3">.</span><span class="s1">translation </span><span class="s2">import </span><span class="s1">gettext</span><span class="s3">, </span><span class="s1">ngettext</span>
+
+<span class="s2">from </span><span class="s3">.</span><span class="s1">base </span><span class="s2">import </span><span class="s1">VARIABLE_ATTRIBUTE_SEPARATOR</span>
+<span class="s2">from </span><span class="s3">.</span><span class="s1">library </span><span class="s2">import </span><span class="s1">Library</span>
+
+<span class="s1">register </span><span class="s3">= </span><span class="s1">Library</span><span class="s3">()</span>
+
+
+<span class="s4">#######################</span>
+<span class="s4"># STRING DECORATOR    #</span>
+<span class="s4">#######################</span>
+
+
+<span class="s2">def </span><span class="s1">stringfilter</span><span class="s3">(</span><span class="s1">func</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Decorator for filters which should only receive strings. The object 
+    passed as the first positional argument will be converted to a string. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s3">@</span><span class="s1">wraps</span><span class="s3">(</span><span class="s1">func</span><span class="s3">)</span>
+    <span class="s2">def </span><span class="s1">_dec</span><span class="s3">(</span><span class="s1">first</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">):</span>
+        <span class="s1">first </span><span class="s3">= </span><span class="s1">str</span><span class="s3">(</span><span class="s1">first</span><span class="s3">)</span>
+        <span class="s1">result </span><span class="s3">= </span><span class="s1">func</span><span class="s3">(</span><span class="s1">first</span><span class="s3">, *</span><span class="s1">args</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+        <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">first</span><span class="s3">, </span><span class="s1">SafeData</span><span class="s3">) </span><span class="s2">and </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">unwrap</span><span class="s3">(</span><span class="s1">func</span><span class="s3">), </span><span class="s5">&quot;is_safe&quot;</span><span class="s3">, </span><span class="s2">False</span><span class="s3">):</span>
+            <span class="s1">result </span><span class="s3">= </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s1">result</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">result</span>
+
+    <span class="s2">return </span><span class="s1">_dec</span>
+
+
+<span class="s4">###################</span>
+<span class="s4"># STRINGS         #</span>
+<span class="s4">###################</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">addslashes</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Add slashes before quotes. Useful for escaping strings in CSV, for 
+    example. Less useful for escaping JavaScript; use the ``escapejs`` 
+    filter instead. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">value</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s5">&quot;</span><span class="s2">\\</span><span class="s5">&quot;</span><span class="s3">, </span><span class="s5">&quot;</span><span class="s2">\\\\</span><span class="s5">&quot;</span><span class="s3">).</span><span class="s1">replace</span><span class="s3">(</span><span class="s5">'&quot;'</span><span class="s3">, </span><span class="s5">'</span><span class="s2">\\</span><span class="s5">&quot;'</span><span class="s3">).</span><span class="s1">replace</span><span class="s3">(</span><span class="s5">&quot;'&quot;</span><span class="s3">, </span><span class="s5">&quot;</span><span class="s2">\\</span><span class="s5">'&quot;</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">capfirst</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Capitalize the first character of the value.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">value </span><span class="s2">and </span><span class="s1">value</span><span class="s3">[</span><span class="s6">0</span><span class="s3">].</span><span class="s1">upper</span><span class="s3">() + </span><span class="s1">value</span><span class="s3">[</span><span class="s6">1</span><span class="s3">:]</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s5">&quot;escapejs&quot;</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">escapejs_filter</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Hex encode characters for use in JavaScript strings.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">escapejs</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">json_script</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">element_id</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Output value JSON-encoded, wrapped in a &lt;script type=&quot;application/json&quot;&gt; 
+    tag (with an optional id). 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">_json_script</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">element_id</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">floatformat</span><span class="s3">(</span><span class="s1">text</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">=-</span><span class="s6">1</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Display a float to a specified number of decimal places. 
+ 
+    If called without an argument, display the floating point number with one 
+    decimal place -- but only if there's a decimal place to be displayed: 
+ 
+    * num1 = 34.23234 
+    * num2 = 34.00000 
+    * num3 = 34.26000 
+    * {{ num1|floatformat }} displays &quot;34.2&quot; 
+    * {{ num2|floatformat }} displays &quot;34&quot; 
+    * {{ num3|floatformat }} displays &quot;34.3&quot; 
+ 
+    If arg is positive, always display exactly arg number of decimal places: 
+ 
+    * {{ num1|floatformat:3 }} displays &quot;34.232&quot; 
+    * {{ num2|floatformat:3 }} displays &quot;34.000&quot; 
+    * {{ num3|floatformat:3 }} displays &quot;34.260&quot; 
+ 
+    If arg is negative, display arg number of decimal places -- but only if 
+    there are places to be displayed: 
+ 
+    * {{ num1|floatformat:&quot;-3&quot; }} displays &quot;34.232&quot; 
+    * {{ num2|floatformat:&quot;-3&quot; }} displays &quot;34&quot; 
+    * {{ num3|floatformat:&quot;-3&quot; }} displays &quot;34.260&quot; 
+ 
+    If arg has the 'g' suffix, force the result to be grouped by the 
+    THOUSAND_SEPARATOR for the active locale. When the active locale is 
+    en (English): 
+ 
+    * {{ 6666.6666|floatformat:&quot;2g&quot; }} displays &quot;6,666.67&quot; 
+    * {{ 10000|floatformat:&quot;g&quot; }} displays &quot;10,000&quot; 
+ 
+    If arg has the 'u' suffix, force the result to be unlocalized. When the 
+    active locale is pl (Polish): 
+ 
+    * {{ 66666.6666|floatformat:&quot;2&quot; }} displays &quot;66666,67&quot; 
+    * {{ 66666.6666|floatformat:&quot;2u&quot; }} displays &quot;66666.67&quot; 
+ 
+    If the input float is infinity or NaN, display the string representation 
+    of that value. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">force_grouping </span><span class="s3">= </span><span class="s2">False</span>
+    <span class="s1">use_l10n </span><span class="s3">= </span><span class="s2">True</span>
+    <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">, </span><span class="s1">str</span><span class="s3">):</span>
+        <span class="s1">last_char </span><span class="s3">= </span><span class="s1">arg</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">]</span>
+        <span class="s2">if </span><span class="s1">arg</span><span class="s3">[-</span><span class="s6">2</span><span class="s3">:] </span><span class="s2">in </span><span class="s3">{</span><span class="s5">&quot;gu&quot;</span><span class="s3">, </span><span class="s5">&quot;ug&quot;</span><span class="s3">}:</span>
+            <span class="s1">force_grouping </span><span class="s3">= </span><span class="s2">True</span>
+            <span class="s1">use_l10n </span><span class="s3">= </span><span class="s2">False</span>
+            <span class="s1">arg </span><span class="s3">= </span><span class="s1">arg</span><span class="s3">[:-</span><span class="s6">2</span><span class="s3">] </span><span class="s2">or </span><span class="s3">-</span><span class="s6">1</span>
+        <span class="s2">elif </span><span class="s1">last_char </span><span class="s3">== </span><span class="s5">&quot;g&quot;</span><span class="s3">:</span>
+            <span class="s1">force_grouping </span><span class="s3">= </span><span class="s2">True</span>
+            <span class="s1">arg </span><span class="s3">= </span><span class="s1">arg</span><span class="s3">[:-</span><span class="s6">1</span><span class="s3">] </span><span class="s2">or </span><span class="s3">-</span><span class="s6">1</span>
+        <span class="s2">elif </span><span class="s1">last_char </span><span class="s3">== </span><span class="s5">&quot;u&quot;</span><span class="s3">:</span>
+            <span class="s1">use_l10n </span><span class="s3">= </span><span class="s2">False</span>
+            <span class="s1">arg </span><span class="s3">= </span><span class="s1">arg</span><span class="s3">[:-</span><span class="s6">1</span><span class="s3">] </span><span class="s2">or </span><span class="s3">-</span><span class="s6">1</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">input_val </span><span class="s3">= </span><span class="s1">str</span><span class="s3">(</span><span class="s1">text</span><span class="s3">)</span>
+        <span class="s1">d </span><span class="s3">= </span><span class="s1">Decimal</span><span class="s3">(</span><span class="s1">input_val</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">InvalidOperation</span><span class="s3">:</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">d </span><span class="s3">= </span><span class="s1">Decimal</span><span class="s3">(</span><span class="s1">str</span><span class="s3">(</span><span class="s1">float</span><span class="s3">(</span><span class="s1">text</span><span class="s3">)))</span>
+        <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">InvalidOperation</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">p </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">ValueError</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">input_val</span>
+
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">m </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">d</span><span class="s3">) - </span><span class="s1">d</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">OverflowError</span><span class="s3">, </span><span class="s1">InvalidOperation</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">input_val</span>
+
+    <span class="s2">if not </span><span class="s1">m </span><span class="s2">and </span><span class="s1">p </span><span class="s3">&lt;= </span><span class="s6">0</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span>
+            <span class="s1">formats</span><span class="s3">.</span><span class="s1">number_format</span><span class="s3">(</span>
+                <span class="s5">&quot;%d&quot; </span><span class="s3">% (</span><span class="s1">int</span><span class="s3">(</span><span class="s1">d</span><span class="s3">)),</span>
+                <span class="s6">0</span><span class="s3">,</span>
+                <span class="s1">use_l10n</span><span class="s3">=</span><span class="s1">use_l10n</span><span class="s3">,</span>
+                <span class="s1">force_grouping</span><span class="s3">=</span><span class="s1">force_grouping</span><span class="s3">,</span>
+            <span class="s3">)</span>
+        <span class="s3">)</span>
+
+    <span class="s1">exp </span><span class="s3">= </span><span class="s1">Decimal</span><span class="s3">(</span><span class="s6">1</span><span class="s3">).</span><span class="s1">scaleb</span><span class="s3">(-</span><span class="s1">abs</span><span class="s3">(</span><span class="s1">p</span><span class="s3">))</span>
+    <span class="s4"># Set the precision high enough to avoid an exception (#15789).</span>
+    <span class="s1">tupl </span><span class="s3">= </span><span class="s1">d</span><span class="s3">.</span><span class="s1">as_tuple</span><span class="s3">()</span>
+    <span class="s1">units </span><span class="s3">= </span><span class="s1">len</span><span class="s3">(</span><span class="s1">tupl</span><span class="s3">[</span><span class="s6">1</span><span class="s3">])</span>
+    <span class="s1">units </span><span class="s3">+= -</span><span class="s1">tupl</span><span class="s3">[</span><span class="s6">2</span><span class="s3">] </span><span class="s2">if </span><span class="s1">m </span><span class="s2">else </span><span class="s1">tupl</span><span class="s3">[</span><span class="s6">2</span><span class="s3">]</span>
+    <span class="s1">prec </span><span class="s3">= </span><span class="s1">abs</span><span class="s3">(</span><span class="s1">p</span><span class="s3">) + </span><span class="s1">units </span><span class="s3">+ </span><span class="s6">1</span>
+    <span class="s1">prec </span><span class="s3">= </span><span class="s1">max</span><span class="s3">(</span><span class="s1">getcontext</span><span class="s3">().</span><span class="s1">prec</span><span class="s3">, </span><span class="s1">prec</span><span class="s3">)</span>
+
+    <span class="s4"># Avoid conversion to scientific notation by accessing `sign`, `digits`,</span>
+    <span class="s4"># and `exponent` from Decimal.as_tuple() directly.</span>
+    <span class="s1">rounded_d </span><span class="s3">= </span><span class="s1">d</span><span class="s3">.</span><span class="s1">quantize</span><span class="s3">(</span><span class="s1">exp</span><span class="s3">, </span><span class="s1">ROUND_HALF_UP</span><span class="s3">, </span><span class="s1">Context</span><span class="s3">(</span><span class="s1">prec</span><span class="s3">=</span><span class="s1">prec</span><span class="s3">))</span>
+    <span class="s1">sign</span><span class="s3">, </span><span class="s1">digits</span><span class="s3">, </span><span class="s1">exponent </span><span class="s3">= </span><span class="s1">rounded_d</span><span class="s3">.</span><span class="s1">as_tuple</span><span class="s3">()</span>
+    <span class="s1">digits </span><span class="s3">= [</span><span class="s1">str</span><span class="s3">(</span><span class="s1">digit</span><span class="s3">) </span><span class="s2">for </span><span class="s1">digit </span><span class="s2">in </span><span class="s1">reversed</span><span class="s3">(</span><span class="s1">digits</span><span class="s3">)]</span>
+    <span class="s2">while </span><span class="s1">len</span><span class="s3">(</span><span class="s1">digits</span><span class="s3">) &lt;= </span><span class="s1">abs</span><span class="s3">(</span><span class="s1">exponent</span><span class="s3">):</span>
+        <span class="s1">digits</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s5">&quot;0&quot;</span><span class="s3">)</span>
+    <span class="s1">digits</span><span class="s3">.</span><span class="s1">insert</span><span class="s3">(-</span><span class="s1">exponent</span><span class="s3">, </span><span class="s5">&quot;.&quot;</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">sign </span><span class="s2">and </span><span class="s1">rounded_d</span><span class="s3">:</span>
+        <span class="s1">digits</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s5">&quot;-&quot;</span><span class="s3">)</span>
+    <span class="s1">number </span><span class="s3">= </span><span class="s5">&quot;&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">reversed</span><span class="s3">(</span><span class="s1">digits</span><span class="s3">))</span>
+    <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span>
+        <span class="s1">formats</span><span class="s3">.</span><span class="s1">number_format</span><span class="s3">(</span>
+            <span class="s1">number</span><span class="s3">,</span>
+            <span class="s1">abs</span><span class="s3">(</span><span class="s1">p</span><span class="s3">),</span>
+            <span class="s1">use_l10n</span><span class="s3">=</span><span class="s1">use_l10n</span><span class="s3">,</span>
+            <span class="s1">force_grouping</span><span class="s3">=</span><span class="s1">force_grouping</span><span class="s3">,</span>
+        <span class="s3">)</span>
+    <span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">iriencode</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Escape an IRI value for use in a URL.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">iri_to_uri</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">needs_autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">linenumbers</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Display text with line numbers.&quot;&quot;&quot;</span>
+    <span class="s1">lines </span><span class="s3">= </span><span class="s1">value</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s5">&quot;</span><span class="s2">\n</span><span class="s5">&quot;</span><span class="s3">)</span>
+    <span class="s4"># Find the maximum width of the line count, for use with zero padding</span>
+    <span class="s4"># string format command</span>
+    <span class="s1">width </span><span class="s3">= </span><span class="s1">str</span><span class="s3">(</span><span class="s1">len</span><span class="s3">(</span><span class="s1">str</span><span class="s3">(</span><span class="s1">len</span><span class="s3">(</span><span class="s1">lines</span><span class="s3">))))</span>
+    <span class="s2">if not </span><span class="s1">autoescape </span><span class="s2">or </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">SafeData</span><span class="s3">):</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s3">, </span><span class="s1">line </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">lines</span><span class="s3">):</span>
+            <span class="s1">lines</span><span class="s3">[</span><span class="s1">i</span><span class="s3">] = (</span><span class="s5">&quot;%0&quot; </span><span class="s3">+ </span><span class="s1">width </span><span class="s3">+ </span><span class="s5">&quot;d. %s&quot;</span><span class="s3">) % (</span><span class="s1">i </span><span class="s3">+ </span><span class="s6">1</span><span class="s3">, </span><span class="s1">line</span><span class="s3">)</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s2">for </span><span class="s1">i</span><span class="s3">, </span><span class="s1">line </span><span class="s2">in </span><span class="s1">enumerate</span><span class="s3">(</span><span class="s1">lines</span><span class="s3">):</span>
+            <span class="s1">lines</span><span class="s3">[</span><span class="s1">i</span><span class="s3">] = (</span><span class="s5">&quot;%0&quot; </span><span class="s3">+ </span><span class="s1">width </span><span class="s3">+ </span><span class="s5">&quot;d. %s&quot;</span><span class="s3">) % (</span><span class="s1">i </span><span class="s3">+ </span><span class="s6">1</span><span class="s3">, </span><span class="s1">escape</span><span class="s3">(</span><span class="s1">line</span><span class="s3">))</span>
+    <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s5">&quot;</span><span class="s2">\n</span><span class="s5">&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">lines</span><span class="s3">))</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">lower</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Convert a string into all lowercase.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">value</span><span class="s3">.</span><span class="s1">lower</span><span class="s3">()</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">make_list</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Return the value turned into a list. 
+ 
+    For an integer, it's a list of digits. 
+    For a string, it's a list of characters. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">list</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">slugify</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Convert to ASCII. Convert spaces to hyphens. Remove characters that aren't 
+    alphanumerics, underscores, or hyphens. Convert to lowercase. Also strip 
+    leading and trailing whitespace. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">_slugify</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">stringformat</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Format the variable according to the arg, a string formatting specifier. 
+ 
+    This specifier uses Python string formatting syntax, with the exception 
+    that the leading &quot;%&quot; is dropped. 
+ 
+    See https://docs.python.org/library/stdtypes.html#printf-style-string-formatting 
+    for documentation of Python string formatting. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">tuple</span><span class="s3">):</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">str</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s3">(</span><span class="s5">&quot;%&quot; </span><span class="s3">+ </span><span class="s1">str</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">)) % </span><span class="s1">value</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">title</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Convert a string into titlecase.&quot;&quot;&quot;</span>
+    <span class="s1">t </span><span class="s3">= </span><span class="s1">re</span><span class="s3">.</span><span class="s1">sub</span><span class="s3">(</span><span class="s5">&quot;([a-z])'([A-Z])&quot;</span><span class="s3">, </span><span class="s2">lambda </span><span class="s1">m</span><span class="s3">: </span><span class="s1">m</span><span class="s3">[</span><span class="s6">0</span><span class="s3">].</span><span class="s1">lower</span><span class="s3">(), </span><span class="s1">value</span><span class="s3">.</span><span class="s1">title</span><span class="s3">())</span>
+    <span class="s2">return </span><span class="s1">re</span><span class="s3">.</span><span class="s1">sub</span><span class="s3">(</span><span class="s5">r&quot;\d([A-Z])&quot;</span><span class="s3">, </span><span class="s2">lambda </span><span class="s1">m</span><span class="s3">: </span><span class="s1">m</span><span class="s3">[</span><span class="s6">0</span><span class="s3">].</span><span class="s1">lower</span><span class="s3">(), </span><span class="s1">t</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">truncatechars</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Truncate a string after `arg` number of characters.&quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">length </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">ValueError</span><span class="s3">:  </span><span class="s4"># Invalid literal for int().</span>
+        <span class="s2">return </span><span class="s1">value  </span><span class="s4"># Fail silently.</span>
+    <span class="s2">return </span><span class="s1">Truncator</span><span class="s3">(</span><span class="s1">value</span><span class="s3">).</span><span class="s1">chars</span><span class="s3">(</span><span class="s1">length</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">truncatechars_html</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Truncate HTML after `arg` number of chars. 
+    Preserve newlines in the HTML. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">length </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">ValueError</span><span class="s3">:  </span><span class="s4"># invalid literal for int()</span>
+        <span class="s2">return </span><span class="s1">value  </span><span class="s4"># Fail silently.</span>
+    <span class="s2">return </span><span class="s1">Truncator</span><span class="s3">(</span><span class="s1">value</span><span class="s3">).</span><span class="s1">chars</span><span class="s3">(</span><span class="s1">length</span><span class="s3">, </span><span class="s1">html</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">truncatewords</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Truncate a string after `arg` number of words. 
+    Remove newlines within the string. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">length </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">ValueError</span><span class="s3">:  </span><span class="s4"># Invalid literal for int().</span>
+        <span class="s2">return </span><span class="s1">value  </span><span class="s4"># Fail silently.</span>
+    <span class="s2">return </span><span class="s1">Truncator</span><span class="s3">(</span><span class="s1">value</span><span class="s3">).</span><span class="s1">words</span><span class="s3">(</span><span class="s1">length</span><span class="s3">, </span><span class="s1">truncate</span><span class="s3">=</span><span class="s5">&quot; …&quot;</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">truncatewords_html</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Truncate HTML after `arg` number of words. 
+    Preserve newlines in the HTML. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">length </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">ValueError</span><span class="s3">:  </span><span class="s4"># invalid literal for int()</span>
+        <span class="s2">return </span><span class="s1">value  </span><span class="s4"># Fail silently.</span>
+    <span class="s2">return </span><span class="s1">Truncator</span><span class="s3">(</span><span class="s1">value</span><span class="s3">).</span><span class="s1">words</span><span class="s3">(</span><span class="s1">length</span><span class="s3">, </span><span class="s1">html</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">truncate</span><span class="s3">=</span><span class="s5">&quot; …&quot;</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">upper</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Convert a string into all uppercase.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">value</span><span class="s3">.</span><span class="s1">upper</span><span class="s3">()</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">urlencode</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">safe</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Escape a value for use in a URL. 
+ 
+    The ``safe`` parameter determines the characters which should not be 
+    escaped by Python's quote() function. If not provided, use the default safe 
+    characters (but an empty string can be provided when *all* characters 
+    should be escaped). 
+    &quot;&quot;&quot;</span>
+    <span class="s1">kwargs </span><span class="s3">= {}</span>
+    <span class="s2">if </span><span class="s1">safe </span><span class="s2">is not None</span><span class="s3">:</span>
+        <span class="s1">kwargs</span><span class="s3">[</span><span class="s5">&quot;safe&quot;</span><span class="s3">] = </span><span class="s1">safe</span>
+    <span class="s2">return </span><span class="s1">quote</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, **</span><span class="s1">kwargs</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">needs_autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">urlize</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Convert URLs in plain text into clickable links.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s1">_urlize</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">nofollow</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">autoescape</span><span class="s3">=</span><span class="s1">autoescape</span><span class="s3">))</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">needs_autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">urlizetrunc</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">limit</span><span class="s3">, </span><span class="s1">autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Convert URLs into clickable links, truncating URLs to the given character 
+    limit, and adding 'rel=nofollow' attribute to discourage spamming. 
+ 
+    Argument: Length to truncate URLs to. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span>
+        <span class="s1">_urlize</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">trim_url_limit</span><span class="s3">=</span><span class="s1">int</span><span class="s3">(</span><span class="s1">limit</span><span class="s3">), </span><span class="s1">nofollow</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">autoescape</span><span class="s3">=</span><span class="s1">autoescape</span><span class="s3">)</span>
+    <span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">wordcount</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Return the number of words.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">len</span><span class="s3">(</span><span class="s1">value</span><span class="s3">.</span><span class="s1">split</span><span class="s3">())</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">wordwrap</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Wrap words at `arg` line length.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">wrap</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">int</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">))</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">ljust</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Left-align the value in a field of a given width.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">value</span><span class="s3">.</span><span class="s1">ljust</span><span class="s3">(</span><span class="s1">int</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">))</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">rjust</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Right-align the value in a field of a given width.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">value</span><span class="s3">.</span><span class="s1">rjust</span><span class="s3">(</span><span class="s1">int</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">))</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">center</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Center the value in a field of a given width.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">value</span><span class="s3">.</span><span class="s1">center</span><span class="s3">(</span><span class="s1">int</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">))</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">cut</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Remove all values of arg from the given string.&quot;&quot;&quot;</span>
+    <span class="s1">safe </span><span class="s3">= </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">SafeData</span><span class="s3">)</span>
+    <span class="s1">value </span><span class="s3">= </span><span class="s1">value</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">, </span><span class="s5">&quot;&quot;</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">safe </span><span class="s2">and </span><span class="s1">arg </span><span class="s3">!= </span><span class="s5">&quot;;&quot;</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">value</span>
+
+
+<span class="s4">###################</span>
+<span class="s4"># HTML STRINGS    #</span>
+<span class="s4">###################</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s5">&quot;escape&quot;</span><span class="s3">, </span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">escape_filter</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Mark the value as a string that should be auto-escaped.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">conditional_escape</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">escapeseq</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    An &quot;escape&quot; filter for sequences. Mark each element in the sequence, 
+    individually, as a string that should be auto-escaped. Return a list with 
+    the results. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s3">[</span><span class="s1">conditional_escape</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">) </span><span class="s2">for </span><span class="s1">obj </span><span class="s2">in </span><span class="s1">value</span><span class="s3">]</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">force_escape</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Escape a string's HTML. Return a new string containing the escaped 
+    characters (as opposed to &quot;escape&quot;, which marks the content for later 
+    possible escaping). 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">escape</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s5">&quot;linebreaks&quot;</span><span class="s3">, </span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">needs_autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">linebreaks_filter</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Replace line breaks in plain text with appropriate HTML; a single 
+    newline becomes an HTML line break (``&lt;br&gt;``) and a new line 
+    followed by a blank line becomes a paragraph break (``&lt;/p&gt;``). 
+    &quot;&quot;&quot;</span>
+    <span class="s1">autoescape </span><span class="s3">= </span><span class="s1">autoescape </span><span class="s2">and not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">SafeData</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s1">linebreaks</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">autoescape</span><span class="s3">))</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">needs_autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">linebreaksbr</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Convert all newlines in a piece of plain text to HTML line breaks 
+    (``&lt;br&gt;``). 
+    &quot;&quot;&quot;</span>
+    <span class="s1">autoescape </span><span class="s3">= </span><span class="s1">autoescape </span><span class="s2">and not </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">SafeData</span><span class="s3">)</span>
+    <span class="s1">value </span><span class="s3">= </span><span class="s1">normalize_newlines</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">autoescape</span><span class="s3">:</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">escape</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+    <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s1">value</span><span class="s3">.</span><span class="s1">replace</span><span class="s3">(</span><span class="s5">&quot;</span><span class="s2">\n</span><span class="s5">&quot;</span><span class="s3">, </span><span class="s5">&quot;&lt;br&gt;&quot;</span><span class="s3">))</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">safe</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Mark the value as a string that should not be auto-escaped.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">safeseq</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    A &quot;safe&quot; filter for sequences. Mark each element in the sequence, 
+    individually, as safe, after converting them to strings. Return a list 
+    with the results. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s3">[</span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s1">obj</span><span class="s3">) </span><span class="s2">for </span><span class="s1">obj </span><span class="s2">in </span><span class="s1">value</span><span class="s3">]</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s3">@</span><span class="s1">stringfilter</span>
+<span class="s2">def </span><span class="s1">striptags</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Strip all [X]HTML tags.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">strip_tags</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+
+<span class="s4">###################</span>
+<span class="s4"># LISTS           #</span>
+<span class="s4">###################</span>
+
+
+<span class="s2">def </span><span class="s1">_property_resolver</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    When arg is convertible to float, behave like operator.itemgetter(arg) 
+    Otherwise, chain __getitem__() and getattr(). 
+ 
+    &gt;&gt;&gt; _property_resolver(1)('abc') 
+    'b' 
+    &gt;&gt;&gt; _property_resolver('1')('abc') 
+    Traceback (most recent call last): 
+    ... 
+    TypeError: string indices must be integers 
+    &gt;&gt;&gt; class Foo: 
+    ...     a = 42 
+    ...     b = 3.14 
+    ...     c = 'Hey!' 
+    &gt;&gt;&gt; _property_resolver('b')(Foo()) 
+    3.14 
+    &quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">float</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">ValueError</span><span class="s3">:</span>
+        <span class="s2">if </span><span class="s1">VARIABLE_ATTRIBUTE_SEPARATOR </span><span class="s3">+ </span><span class="s5">&quot;_&quot; </span><span class="s2">in </span><span class="s1">arg </span><span class="s2">or </span><span class="s1">arg</span><span class="s3">[</span><span class="s6">0</span><span class="s3">] == </span><span class="s5">&quot;_&quot;</span><span class="s3">:</span>
+            <span class="s2">raise </span><span class="s1">AttributeError</span><span class="s3">(</span><span class="s5">&quot;Access to private variables is forbidden.&quot;</span><span class="s3">)</span>
+        <span class="s1">parts </span><span class="s3">= </span><span class="s1">arg</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s1">VARIABLE_ATTRIBUTE_SEPARATOR</span><span class="s3">)</span>
+
+        <span class="s2">def </span><span class="s1">resolve</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+            <span class="s2">for </span><span class="s1">part </span><span class="s2">in </span><span class="s1">parts</span><span class="s3">:</span>
+                <span class="s2">try</span><span class="s3">:</span>
+                    <span class="s1">value </span><span class="s3">= </span><span class="s1">value</span><span class="s3">[</span><span class="s1">part</span><span class="s3">]</span>
+                <span class="s2">except </span><span class="s3">(</span><span class="s1">AttributeError</span><span class="s3">, </span><span class="s1">IndexError</span><span class="s3">, </span><span class="s1">KeyError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">, </span><span class="s1">ValueError</span><span class="s3">):</span>
+                    <span class="s1">value </span><span class="s3">= </span><span class="s1">getattr</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">part</span><span class="s3">)</span>
+            <span class="s2">return </span><span class="s1">value</span>
+
+        <span class="s2">return </span><span class="s1">resolve</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">itemgetter</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">dictsort</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Given a list of dicts, return that list sorted by the property given in 
+    the argument. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">sorted</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">key</span><span class="s3">=</span><span class="s1">_property_resolver</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">))</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">AttributeError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">dictsortreversed</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Given a list of dicts, return that list sorted in reverse order by the 
+    property given in the argument. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">sorted</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">key</span><span class="s3">=</span><span class="s1">_property_resolver</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">), </span><span class="s1">reverse</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">AttributeError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">first</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Return the first item in a list.&quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">value</span><span class="s3">[</span><span class="s6">0</span><span class="s3">]</span>
+    <span class="s2">except </span><span class="s1">IndexError</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">needs_autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">join</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">, </span><span class="s1">autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Join a list with a string, like Python's ``str.join(list)``.&quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">if </span><span class="s1">autoescape</span><span class="s3">:</span>
+            <span class="s1">data </span><span class="s3">= </span><span class="s1">conditional_escape</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">).</span><span class="s1">join</span><span class="s3">([</span><span class="s1">conditional_escape</span><span class="s3">(</span><span class="s1">v</span><span class="s3">) </span><span class="s2">for </span><span class="s1">v </span><span class="s2">in </span><span class="s1">value</span><span class="s3">])</span>
+        <span class="s2">else</span><span class="s3">:</span>
+            <span class="s1">data </span><span class="s3">= </span><span class="s1">arg</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">TypeError</span><span class="s3">:  </span><span class="s4"># Fail silently if arg isn't iterable.</span>
+        <span class="s2">return </span><span class="s1">value</span>
+    <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s1">data</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">last</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Return the last item in a list.&quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">value</span><span class="s3">[-</span><span class="s6">1</span><span class="s3">]</span>
+    <span class="s2">except </span><span class="s1">IndexError</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">length</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Return the length of the value - useful for lists.&quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">len</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s6">0</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">length_is</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Return a boolean of whether the value's length is the argument.&quot;&quot;&quot;</span>
+    <span class="s1">warnings</span><span class="s3">.</span><span class="s1">warn</span><span class="s3">(</span>
+        <span class="s5">&quot;The length_is template filter is deprecated in favor of the length template &quot;</span>
+        <span class="s5">&quot;filter and the == operator within an {% if %} tag.&quot;</span><span class="s3">,</span>
+        <span class="s1">RemovedInDjango51Warning</span><span class="s3">,</span>
+    <span class="s3">)</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">len</span><span class="s3">(</span><span class="s1">value</span><span class="s3">) == </span><span class="s1">int</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">random</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Return a random item from the list.&quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">random_module</span><span class="s3">.</span><span class="s1">choice</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">IndexError</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s5">&quot;slice&quot;</span><span class="s3">, </span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">slice_filter</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Return a slice of the list using the same syntax as Python's list slicing. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">bits </span><span class="s3">= []</span>
+        <span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">str</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">).</span><span class="s1">split</span><span class="s3">(</span><span class="s5">&quot;:&quot;</span><span class="s3">):</span>
+            <span class="s2">if not </span><span class="s1">x</span><span class="s3">:</span>
+                <span class="s1">bits</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s2">None</span><span class="s3">)</span>
+            <span class="s2">else</span><span class="s3">:</span>
+                <span class="s1">bits</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s1">int</span><span class="s3">(</span><span class="s1">x</span><span class="s3">))</span>
+        <span class="s2">return </span><span class="s1">value</span><span class="s3">[</span><span class="s1">slice</span><span class="s3">(*</span><span class="s1">bits</span><span class="s3">)]</span>
+
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">value  </span><span class="s4"># Fail silently.</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">needs_autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">unordered_list</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">autoescape</span><span class="s3">=</span><span class="s2">True</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Recursively take a self-nested list and return an HTML unordered list -- 
+    WITHOUT opening and closing &lt;ul&gt; tags. 
+ 
+    Assume the list is in the proper format. For example, if ``var`` contains: 
+    ``['States', ['Kansas', ['Lawrence', 'Topeka'], 'Illinois']]``, then 
+    ``{{ var|unordered_list }}`` returns:: 
+ 
+        &lt;li&gt;States 
+        &lt;ul&gt; 
+                &lt;li&gt;Kansas 
+                &lt;ul&gt; 
+                        &lt;li&gt;Lawrence&lt;/li&gt; 
+                        &lt;li&gt;Topeka&lt;/li&gt; 
+                &lt;/ul&gt; 
+                &lt;/li&gt; 
+                &lt;li&gt;Illinois&lt;/li&gt; 
+        &lt;/ul&gt; 
+        &lt;/li&gt; 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">autoescape</span><span class="s3">:</span>
+        <span class="s1">escaper </span><span class="s3">= </span><span class="s1">conditional_escape</span>
+    <span class="s2">else</span><span class="s3">:</span>
+
+        <span class="s2">def </span><span class="s1">escaper</span><span class="s3">(</span><span class="s1">x</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s1">x</span>
+
+    <span class="s2">def </span><span class="s1">walk_items</span><span class="s3">(</span><span class="s1">item_list</span><span class="s3">):</span>
+        <span class="s1">item_iterator </span><span class="s3">= </span><span class="s1">iter</span><span class="s3">(</span><span class="s1">item_list</span><span class="s3">)</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s1">item </span><span class="s3">= </span><span class="s1">next</span><span class="s3">(</span><span class="s1">item_iterator</span><span class="s3">)</span>
+            <span class="s2">while True</span><span class="s3">:</span>
+                <span class="s2">try</span><span class="s3">:</span>
+                    <span class="s1">next_item </span><span class="s3">= </span><span class="s1">next</span><span class="s3">(</span><span class="s1">item_iterator</span><span class="s3">)</span>
+                <span class="s2">except </span><span class="s1">StopIteration</span><span class="s3">:</span>
+                    <span class="s2">yield </span><span class="s1">item</span><span class="s3">, </span><span class="s2">None</span>
+                    <span class="s2">break</span>
+                <span class="s2">if </span><span class="s1">isinstance</span><span class="s3">(</span><span class="s1">next_item</span><span class="s3">, (</span><span class="s1">list</span><span class="s3">, </span><span class="s1">tuple</span><span class="s3">, </span><span class="s1">types</span><span class="s3">.</span><span class="s1">GeneratorType</span><span class="s3">)):</span>
+                    <span class="s2">try</span><span class="s3">:</span>
+                        <span class="s1">iter</span><span class="s3">(</span><span class="s1">next_item</span><span class="s3">)</span>
+                    <span class="s2">except </span><span class="s1">TypeError</span><span class="s3">:</span>
+                        <span class="s2">pass</span>
+                    <span class="s2">else</span><span class="s3">:</span>
+                        <span class="s2">yield </span><span class="s1">item</span><span class="s3">, </span><span class="s1">next_item</span>
+                        <span class="s1">item </span><span class="s3">= </span><span class="s1">next</span><span class="s3">(</span><span class="s1">item_iterator</span><span class="s3">)</span>
+                        <span class="s2">continue</span>
+                <span class="s2">yield </span><span class="s1">item</span><span class="s3">, </span><span class="s2">None</span>
+                <span class="s1">item </span><span class="s3">= </span><span class="s1">next_item</span>
+        <span class="s2">except </span><span class="s1">StopIteration</span><span class="s3">:</span>
+            <span class="s2">pass</span>
+
+    <span class="s2">def </span><span class="s1">list_formatter</span><span class="s3">(</span><span class="s1">item_list</span><span class="s3">, </span><span class="s1">tabs</span><span class="s3">=</span><span class="s6">1</span><span class="s3">):</span>
+        <span class="s1">indent </span><span class="s3">= </span><span class="s5">&quot;</span><span class="s2">\t</span><span class="s5">&quot; </span><span class="s3">* </span><span class="s1">tabs</span>
+        <span class="s1">output </span><span class="s3">= []</span>
+        <span class="s2">for </span><span class="s1">item</span><span class="s3">, </span><span class="s1">children </span><span class="s2">in </span><span class="s1">walk_items</span><span class="s3">(</span><span class="s1">item_list</span><span class="s3">):</span>
+            <span class="s1">sublist </span><span class="s3">= </span><span class="s5">&quot;&quot;</span>
+            <span class="s2">if </span><span class="s1">children</span><span class="s3">:</span>
+                <span class="s1">sublist </span><span class="s3">= </span><span class="s5">&quot;</span><span class="s2">\n</span><span class="s5">%s&lt;ul&gt;</span><span class="s2">\n</span><span class="s5">%s</span><span class="s2">\n</span><span class="s5">%s&lt;/ul&gt;</span><span class="s2">\n</span><span class="s5">%s&quot; </span><span class="s3">% (</span>
+                    <span class="s1">indent</span><span class="s3">,</span>
+                    <span class="s1">list_formatter</span><span class="s3">(</span><span class="s1">children</span><span class="s3">, </span><span class="s1">tabs </span><span class="s3">+ </span><span class="s6">1</span><span class="s3">),</span>
+                    <span class="s1">indent</span><span class="s3">,</span>
+                    <span class="s1">indent</span><span class="s3">,</span>
+                <span class="s3">)</span>
+            <span class="s1">output</span><span class="s3">.</span><span class="s1">append</span><span class="s3">(</span><span class="s5">&quot;%s&lt;li&gt;%s%s&lt;/li&gt;&quot; </span><span class="s3">% (</span><span class="s1">indent</span><span class="s3">, </span><span class="s1">escaper</span><span class="s3">(</span><span class="s1">item</span><span class="s3">), </span><span class="s1">sublist</span><span class="s3">))</span>
+        <span class="s2">return </span><span class="s5">&quot;</span><span class="s2">\n</span><span class="s5">&quot;</span><span class="s3">.</span><span class="s1">join</span><span class="s3">(</span><span class="s1">output</span><span class="s3">)</span>
+
+    <span class="s2">return </span><span class="s1">mark_safe</span><span class="s3">(</span><span class="s1">list_formatter</span><span class="s3">(</span><span class="s1">value</span><span class="s3">))</span>
+
+
+<span class="s4">###################</span>
+<span class="s4"># INTEGERS        #</span>
+<span class="s4">###################</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">add</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Add the arg to the value.&quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">int</span><span class="s3">(</span><span class="s1">value</span><span class="s3">) + </span><span class="s1">int</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">value </span><span class="s3">+ </span><span class="s1">arg</span>
+        <span class="s2">except </span><span class="s1">Exception</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">get_digit</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Given a whole number, return the requested digit of it, where 1 is the 
+    right-most digit, 2 is the second-right-most digit, etc. Return the 
+    original value for invalid input (if input or argument is not an integer, 
+    or if argument is less than 1). Otherwise, output is always an integer. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">arg </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">)</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">ValueError</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">value  </span><span class="s4"># Fail silently for an invalid argument</span>
+    <span class="s2">if </span><span class="s1">arg </span><span class="s3">&lt; </span><span class="s6">1</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">value</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">int</span><span class="s3">(</span><span class="s1">str</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)[-</span><span class="s1">arg</span><span class="s3">])</span>
+    <span class="s2">except </span><span class="s1">IndexError</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s6">0</span>
+
+
+<span class="s4">###################</span>
+<span class="s4"># DATES           #</span>
+<span class="s4">###################</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">expects_localtime</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">date</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Format a date according to the given format.&quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">value </span><span class="s2">in </span><span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s5">&quot;&quot;</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">formats</span><span class="s3">.</span><span class="s1">date_format</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">AttributeError</span><span class="s3">:</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">format</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s1">AttributeError</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">expects_localtime</span><span class="s3">=</span><span class="s2">True</span><span class="s3">, </span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">time</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Format a time according to the given format.&quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">value </span><span class="s2">in </span><span class="s3">(</span><span class="s2">None</span><span class="s3">, </span><span class="s5">&quot;&quot;</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">formats</span><span class="s3">.</span><span class="s1">time_format</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">AttributeError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">time_format</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">)</span>
+        <span class="s2">except </span><span class="s3">(</span><span class="s1">AttributeError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+            <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s5">&quot;timesince&quot;</span><span class="s3">, </span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">timesince_filter</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Format a date as the time since that date (i.e. &quot;4 days, 6 hours&quot;).&quot;&quot;&quot;</span>
+    <span class="s2">if not </span><span class="s1">value</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">if </span><span class="s1">arg</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">timesince</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">)</span>
+        <span class="s2">return </span><span class="s1">timesince</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s5">&quot;timeuntil&quot;</span><span class="s3">, </span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">timeuntil_filter</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Format a date as the time until that date (i.e. &quot;4 days, 6 hours&quot;).&quot;&quot;&quot;</span>
+    <span class="s2">if not </span><span class="s1">value</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">timeuntil</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">TypeError</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+
+
+<span class="s4">###################</span>
+<span class="s4"># LOGIC           #</span>
+<span class="s4">###################</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">default</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;If value is unavailable, use given default.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">value </span><span class="s2">or </span><span class="s1">arg</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">default_if_none</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;If value is None, use given default.&quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">value </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">arg</span>
+    <span class="s2">return </span><span class="s1">value</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">divisibleby</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Return True if the value is divisible by the argument.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">int</span><span class="s3">(</span><span class="s1">value</span><span class="s3">) % </span><span class="s1">int</span><span class="s3">(</span><span class="s1">arg</span><span class="s3">) == </span><span class="s6">0</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">yesno</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">=</span><span class="s2">None</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Given a string mapping values for true, false, and (optionally) None, 
+    return one of those strings according to the value: 
+ 
+    ==========  ======================  ================================== 
+    Value       Argument                Outputs 
+    ==========  ======================  ================================== 
+    ``True``    ``&quot;yeah,no,maybe&quot;``     ``yeah`` 
+    ``False``   ``&quot;yeah,no,maybe&quot;``     ``no`` 
+    ``None``    ``&quot;yeah,no,maybe&quot;``     ``maybe`` 
+    ``None``    ``&quot;yeah,no&quot;``           ``&quot;no&quot;`` (converts None to False 
+                                        if no mapping for None is given. 
+    ==========  ======================  ================================== 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s1">arg </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s4"># Translators: Please do not add spaces around commas.</span>
+        <span class="s1">arg </span><span class="s3">= </span><span class="s1">gettext</span><span class="s3">(</span><span class="s5">&quot;yes,no,maybe&quot;</span><span class="s3">)</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">arg</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s5">&quot;,&quot;</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) &lt; </span><span class="s6">2</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">value  </span><span class="s4"># Invalid arg.</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">yes</span><span class="s3">, </span><span class="s1">no</span><span class="s3">, </span><span class="s1">maybe </span><span class="s3">= </span><span class="s1">bits</span>
+    <span class="s2">except </span><span class="s1">ValueError</span><span class="s3">:</span>
+        <span class="s4"># Unpack list of wrong size (no &quot;maybe&quot; value provided).</span>
+        <span class="s1">yes</span><span class="s3">, </span><span class="s1">no</span><span class="s3">, </span><span class="s1">maybe </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">0</span><span class="s3">], </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">1</span><span class="s3">], </span><span class="s1">bits</span><span class="s3">[</span><span class="s6">1</span><span class="s3">]</span>
+    <span class="s2">if </span><span class="s1">value </span><span class="s2">is None</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">maybe</span>
+    <span class="s2">if </span><span class="s1">value</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">yes</span>
+    <span class="s2">return </span><span class="s1">no</span>
+
+
+<span class="s4">###################</span>
+<span class="s4"># MISC            #</span>
+<span class="s4">###################</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">filesizeformat</span><span class="s3">(</span><span class="s1">bytes_</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Format the value like a 'human-readable' file size (i.e. 13 KB, 4.1 MB, 
+    102 bytes, etc.). 
+    &quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s1">bytes_ </span><span class="s3">= </span><span class="s1">int</span><span class="s3">(</span><span class="s1">bytes_</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s3">(</span><span class="s1">TypeError</span><span class="s3">, </span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">UnicodeDecodeError</span><span class="s3">):</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">ngettext</span><span class="s3">(</span><span class="s5">&quot;%(size)d byte&quot;</span><span class="s3">, </span><span class="s5">&quot;%(size)d bytes&quot;</span><span class="s3">, </span><span class="s6">0</span><span class="s3">) % {</span><span class="s5">&quot;size&quot;</span><span class="s3">: </span><span class="s6">0</span><span class="s3">}</span>
+        <span class="s2">return </span><span class="s1">avoid_wrapping</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+    <span class="s2">def </span><span class="s1">filesize_number_format</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+        <span class="s2">return </span><span class="s1">formats</span><span class="s3">.</span><span class="s1">number_format</span><span class="s3">(</span><span class="s1">round</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s6">1</span><span class="s3">), </span><span class="s6">1</span><span class="s3">)</span>
+
+    <span class="s1">KB </span><span class="s3">= </span><span class="s6">1 </span><span class="s3">&lt;&lt; </span><span class="s6">10</span>
+    <span class="s1">MB </span><span class="s3">= </span><span class="s6">1 </span><span class="s3">&lt;&lt; </span><span class="s6">20</span>
+    <span class="s1">GB </span><span class="s3">= </span><span class="s6">1 </span><span class="s3">&lt;&lt; </span><span class="s6">30</span>
+    <span class="s1">TB </span><span class="s3">= </span><span class="s6">1 </span><span class="s3">&lt;&lt; </span><span class="s6">40</span>
+    <span class="s1">PB </span><span class="s3">= </span><span class="s6">1 </span><span class="s3">&lt;&lt; </span><span class="s6">50</span>
+
+    <span class="s1">negative </span><span class="s3">= </span><span class="s1">bytes_ </span><span class="s3">&lt; </span><span class="s6">0</span>
+    <span class="s2">if </span><span class="s1">negative</span><span class="s3">:</span>
+        <span class="s1">bytes_ </span><span class="s3">= -</span><span class="s1">bytes_  </span><span class="s4"># Allow formatting of negative numbers.</span>
+
+    <span class="s2">if </span><span class="s1">bytes_ </span><span class="s3">&lt; </span><span class="s1">KB</span><span class="s3">:</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">ngettext</span><span class="s3">(</span><span class="s5">&quot;%(size)d byte&quot;</span><span class="s3">, </span><span class="s5">&quot;%(size)d bytes&quot;</span><span class="s3">, </span><span class="s1">bytes_</span><span class="s3">) % {</span><span class="s5">&quot;size&quot;</span><span class="s3">: </span><span class="s1">bytes_</span><span class="s3">}</span>
+    <span class="s2">elif </span><span class="s1">bytes_ </span><span class="s3">&lt; </span><span class="s1">MB</span><span class="s3">:</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">gettext</span><span class="s3">(</span><span class="s5">&quot;%s KB&quot;</span><span class="s3">) % </span><span class="s1">filesize_number_format</span><span class="s3">(</span><span class="s1">bytes_ </span><span class="s3">/ </span><span class="s1">KB</span><span class="s3">)</span>
+    <span class="s2">elif </span><span class="s1">bytes_ </span><span class="s3">&lt; </span><span class="s1">GB</span><span class="s3">:</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">gettext</span><span class="s3">(</span><span class="s5">&quot;%s MB&quot;</span><span class="s3">) % </span><span class="s1">filesize_number_format</span><span class="s3">(</span><span class="s1">bytes_ </span><span class="s3">/ </span><span class="s1">MB</span><span class="s3">)</span>
+    <span class="s2">elif </span><span class="s1">bytes_ </span><span class="s3">&lt; </span><span class="s1">TB</span><span class="s3">:</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">gettext</span><span class="s3">(</span><span class="s5">&quot;%s GB&quot;</span><span class="s3">) % </span><span class="s1">filesize_number_format</span><span class="s3">(</span><span class="s1">bytes_ </span><span class="s3">/ </span><span class="s1">GB</span><span class="s3">)</span>
+    <span class="s2">elif </span><span class="s1">bytes_ </span><span class="s3">&lt; </span><span class="s1">PB</span><span class="s3">:</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">gettext</span><span class="s3">(</span><span class="s5">&quot;%s TB&quot;</span><span class="s3">) % </span><span class="s1">filesize_number_format</span><span class="s3">(</span><span class="s1">bytes_ </span><span class="s3">/ </span><span class="s1">TB</span><span class="s3">)</span>
+    <span class="s2">else</span><span class="s3">:</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s1">gettext</span><span class="s3">(</span><span class="s5">&quot;%s PB&quot;</span><span class="s3">) % </span><span class="s1">filesize_number_format</span><span class="s3">(</span><span class="s1">bytes_ </span><span class="s3">/ </span><span class="s1">PB</span><span class="s3">)</span>
+
+    <span class="s2">if </span><span class="s1">negative</span><span class="s3">:</span>
+        <span class="s1">value </span><span class="s3">= </span><span class="s5">&quot;-%s&quot; </span><span class="s3">% </span><span class="s1">value</span>
+    <span class="s2">return </span><span class="s1">avoid_wrapping</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">False</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">pluralize</span><span class="s3">(</span><span class="s1">value</span><span class="s3">, </span><span class="s1">arg</span><span class="s3">=</span><span class="s5">&quot;s&quot;</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot; 
+    Return a plural suffix if the value is not 1, '1', or an object of 
+    length 1. By default, use 's' as the suffix: 
+ 
+    * If value is 0, vote{{ value|pluralize }} display &quot;votes&quot;. 
+    * If value is 1, vote{{ value|pluralize }} display &quot;vote&quot;. 
+    * If value is 2, vote{{ value|pluralize }} display &quot;votes&quot;. 
+ 
+    If an argument is provided, use that string instead: 
+ 
+    * If value is 0, class{{ value|pluralize:&quot;es&quot; }} display &quot;classes&quot;. 
+    * If value is 1, class{{ value|pluralize:&quot;es&quot; }} display &quot;class&quot;. 
+    * If value is 2, class{{ value|pluralize:&quot;es&quot; }} display &quot;classes&quot;. 
+ 
+    If the provided argument contains a comma, use the text before the comma 
+    for the singular case and the text after the comma for the plural case: 
+ 
+    * If value is 0, cand{{ value|pluralize:&quot;y,ies&quot; }} display &quot;candies&quot;. 
+    * If value is 1, cand{{ value|pluralize:&quot;y,ies&quot; }} display &quot;candy&quot;. 
+    * If value is 2, cand{{ value|pluralize:&quot;y,ies&quot; }} display &quot;candies&quot;. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if </span><span class="s5">&quot;,&quot; </span><span class="s2">not in </span><span class="s1">arg</span><span class="s3">:</span>
+        <span class="s1">arg </span><span class="s3">= </span><span class="s5">&quot;,&quot; </span><span class="s3">+ </span><span class="s1">arg</span>
+    <span class="s1">bits </span><span class="s3">= </span><span class="s1">arg</span><span class="s3">.</span><span class="s1">split</span><span class="s3">(</span><span class="s5">&quot;,&quot;</span><span class="s3">)</span>
+    <span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">bits</span><span class="s3">) &gt; </span><span class="s6">2</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+    <span class="s1">singular_suffix</span><span class="s3">, </span><span class="s1">plural_suffix </span><span class="s3">= </span><span class="s1">bits</span><span class="s3">[:</span><span class="s6">2</span><span class="s3">]</span>
+
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">singular_suffix </span><span class="s2">if </span><span class="s1">float</span><span class="s3">(</span><span class="s1">value</span><span class="s3">) == </span><span class="s6">1 </span><span class="s2">else </span><span class="s1">plural_suffix</span>
+    <span class="s2">except </span><span class="s1">ValueError</span><span class="s3">:  </span><span class="s4"># Invalid string that's not a number.</span>
+        <span class="s2">pass</span>
+    <span class="s2">except </span><span class="s1">TypeError</span><span class="s3">:  </span><span class="s4"># Value isn't a string or a number; maybe it's a list?</span>
+        <span class="s2">try</span><span class="s3">:</span>
+            <span class="s2">return </span><span class="s1">singular_suffix </span><span class="s2">if </span><span class="s1">len</span><span class="s3">(</span><span class="s1">value</span><span class="s3">) == </span><span class="s6">1 </span><span class="s2">else </span><span class="s1">plural_suffix</span>
+        <span class="s2">except </span><span class="s1">TypeError</span><span class="s3">:  </span><span class="s4"># len() of unsized object.</span>
+            <span class="s2">pass</span>
+    <span class="s2">return </span><span class="s5">&quot;&quot;</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s5">&quot;phone2numeric&quot;</span><span class="s3">, </span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">phone2numeric_filter</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;Take a phone number and converts it in to its numerical equivalent.&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">phone2numeric</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+
+
+<span class="s3">@</span><span class="s1">register</span><span class="s3">.</span><span class="s1">filter</span><span class="s3">(</span><span class="s1">is_safe</span><span class="s3">=</span><span class="s2">True</span><span class="s3">)</span>
+<span class="s2">def </span><span class="s1">pprint</span><span class="s3">(</span><span class="s1">value</span><span class="s3">):</span>
+    <span class="s0">&quot;&quot;&quot;A wrapper around pprint.pprint -- for debugging, really.&quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s1">pformat</span><span class="s3">(</span><span class="s1">value</span><span class="s3">)</span>
+    <span class="s2">except </span><span class="s1">Exception </span><span class="s2">as </span><span class="s1">e</span><span class="s3">:</span>
+        <span class="s2">return </span><span class="s5">&quot;Error in formatting: %s: %s&quot; </span><span class="s3">% (</span><span class="s1">e</span><span class="s3">.</span><span class="s1">__class__</span><span class="s3">.</span><span class="s1">__name__</span><span class="s3">, </span><span class="s1">e</span><span class="s3">)</span>
+</pre>
+</body>
+</html>

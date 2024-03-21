@@ -1,0 +1,635 @@
+<html>
+<head>
+<title>sites.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #7a7e85;}
+.s5 { color: #6aab73;}
+.s6 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+sites.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">functools </span><span class="s0">import </span><span class="s1">update_wrapper</span>
+<span class="s0">from </span><span class="s1">weakref </span><span class="s0">import </span><span class="s1">WeakSet</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">apps </span><span class="s0">import </span><span class="s1">apps</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin </span><span class="s0">import </span><span class="s1">ModelAdmin</span><span class="s2">, </span><span class="s1">actions</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">AlreadyRegistered</span><span class="s2">, </span><span class="s1">NotRegistered</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin</span><span class="s2">.</span><span class="s1">views</span><span class="s2">.</span><span class="s1">autocomplete </span><span class="s0">import </span><span class="s1">AutocompleteJsonView</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">auth </span><span class="s0">import </span><span class="s1">REDIRECT_FIELD_NAME</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s1">ImproperlyConfigured</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">db</span><span class="s2">.</span><span class="s1">models</span><span class="s2">.</span><span class="s1">base </span><span class="s0">import </span><span class="s1">ModelBase</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">Http404</span><span class="s2">, </span><span class="s1">HttpResponsePermanentRedirect</span><span class="s2">, </span><span class="s1">HttpResponseRedirect</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">template</span><span class="s2">.</span><span class="s1">response </span><span class="s0">import </span><span class="s1">TemplateResponse</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">urls </span><span class="s0">import </span><span class="s1">NoReverseMatch</span><span class="s2">, </span><span class="s1">Resolver404</span><span class="s2">, </span><span class="s1">resolve</span><span class="s2">, </span><span class="s1">reverse</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">decorators </span><span class="s0">import </span><span class="s1">method_decorator</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">functional </span><span class="s0">import </span><span class="s1">LazyObject</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">module_loading </span><span class="s0">import </span><span class="s1">import_string</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">text </span><span class="s0">import </span><span class="s1">capfirst</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">translation </span><span class="s0">import </span><span class="s1">gettext </span><span class="s0">as </span><span class="s1">_</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">translation </span><span class="s0">import </span><span class="s1">gettext_lazy</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">views</span><span class="s2">.</span><span class="s1">decorators</span><span class="s2">.</span><span class="s1">cache </span><span class="s0">import </span><span class="s1">never_cache</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">views</span><span class="s2">.</span><span class="s1">decorators</span><span class="s2">.</span><span class="s1">common </span><span class="s0">import </span><span class="s1">no_append_slash</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">views</span><span class="s2">.</span><span class="s1">decorators</span><span class="s2">.</span><span class="s1">csrf </span><span class="s0">import </span><span class="s1">csrf_protect</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">views</span><span class="s2">.</span><span class="s1">i18n </span><span class="s0">import </span><span class="s1">JavaScriptCatalog</span>
+
+<span class="s1">all_sites </span><span class="s2">= </span><span class="s1">WeakSet</span><span class="s2">()</span>
+
+
+<span class="s0">class </span><span class="s1">AdminSite</span><span class="s2">:</span>
+    <span class="s3">&quot;&quot;&quot; 
+    An AdminSite object encapsulates an instance of the Django admin application, ready 
+    to be hooked in to your URLconf. Models are registered with the AdminSite using the 
+    register() method, and the get_urls() method can then be used to access Django view 
+    functions that present a full admin interface for the collection of registered 
+    models. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s4"># Text to put at the end of each page's &lt;title&gt;.</span>
+    <span class="s1">site_title </span><span class="s2">= </span><span class="s1">gettext_lazy</span><span class="s2">(</span><span class="s5">&quot;Django site admin&quot;</span><span class="s2">)</span>
+
+    <span class="s4"># Text to put in each page's &lt;div id=&quot;site-name&quot;&gt;.</span>
+    <span class="s1">site_header </span><span class="s2">= </span><span class="s1">gettext_lazy</span><span class="s2">(</span><span class="s5">&quot;Django administration&quot;</span><span class="s2">)</span>
+
+    <span class="s4"># Text to put at the top of the admin index page.</span>
+    <span class="s1">index_title </span><span class="s2">= </span><span class="s1">gettext_lazy</span><span class="s2">(</span><span class="s5">&quot;Site administration&quot;</span><span class="s2">)</span>
+
+    <span class="s4"># URL for the &quot;View site&quot; link at the top of each admin page.</span>
+    <span class="s1">site_url </span><span class="s2">= </span><span class="s5">&quot;/&quot;</span>
+
+    <span class="s1">enable_nav_sidebar </span><span class="s2">= </span><span class="s0">True</span>
+
+    <span class="s1">empty_value_display </span><span class="s2">= </span><span class="s5">&quot;-&quot;</span>
+
+    <span class="s1">login_form </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">index_template </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">app_index_template </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">login_template </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">logout_template </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">password_change_template </span><span class="s2">= </span><span class="s0">None</span>
+    <span class="s1">password_change_done_template </span><span class="s2">= </span><span class="s0">None</span>
+
+    <span class="s1">final_catch_all_view </span><span class="s2">= </span><span class="s0">True</span>
+
+    <span class="s0">def </span><span class="s1">__init__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">=</span><span class="s5">&quot;admin&quot;</span><span class="s2">):</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_registry </span><span class="s2">= {}  </span><span class="s4"># model_class class -&gt; admin_class instance</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">name </span><span class="s2">= </span><span class="s1">name</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_actions </span><span class="s2">= {</span><span class="s5">&quot;delete_selected&quot;</span><span class="s2">: </span><span class="s1">actions</span><span class="s2">.</span><span class="s1">delete_selected</span><span class="s2">}</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_global_actions </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_actions</span><span class="s2">.</span><span class="s1">copy</span><span class="s2">()</span>
+        <span class="s1">all_sites</span><span class="s2">.</span><span class="s1">add</span><span class="s2">(</span><span class="s1">self</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s5">f&quot;</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span><span class="s0">}</span><span class="s5">(name=</span><span class="s0">{</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s0">!r}</span><span class="s5">)&quot;</span>
+
+    <span class="s0">def </span><span class="s1">check</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">app_configs</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Run the system checks on all ModelAdmins, except if they aren't 
+        customized at all. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">app_configs </span><span class="s0">is None</span><span class="s2">:</span>
+            <span class="s1">app_configs </span><span class="s2">= </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_configs</span><span class="s2">()</span>
+        <span class="s1">app_configs </span><span class="s2">= </span><span class="s1">set</span><span class="s2">(</span><span class="s1">app_configs</span><span class="s2">)  </span><span class="s4"># Speed up lookups below</span>
+
+        <span class="s1">errors </span><span class="s2">= []</span>
+        <span class="s1">modeladmins </span><span class="s2">= (</span>
+            <span class="s1">o </span><span class="s0">for </span><span class="s1">o </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_registry</span><span class="s2">.</span><span class="s1">values</span><span class="s2">() </span><span class="s0">if </span><span class="s1">o</span><span class="s2">.</span><span class="s1">__class__ </span><span class="s0">is not </span><span class="s1">ModelAdmin</span>
+        <span class="s2">)</span>
+        <span class="s0">for </span><span class="s1">modeladmin </span><span class="s0">in </span><span class="s1">modeladmins</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">modeladmin</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">app_config </span><span class="s0">in </span><span class="s1">app_configs</span><span class="s2">:</span>
+                <span class="s1">errors</span><span class="s2">.</span><span class="s1">extend</span><span class="s2">(</span><span class="s1">modeladmin</span><span class="s2">.</span><span class="s1">check</span><span class="s2">())</span>
+        <span class="s0">return </span><span class="s1">errors</span>
+
+    <span class="s0">def </span><span class="s1">register</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model_or_iterable</span><span class="s2">, </span><span class="s1">admin_class</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Register the given model(s) with the given admin class. 
+ 
+        The model(s) should be Model classes, not instances. 
+ 
+        If an admin class isn't given, use ModelAdmin (the default admin 
+        options). If keyword arguments are given -- e.g., list_display -- 
+        apply them as options to the admin class. 
+ 
+        If a model is already registered, raise AlreadyRegistered. 
+ 
+        If a model is abstract, raise ImproperlyConfigured. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">admin_class </span><span class="s2">= </span><span class="s1">admin_class </span><span class="s0">or </span><span class="s1">ModelAdmin</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">model_or_iterable</span><span class="s2">, </span><span class="s1">ModelBase</span><span class="s2">):</span>
+            <span class="s1">model_or_iterable </span><span class="s2">= [</span><span class="s1">model_or_iterable</span><span class="s2">]</span>
+        <span class="s0">for </span><span class="s1">model </span><span class="s0">in </span><span class="s1">model_or_iterable</span><span class="s2">:</span>
+            <span class="s0">if </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">abstract</span><span class="s2">:</span>
+                <span class="s0">raise </span><span class="s1">ImproperlyConfigured</span><span class="s2">(</span>
+                    <span class="s5">&quot;The model %s is abstract, so it cannot be registered with admin.&quot;</span>
+                    <span class="s2">% </span><span class="s1">model</span><span class="s2">.</span><span class="s1">__name__</span>
+                <span class="s2">)</span>
+
+            <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_registered</span><span class="s2">(</span><span class="s1">model</span><span class="s2">):</span>
+                <span class="s1">registered_admin </span><span class="s2">= </span><span class="s1">str</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_model_admin</span><span class="s2">(</span><span class="s1">model</span><span class="s2">))</span>
+                <span class="s1">msg </span><span class="s2">= </span><span class="s5">&quot;The model %s is already registered &quot; </span><span class="s2">% </span><span class="s1">model</span><span class="s2">.</span><span class="s1">__name__</span>
+                <span class="s0">if </span><span class="s1">registered_admin</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s5">&quot;.ModelAdmin&quot;</span><span class="s2">):</span>
+                    <span class="s4"># Most likely registered without a ModelAdmin subclass.</span>
+                    <span class="s1">msg </span><span class="s2">+= </span><span class="s5">&quot;in app %r.&quot; </span><span class="s2">% </span><span class="s1">registered_admin</span><span class="s2">.</span><span class="s1">removesuffix</span><span class="s2">(</span><span class="s5">&quot;.ModelAdmin&quot;</span><span class="s2">)</span>
+                <span class="s0">else</span><span class="s2">:</span>
+                    <span class="s1">msg </span><span class="s2">+= </span><span class="s5">&quot;with %r.&quot; </span><span class="s2">% </span><span class="s1">registered_admin</span>
+                <span class="s0">raise </span><span class="s1">AlreadyRegistered</span><span class="s2">(</span><span class="s1">msg</span><span class="s2">)</span>
+
+            <span class="s4"># Ignore the registration if the model has been</span>
+            <span class="s4"># swapped out.</span>
+            <span class="s0">if not </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">swapped</span><span class="s2">:</span>
+                <span class="s4"># If we got **options then dynamically construct a subclass of</span>
+                <span class="s4"># admin_class with those **options.</span>
+                <span class="s0">if </span><span class="s1">options</span><span class="s2">:</span>
+                    <span class="s4"># For reasons I don't quite understand, without a __module__</span>
+                    <span class="s4"># the created class appears to &quot;live&quot; in the wrong place,</span>
+                    <span class="s4"># which causes issues later on.</span>
+                    <span class="s1">options</span><span class="s2">[</span><span class="s5">&quot;__module__&quot;</span><span class="s2">] = </span><span class="s1">__name__</span>
+                    <span class="s1">admin_class </span><span class="s2">= </span><span class="s1">type</span><span class="s2">(</span>
+                        <span class="s5">&quot;%sAdmin&quot; </span><span class="s2">% </span><span class="s1">model</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">, (</span><span class="s1">admin_class</span><span class="s2">,), </span><span class="s1">options</span>
+                    <span class="s2">)</span>
+
+                <span class="s4"># Instantiate the admin class to save in the registry</span>
+                <span class="s1">self</span><span class="s2">.</span><span class="s1">_registry</span><span class="s2">[</span><span class="s1">model</span><span class="s2">] = </span><span class="s1">admin_class</span><span class="s2">(</span><span class="s1">model</span><span class="s2">, </span><span class="s1">self</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">unregister</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model_or_iterable</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Unregister the given model(s). 
+ 
+        If a model isn't already registered, raise NotRegistered. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">model_or_iterable</span><span class="s2">, </span><span class="s1">ModelBase</span><span class="s2">):</span>
+            <span class="s1">model_or_iterable </span><span class="s2">= [</span><span class="s1">model_or_iterable</span><span class="s2">]</span>
+        <span class="s0">for </span><span class="s1">model </span><span class="s0">in </span><span class="s1">model_or_iterable</span><span class="s2">:</span>
+            <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">is_registered</span><span class="s2">(</span><span class="s1">model</span><span class="s2">):</span>
+                <span class="s0">raise </span><span class="s1">NotRegistered</span><span class="s2">(</span><span class="s5">&quot;The model %s is not registered&quot; </span><span class="s2">% </span><span class="s1">model</span><span class="s2">.</span><span class="s1">__name__</span><span class="s2">)</span>
+            <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_registry</span><span class="s2">[</span><span class="s1">model</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">is_registered</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Check if a model class is registered with this `AdminSite`. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">model </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_registry</span>
+
+    <span class="s0">def </span><span class="s1">get_model_admin</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">model</span><span class="s2">):</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_registry</span><span class="s2">[</span><span class="s1">model</span><span class="s2">]</span>
+        <span class="s0">except </span><span class="s1">KeyError</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">NotRegistered</span><span class="s2">(</span><span class="s5">f&quot;The model </span><span class="s0">{</span><span class="s1">model</span><span class="s2">.</span><span class="s1">__name__</span><span class="s0">} </span><span class="s5">is not registered.&quot;</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">add_action</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">action</span><span class="s2">, </span><span class="s1">name</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Register an action to be available globally. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">name </span><span class="s2">= </span><span class="s1">name </span><span class="s0">or </span><span class="s1">action</span><span class="s2">.</span><span class="s1">__name__</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_actions</span><span class="s2">[</span><span class="s1">name</span><span class="s2">] = </span><span class="s1">action</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_global_actions</span><span class="s2">[</span><span class="s1">name</span><span class="s2">] = </span><span class="s1">action</span>
+
+    <span class="s0">def </span><span class="s1">disable_action</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Disable a globally-registered action. Raise KeyError for invalid names. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">del </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_actions</span><span class="s2">[</span><span class="s1">name</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">get_action</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">name</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Explicitly get a registered global action whether it's enabled or 
+        not. Raise KeyError for invalid names. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_global_actions</span><span class="s2">[</span><span class="s1">name</span><span class="s2">]</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">actions</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Get all the enabled actions as an iterable of (name, func). 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_actions</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">has_permission</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return True if the given HttpRequest has permission to view 
+        *at least one* page in the admin site. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">request</span><span class="s2">.</span><span class="s1">user</span><span class="s2">.</span><span class="s1">is_active </span><span class="s0">and </span><span class="s1">request</span><span class="s2">.</span><span class="s1">user</span><span class="s2">.</span><span class="s1">is_staff</span>
+
+    <span class="s0">def </span><span class="s1">admin_view</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">view</span><span class="s2">, </span><span class="s1">cacheable</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Decorator to create an admin view attached to this ``AdminSite``. This 
+        wraps the view and provides permission checking by calling 
+        ``self.has_permission``. 
+ 
+        You'll want to use this from within ``AdminSite.get_urls()``: 
+ 
+            class MyAdminSite(AdminSite): 
+ 
+                def get_urls(self): 
+                    from django.urls import path 
+ 
+                    urls = super().get_urls() 
+                    urls += [ 
+                        path('my_view/', self.admin_view(some_view)) 
+                    ] 
+                    return urls 
+ 
+        By default, admin_views are marked non-cacheable using the 
+        ``never_cache`` decorator. If the view can be safely cached, set 
+        cacheable=True. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s0">def </span><span class="s1">inner</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+            <span class="s0">if not </span><span class="s1">self</span><span class="s2">.</span><span class="s1">has_permission</span><span class="s2">(</span><span class="s1">request</span><span class="s2">):</span>
+                <span class="s0">if </span><span class="s1">request</span><span class="s2">.</span><span class="s1">path </span><span class="s2">== </span><span class="s1">reverse</span><span class="s2">(</span><span class="s5">&quot;admin:logout&quot;</span><span class="s2">, </span><span class="s1">current_app</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">):</span>
+                    <span class="s1">index_path </span><span class="s2">= </span><span class="s1">reverse</span><span class="s2">(</span><span class="s5">&quot;admin:index&quot;</span><span class="s2">, </span><span class="s1">current_app</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+                    <span class="s0">return </span><span class="s1">HttpResponseRedirect</span><span class="s2">(</span><span class="s1">index_path</span><span class="s2">)</span>
+                <span class="s4"># Inner import to prevent django.contrib.admin (app) from</span>
+                <span class="s4"># importing django.contrib.auth.models.User (unrelated model).</span>
+                <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">auth</span><span class="s2">.</span><span class="s1">views </span><span class="s0">import </span><span class="s1">redirect_to_login</span>
+
+                <span class="s0">return </span><span class="s1">redirect_to_login</span><span class="s2">(</span>
+                    <span class="s1">request</span><span class="s2">.</span><span class="s1">get_full_path</span><span class="s2">(),</span>
+                    <span class="s1">reverse</span><span class="s2">(</span><span class="s5">&quot;admin:login&quot;</span><span class="s2">, </span><span class="s1">current_app</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">),</span>
+                <span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">view</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, *</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+        <span class="s0">if not </span><span class="s1">cacheable</span><span class="s2">:</span>
+            <span class="s1">inner </span><span class="s2">= </span><span class="s1">never_cache</span><span class="s2">(</span><span class="s1">inner</span><span class="s2">)</span>
+        <span class="s4"># We add csrf_protect here so this function can be used as a utility</span>
+        <span class="s4"># function for any view, without having to repeat 'csrf_protect'.</span>
+        <span class="s0">if not </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">view</span><span class="s2">, </span><span class="s5">&quot;csrf_exempt&quot;</span><span class="s2">, </span><span class="s0">False</span><span class="s2">):</span>
+            <span class="s1">inner </span><span class="s2">= </span><span class="s1">csrf_protect</span><span class="s2">(</span><span class="s1">inner</span><span class="s2">)</span>
+        <span class="s0">return </span><span class="s1">update_wrapper</span><span class="s2">(</span><span class="s1">inner</span><span class="s2">, </span><span class="s1">view</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_urls</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s4"># Since this module gets imported in the application's root package,</span>
+        <span class="s4"># it cannot import models from other applications at the module level,</span>
+        <span class="s4"># and django.contrib.contenttypes.views imports ContentType.</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">contenttypes </span><span class="s0">import </span><span class="s1">views </span><span class="s0">as </span><span class="s1">contenttype_views</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">urls </span><span class="s0">import </span><span class="s1">include</span><span class="s2">, </span><span class="s1">path</span><span class="s2">, </span><span class="s1">re_path</span>
+
+        <span class="s0">def </span><span class="s1">wrap</span><span class="s2">(</span><span class="s1">view</span><span class="s2">, </span><span class="s1">cacheable</span><span class="s2">=</span><span class="s0">False</span><span class="s2">):</span>
+            <span class="s0">def </span><span class="s1">wrapper</span><span class="s2">(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">):</span>
+                <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">admin_view</span><span class="s2">(</span><span class="s1">view</span><span class="s2">, </span><span class="s1">cacheable</span><span class="s2">)(*</span><span class="s1">args</span><span class="s2">, **</span><span class="s1">kwargs</span><span class="s2">)</span>
+
+            <span class="s1">wrapper</span><span class="s2">.</span><span class="s1">admin_site </span><span class="s2">= </span><span class="s1">self</span>
+            <span class="s0">return </span><span class="s1">update_wrapper</span><span class="s2">(</span><span class="s1">wrapper</span><span class="s2">, </span><span class="s1">view</span><span class="s2">)</span>
+
+        <span class="s4"># Admin-site-wide views.</span>
+        <span class="s1">urlpatterns </span><span class="s2">= [</span>
+            <span class="s1">path</span><span class="s2">(</span><span class="s5">&quot;&quot;</span><span class="s2">, </span><span class="s1">wrap</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">index</span><span class="s2">), </span><span class="s1">name</span><span class="s2">=</span><span class="s5">&quot;index&quot;</span><span class="s2">),</span>
+            <span class="s1">path</span><span class="s2">(</span><span class="s5">&quot;login/&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">login</span><span class="s2">, </span><span class="s1">name</span><span class="s2">=</span><span class="s5">&quot;login&quot;</span><span class="s2">),</span>
+            <span class="s1">path</span><span class="s2">(</span><span class="s5">&quot;logout/&quot;</span><span class="s2">, </span><span class="s1">wrap</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">logout</span><span class="s2">), </span><span class="s1">name</span><span class="s2">=</span><span class="s5">&quot;logout&quot;</span><span class="s2">),</span>
+            <span class="s1">path</span><span class="s2">(</span>
+                <span class="s5">&quot;password_change/&quot;</span><span class="s2">,</span>
+                <span class="s1">wrap</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">password_change</span><span class="s2">, </span><span class="s1">cacheable</span><span class="s2">=</span><span class="s0">True</span><span class="s2">),</span>
+                <span class="s1">name</span><span class="s2">=</span><span class="s5">&quot;password_change&quot;</span><span class="s2">,</span>
+            <span class="s2">),</span>
+            <span class="s1">path</span><span class="s2">(</span>
+                <span class="s5">&quot;password_change/done/&quot;</span><span class="s2">,</span>
+                <span class="s1">wrap</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">password_change_done</span><span class="s2">, </span><span class="s1">cacheable</span><span class="s2">=</span><span class="s0">True</span><span class="s2">),</span>
+                <span class="s1">name</span><span class="s2">=</span><span class="s5">&quot;password_change_done&quot;</span><span class="s2">,</span>
+            <span class="s2">),</span>
+            <span class="s1">path</span><span class="s2">(</span><span class="s5">&quot;autocomplete/&quot;</span><span class="s2">, </span><span class="s1">wrap</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">autocomplete_view</span><span class="s2">), </span><span class="s1">name</span><span class="s2">=</span><span class="s5">&quot;autocomplete&quot;</span><span class="s2">),</span>
+            <span class="s1">path</span><span class="s2">(</span><span class="s5">&quot;jsi18n/&quot;</span><span class="s2">, </span><span class="s1">wrap</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">i18n_javascript</span><span class="s2">, </span><span class="s1">cacheable</span><span class="s2">=</span><span class="s0">True</span><span class="s2">), </span><span class="s1">name</span><span class="s2">=</span><span class="s5">&quot;jsi18n&quot;</span><span class="s2">),</span>
+            <span class="s1">path</span><span class="s2">(</span>
+                <span class="s5">&quot;r/&lt;int:content_type_id&gt;/&lt;path:object_id&gt;/&quot;</span><span class="s2">,</span>
+                <span class="s1">wrap</span><span class="s2">(</span><span class="s1">contenttype_views</span><span class="s2">.</span><span class="s1">shortcut</span><span class="s2">),</span>
+                <span class="s1">name</span><span class="s2">=</span><span class="s5">&quot;view_on_site&quot;</span><span class="s2">,</span>
+            <span class="s2">),</span>
+        <span class="s2">]</span>
+
+        <span class="s4"># Add in each model's views, and create a list of valid URLS for the</span>
+        <span class="s4"># app_index</span>
+        <span class="s1">valid_app_labels </span><span class="s2">= []</span>
+        <span class="s0">for </span><span class="s1">model</span><span class="s2">, </span><span class="s1">model_admin </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_registry</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s1">urlpatterns </span><span class="s2">+= [</span>
+                <span class="s1">path</span><span class="s2">(</span>
+                    <span class="s5">&quot;%s/%s/&quot; </span><span class="s2">% (</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">),</span>
+                    <span class="s1">include</span><span class="s2">(</span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">urls</span><span class="s2">),</span>
+                <span class="s2">),</span>
+            <span class="s2">]</span>
+            <span class="s0">if </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">app_label </span><span class="s0">not in </span><span class="s1">valid_app_labels</span><span class="s2">:</span>
+                <span class="s1">valid_app_labels</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">app_label</span><span class="s2">)</span>
+
+        <span class="s4"># If there were ModelAdmins registered, we should have a list of app</span>
+        <span class="s4"># labels for which we need to allow access to the app_index view,</span>
+        <span class="s0">if </span><span class="s1">valid_app_labels</span><span class="s2">:</span>
+            <span class="s1">regex </span><span class="s2">= </span><span class="s5">r&quot;^(?P&lt;app_label&gt;&quot; </span><span class="s2">+ </span><span class="s5">&quot;|&quot;</span><span class="s2">.</span><span class="s1">join</span><span class="s2">(</span><span class="s1">valid_app_labels</span><span class="s2">) + </span><span class="s5">&quot;)/$&quot;</span>
+            <span class="s1">urlpatterns </span><span class="s2">+= [</span>
+                <span class="s1">re_path</span><span class="s2">(</span><span class="s1">regex</span><span class="s2">, </span><span class="s1">wrap</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">app_index</span><span class="s2">), </span><span class="s1">name</span><span class="s2">=</span><span class="s5">&quot;app_list&quot;</span><span class="s2">),</span>
+            <span class="s2">]</span>
+
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">final_catch_all_view</span><span class="s2">:</span>
+            <span class="s1">urlpatterns</span><span class="s2">.</span><span class="s1">append</span><span class="s2">(</span><span class="s1">re_path</span><span class="s2">(</span><span class="s5">r&quot;(?P&lt;url&gt;.*)$&quot;</span><span class="s2">, </span><span class="s1">wrap</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">catch_all_view</span><span class="s2">)))</span>
+
+        <span class="s0">return </span><span class="s1">urlpatterns</span>
+
+    <span class="s2">@</span><span class="s1">property</span>
+    <span class="s0">def </span><span class="s1">urls</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_urls</span><span class="s2">(), </span><span class="s5">&quot;admin&quot;</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+
+    <span class="s0">def </span><span class="s1">each_context</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return a dictionary of variables to put in the template context for 
+        *every* page in the admin site. 
+ 
+        For sites running on a subpath, use the SCRIPT_NAME value if site_url 
+        hasn't been customized. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">script_name </span><span class="s2">= </span><span class="s1">request</span><span class="s2">.</span><span class="s1">META</span><span class="s2">[</span><span class="s5">&quot;SCRIPT_NAME&quot;</span><span class="s2">]</span>
+        <span class="s1">site_url </span><span class="s2">= (</span>
+            <span class="s1">script_name </span><span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">site_url </span><span class="s2">== </span><span class="s5">&quot;/&quot; </span><span class="s0">and </span><span class="s1">script_name </span><span class="s0">else </span><span class="s1">self</span><span class="s2">.</span><span class="s1">site_url</span>
+        <span class="s2">)</span>
+        <span class="s0">return </span><span class="s2">{</span>
+            <span class="s5">&quot;site_title&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">site_title</span><span class="s2">,</span>
+            <span class="s5">&quot;site_header&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">site_header</span><span class="s2">,</span>
+            <span class="s5">&quot;site_url&quot;</span><span class="s2">: </span><span class="s1">site_url</span><span class="s2">,</span>
+            <span class="s5">&quot;has_permission&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">has_permission</span><span class="s2">(</span><span class="s1">request</span><span class="s2">),</span>
+            <span class="s5">&quot;available_apps&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_app_list</span><span class="s2">(</span><span class="s1">request</span><span class="s2">),</span>
+            <span class="s5">&quot;is_popup&quot;</span><span class="s2">: </span><span class="s0">False</span><span class="s2">,</span>
+            <span class="s5">&quot;is_nav_sidebar_enabled&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">enable_nav_sidebar</span><span class="s2">,</span>
+            <span class="s5">&quot;log_entries&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_log_entries</span><span class="s2">(</span><span class="s1">request</span><span class="s2">),</span>
+        <span class="s2">}</span>
+
+    <span class="s0">def </span><span class="s1">password_change</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">extra_context</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Handle the &quot;change password&quot; task -- both form display and validation. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin</span><span class="s2">.</span><span class="s1">forms </span><span class="s0">import </span><span class="s1">AdminPasswordChangeForm</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">auth</span><span class="s2">.</span><span class="s1">views </span><span class="s0">import </span><span class="s1">PasswordChangeView</span>
+
+        <span class="s1">url </span><span class="s2">= </span><span class="s1">reverse</span><span class="s2">(</span><span class="s5">&quot;admin:password_change_done&quot;</span><span class="s2">, </span><span class="s1">current_app</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+        <span class="s1">defaults </span><span class="s2">= {</span>
+            <span class="s5">&quot;form_class&quot;</span><span class="s2">: </span><span class="s1">AdminPasswordChangeForm</span><span class="s2">,</span>
+            <span class="s5">&quot;success_url&quot;</span><span class="s2">: </span><span class="s1">url</span><span class="s2">,</span>
+            <span class="s5">&quot;extra_context&quot;</span><span class="s2">: {**</span><span class="s1">self</span><span class="s2">.</span><span class="s1">each_context</span><span class="s2">(</span><span class="s1">request</span><span class="s2">), **(</span><span class="s1">extra_context </span><span class="s0">or </span><span class="s2">{})},</span>
+        <span class="s2">}</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">password_change_template </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">defaults</span><span class="s2">[</span><span class="s5">&quot;template_name&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">password_change_template</span>
+        <span class="s1">request</span><span class="s2">.</span><span class="s1">current_app </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+        <span class="s0">return </span><span class="s1">PasswordChangeView</span><span class="s2">.</span><span class="s1">as_view</span><span class="s2">(**</span><span class="s1">defaults</span><span class="s2">)(</span><span class="s1">request</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">password_change_done</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">extra_context</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Display the &quot;success&quot; page after a password change. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">auth</span><span class="s2">.</span><span class="s1">views </span><span class="s0">import </span><span class="s1">PasswordChangeDoneView</span>
+
+        <span class="s1">defaults </span><span class="s2">= {</span>
+            <span class="s5">&quot;extra_context&quot;</span><span class="s2">: {**</span><span class="s1">self</span><span class="s2">.</span><span class="s1">each_context</span><span class="s2">(</span><span class="s1">request</span><span class="s2">), **(</span><span class="s1">extra_context </span><span class="s0">or </span><span class="s2">{})},</span>
+        <span class="s2">}</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">password_change_done_template </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">defaults</span><span class="s2">[</span><span class="s5">&quot;template_name&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">password_change_done_template</span>
+        <span class="s1">request</span><span class="s2">.</span><span class="s1">current_app </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+        <span class="s0">return </span><span class="s1">PasswordChangeDoneView</span><span class="s2">.</span><span class="s1">as_view</span><span class="s2">(**</span><span class="s1">defaults</span><span class="s2">)(</span><span class="s1">request</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">i18n_javascript</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">extra_context</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Display the i18n JavaScript that the Django admin requires. 
+ 
+        `extra_context` is unused but present for consistency with the other 
+        admin views. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">JavaScriptCatalog</span><span class="s2">.</span><span class="s1">as_view</span><span class="s2">(</span><span class="s1">packages</span><span class="s2">=[</span><span class="s5">&quot;django.contrib.admin&quot;</span><span class="s2">])(</span><span class="s1">request</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">logout</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">extra_context</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Log out the user for the given HttpRequest. 
+ 
+        This should *not* assume the user is already logged in. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">auth</span><span class="s2">.</span><span class="s1">views </span><span class="s0">import </span><span class="s1">LogoutView</span>
+
+        <span class="s1">defaults </span><span class="s2">= {</span>
+            <span class="s5">&quot;extra_context&quot;</span><span class="s2">: {</span>
+                <span class="s2">**</span><span class="s1">self</span><span class="s2">.</span><span class="s1">each_context</span><span class="s2">(</span><span class="s1">request</span><span class="s2">),</span>
+                <span class="s4"># Since the user isn't logged out at this point, the value of</span>
+                <span class="s4"># has_permission must be overridden.</span>
+                <span class="s5">&quot;has_permission&quot;</span><span class="s2">: </span><span class="s0">False</span><span class="s2">,</span>
+                <span class="s2">**(</span><span class="s1">extra_context </span><span class="s0">or </span><span class="s2">{}),</span>
+            <span class="s2">},</span>
+        <span class="s2">}</span>
+        <span class="s0">if </span><span class="s1">self</span><span class="s2">.</span><span class="s1">logout_template </span><span class="s0">is not None</span><span class="s2">:</span>
+            <span class="s1">defaults</span><span class="s2">[</span><span class="s5">&quot;template_name&quot;</span><span class="s2">] = </span><span class="s1">self</span><span class="s2">.</span><span class="s1">logout_template</span>
+        <span class="s1">request</span><span class="s2">.</span><span class="s1">current_app </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+        <span class="s0">return </span><span class="s1">LogoutView</span><span class="s2">.</span><span class="s1">as_view</span><span class="s2">(**</span><span class="s1">defaults</span><span class="s2">)(</span><span class="s1">request</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">method_decorator</span><span class="s2">(</span><span class="s1">never_cache</span><span class="s2">)</span>
+    <span class="s0">def </span><span class="s1">login</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">extra_context</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Display the login form for the given HttpRequest. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">request</span><span class="s2">.</span><span class="s1">method </span><span class="s2">== </span><span class="s5">&quot;GET&quot; </span><span class="s0">and </span><span class="s1">self</span><span class="s2">.</span><span class="s1">has_permission</span><span class="s2">(</span><span class="s1">request</span><span class="s2">):</span>
+            <span class="s4"># Already logged-in, redirect to admin index</span>
+            <span class="s1">index_path </span><span class="s2">= </span><span class="s1">reverse</span><span class="s2">(</span><span class="s5">&quot;admin:index&quot;</span><span class="s2">, </span><span class="s1">current_app</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">HttpResponseRedirect</span><span class="s2">(</span><span class="s1">index_path</span><span class="s2">)</span>
+
+        <span class="s4"># Since this module gets imported in the application's root package,</span>
+        <span class="s4"># it cannot import models from other applications at the module level,</span>
+        <span class="s4"># and django.contrib.admin.forms eventually imports User.</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin</span><span class="s2">.</span><span class="s1">forms </span><span class="s0">import </span><span class="s1">AdminAuthenticationForm</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">auth</span><span class="s2">.</span><span class="s1">views </span><span class="s0">import </span><span class="s1">LoginView</span>
+
+        <span class="s1">context </span><span class="s2">= {</span>
+            <span class="s2">**</span><span class="s1">self</span><span class="s2">.</span><span class="s1">each_context</span><span class="s2">(</span><span class="s1">request</span><span class="s2">),</span>
+            <span class="s5">&quot;title&quot;</span><span class="s2">: </span><span class="s1">_</span><span class="s2">(</span><span class="s5">&quot;Log in&quot;</span><span class="s2">),</span>
+            <span class="s5">&quot;subtitle&quot;</span><span class="s2">: </span><span class="s0">None</span><span class="s2">,</span>
+            <span class="s5">&quot;app_path&quot;</span><span class="s2">: </span><span class="s1">request</span><span class="s2">.</span><span class="s1">get_full_path</span><span class="s2">(),</span>
+            <span class="s5">&quot;username&quot;</span><span class="s2">: </span><span class="s1">request</span><span class="s2">.</span><span class="s1">user</span><span class="s2">.</span><span class="s1">get_username</span><span class="s2">(),</span>
+        <span class="s2">}</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s1">REDIRECT_FIELD_NAME </span><span class="s0">not in </span><span class="s1">request</span><span class="s2">.</span><span class="s1">GET</span>
+            <span class="s0">and </span><span class="s1">REDIRECT_FIELD_NAME </span><span class="s0">not in </span><span class="s1">request</span><span class="s2">.</span><span class="s1">POST</span>
+        <span class="s2">):</span>
+            <span class="s1">context</span><span class="s2">[</span><span class="s1">REDIRECT_FIELD_NAME</span><span class="s2">] = </span><span class="s1">reverse</span><span class="s2">(</span><span class="s5">&quot;admin:index&quot;</span><span class="s2">, </span><span class="s1">current_app</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">)</span>
+        <span class="s1">context</span><span class="s2">.</span><span class="s1">update</span><span class="s2">(</span><span class="s1">extra_context </span><span class="s0">or </span><span class="s2">{})</span>
+
+        <span class="s1">defaults </span><span class="s2">= {</span>
+            <span class="s5">&quot;extra_context&quot;</span><span class="s2">: </span><span class="s1">context</span><span class="s2">,</span>
+            <span class="s5">&quot;authentication_form&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">login_form </span><span class="s0">or </span><span class="s1">AdminAuthenticationForm</span><span class="s2">,</span>
+            <span class="s5">&quot;template_name&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">login_template </span><span class="s0">or </span><span class="s5">&quot;admin/login.html&quot;</span><span class="s2">,</span>
+        <span class="s2">}</span>
+        <span class="s1">request</span><span class="s2">.</span><span class="s1">current_app </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+        <span class="s0">return </span><span class="s1">LoginView</span><span class="s2">.</span><span class="s1">as_view</span><span class="s2">(**</span><span class="s1">defaults</span><span class="s2">)(</span><span class="s1">request</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">autocomplete_view</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">AutocompleteJsonView</span><span class="s2">.</span><span class="s1">as_view</span><span class="s2">(</span><span class="s1">admin_site</span><span class="s2">=</span><span class="s1">self</span><span class="s2">)(</span><span class="s1">request</span><span class="s2">)</span>
+
+    <span class="s2">@</span><span class="s1">no_append_slash</span>
+    <span class="s0">def </span><span class="s1">catch_all_view</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">url</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">APPEND_SLASH </span><span class="s0">and not </span><span class="s1">url</span><span class="s2">.</span><span class="s1">endswith</span><span class="s2">(</span><span class="s5">&quot;/&quot;</span><span class="s2">):</span>
+            <span class="s1">urlconf </span><span class="s2">= </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s5">&quot;urlconf&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">match </span><span class="s2">= </span><span class="s1">resolve</span><span class="s2">(</span><span class="s5">&quot;%s/&quot; </span><span class="s2">% </span><span class="s1">request</span><span class="s2">.</span><span class="s1">path_info</span><span class="s2">, </span><span class="s1">urlconf</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">Resolver404</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s0">if </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">match</span><span class="s2">.</span><span class="s1">func</span><span class="s2">, </span><span class="s5">&quot;should_append_slash&quot;</span><span class="s2">, </span><span class="s0">True</span><span class="s2">):</span>
+                    <span class="s0">return </span><span class="s1">HttpResponsePermanentRedirect</span><span class="s2">(</span>
+                        <span class="s1">request</span><span class="s2">.</span><span class="s1">get_full_path</span><span class="s2">(</span><span class="s1">force_append_slash</span><span class="s2">=</span><span class="s0">True</span><span class="s2">)</span>
+                    <span class="s2">)</span>
+        <span class="s0">raise </span><span class="s1">Http404</span>
+
+    <span class="s0">def </span><span class="s1">_build_app_dict</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">label</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Build the app dictionary. The optional `label` parameter filters models 
+        of a specific app. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">app_dict </span><span class="s2">= {}</span>
+
+        <span class="s0">if </span><span class="s1">label</span><span class="s2">:</span>
+            <span class="s1">models </span><span class="s2">= {</span>
+                <span class="s1">m</span><span class="s2">: </span><span class="s1">m_a</span>
+                <span class="s0">for </span><span class="s1">m</span><span class="s2">, </span><span class="s1">m_a </span><span class="s0">in </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_registry</span><span class="s2">.</span><span class="s1">items</span><span class="s2">()</span>
+                <span class="s0">if </span><span class="s1">m</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">app_label </span><span class="s2">== </span><span class="s1">label</span>
+            <span class="s2">}</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">models </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_registry</span>
+
+        <span class="s0">for </span><span class="s1">model</span><span class="s2">, </span><span class="s1">model_admin </span><span class="s0">in </span><span class="s1">models</span><span class="s2">.</span><span class="s1">items</span><span class="s2">():</span>
+            <span class="s1">app_label </span><span class="s2">= </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">app_label</span>
+
+            <span class="s1">has_module_perms </span><span class="s2">= </span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">has_module_permission</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+            <span class="s0">if not </span><span class="s1">has_module_perms</span><span class="s2">:</span>
+                <span class="s0">continue</span>
+
+            <span class="s1">perms </span><span class="s2">= </span><span class="s1">model_admin</span><span class="s2">.</span><span class="s1">get_model_perms</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+
+            <span class="s4"># Check whether user has any perm for this module.</span>
+            <span class="s4"># If so, add the module to the model_list.</span>
+            <span class="s0">if True not in </span><span class="s1">perms</span><span class="s2">.</span><span class="s1">values</span><span class="s2">():</span>
+                <span class="s0">continue</span>
+
+            <span class="s1">info </span><span class="s2">= (</span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">model_name</span><span class="s2">)</span>
+            <span class="s1">model_dict </span><span class="s2">= {</span>
+                <span class="s5">&quot;model&quot;</span><span class="s2">: </span><span class="s1">model</span><span class="s2">,</span>
+                <span class="s5">&quot;name&quot;</span><span class="s2">: </span><span class="s1">capfirst</span><span class="s2">(</span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">verbose_name_plural</span><span class="s2">),</span>
+                <span class="s5">&quot;object_name&quot;</span><span class="s2">: </span><span class="s1">model</span><span class="s2">.</span><span class="s1">_meta</span><span class="s2">.</span><span class="s1">object_name</span><span class="s2">,</span>
+                <span class="s5">&quot;perms&quot;</span><span class="s2">: </span><span class="s1">perms</span><span class="s2">,</span>
+                <span class="s5">&quot;admin_url&quot;</span><span class="s2">: </span><span class="s0">None</span><span class="s2">,</span>
+                <span class="s5">&quot;add_url&quot;</span><span class="s2">: </span><span class="s0">None</span><span class="s2">,</span>
+            <span class="s2">}</span>
+            <span class="s0">if </span><span class="s1">perms</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;change&quot;</span><span class="s2">) </span><span class="s0">or </span><span class="s1">perms</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;view&quot;</span><span class="s2">):</span>
+                <span class="s1">model_dict</span><span class="s2">[</span><span class="s5">&quot;view_only&quot;</span><span class="s2">] = </span><span class="s0">not </span><span class="s1">perms</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;change&quot;</span><span class="s2">)</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">model_dict</span><span class="s2">[</span><span class="s5">&quot;admin_url&quot;</span><span class="s2">] = </span><span class="s1">reverse</span><span class="s2">(</span>
+                        <span class="s5">&quot;admin:%s_%s_changelist&quot; </span><span class="s2">% </span><span class="s1">info</span><span class="s2">, </span><span class="s1">current_app</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+                    <span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">NoReverseMatch</span><span class="s2">:</span>
+                    <span class="s0">pass</span>
+            <span class="s0">if </span><span class="s1">perms</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s5">&quot;add&quot;</span><span class="s2">):</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">model_dict</span><span class="s2">[</span><span class="s5">&quot;add_url&quot;</span><span class="s2">] = </span><span class="s1">reverse</span><span class="s2">(</span>
+                        <span class="s5">&quot;admin:%s_%s_add&quot; </span><span class="s2">% </span><span class="s1">info</span><span class="s2">, </span><span class="s1">current_app</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+                    <span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">NoReverseMatch</span><span class="s2">:</span>
+                    <span class="s0">pass</span>
+
+            <span class="s0">if </span><span class="s1">app_label </span><span class="s0">in </span><span class="s1">app_dict</span><span class="s2">:</span>
+                <span class="s1">app_dict</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">][</span><span class="s5">&quot;models&quot;</span><span class="s2">].</span><span class="s1">append</span><span class="s2">(</span><span class="s1">model_dict</span><span class="s2">)</span>
+            <span class="s0">else</span><span class="s2">:</span>
+                <span class="s1">app_dict</span><span class="s2">[</span><span class="s1">app_label</span><span class="s2">] = {</span>
+                    <span class="s5">&quot;name&quot;</span><span class="s2">: </span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_config</span><span class="s2">(</span><span class="s1">app_label</span><span class="s2">).</span><span class="s1">verbose_name</span><span class="s2">,</span>
+                    <span class="s5">&quot;app_label&quot;</span><span class="s2">: </span><span class="s1">app_label</span><span class="s2">,</span>
+                    <span class="s5">&quot;app_url&quot;</span><span class="s2">: </span><span class="s1">reverse</span><span class="s2">(</span>
+                        <span class="s5">&quot;admin:app_list&quot;</span><span class="s2">,</span>
+                        <span class="s1">kwargs</span><span class="s2">={</span><span class="s5">&quot;app_label&quot;</span><span class="s2">: </span><span class="s1">app_label</span><span class="s2">},</span>
+                        <span class="s1">current_app</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span><span class="s2">,</span>
+                    <span class="s2">),</span>
+                    <span class="s5">&quot;has_module_perms&quot;</span><span class="s2">: </span><span class="s1">has_module_perms</span><span class="s2">,</span>
+                    <span class="s5">&quot;models&quot;</span><span class="s2">: [</span><span class="s1">model_dict</span><span class="s2">],</span>
+                <span class="s2">}</span>
+
+        <span class="s0">return </span><span class="s1">app_dict</span>
+
+    <span class="s0">def </span><span class="s1">get_app_list</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Return a sorted list of all the installed apps that have been 
+        registered in this site. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">app_dict </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">_build_app_dict</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">)</span>
+
+        <span class="s4"># Sort the apps alphabetically.</span>
+        <span class="s1">app_list </span><span class="s2">= </span><span class="s1">sorted</span><span class="s2">(</span><span class="s1">app_dict</span><span class="s2">.</span><span class="s1">values</span><span class="s2">(), </span><span class="s1">key</span><span class="s2">=</span><span class="s0">lambda </span><span class="s1">x</span><span class="s2">: </span><span class="s1">x</span><span class="s2">[</span><span class="s5">&quot;name&quot;</span><span class="s2">].</span><span class="s1">lower</span><span class="s2">())</span>
+
+        <span class="s4"># Sort the models alphabetically within each app.</span>
+        <span class="s0">for </span><span class="s1">app </span><span class="s0">in </span><span class="s1">app_list</span><span class="s2">:</span>
+            <span class="s1">app</span><span class="s2">[</span><span class="s5">&quot;models&quot;</span><span class="s2">].</span><span class="s1">sort</span><span class="s2">(</span><span class="s1">key</span><span class="s2">=</span><span class="s0">lambda </span><span class="s1">x</span><span class="s2">: </span><span class="s1">x</span><span class="s2">[</span><span class="s5">&quot;name&quot;</span><span class="s2">])</span>
+
+        <span class="s0">return </span><span class="s1">app_list</span>
+
+    <span class="s0">def </span><span class="s1">index</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">extra_context</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Display the main admin index page, which lists all of the installed 
+        apps that have been registered in this site. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">app_list </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_app_list</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+
+        <span class="s1">context </span><span class="s2">= {</span>
+            <span class="s2">**</span><span class="s1">self</span><span class="s2">.</span><span class="s1">each_context</span><span class="s2">(</span><span class="s1">request</span><span class="s2">),</span>
+            <span class="s5">&quot;title&quot;</span><span class="s2">: </span><span class="s1">self</span><span class="s2">.</span><span class="s1">index_title</span><span class="s2">,</span>
+            <span class="s5">&quot;subtitle&quot;</span><span class="s2">: </span><span class="s0">None</span><span class="s2">,</span>
+            <span class="s5">&quot;app_list&quot;</span><span class="s2">: </span><span class="s1">app_list</span><span class="s2">,</span>
+            <span class="s2">**(</span><span class="s1">extra_context </span><span class="s0">or </span><span class="s2">{}),</span>
+        <span class="s2">}</span>
+
+        <span class="s1">request</span><span class="s2">.</span><span class="s1">current_app </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+
+        <span class="s0">return </span><span class="s1">TemplateResponse</span><span class="s2">(</span>
+            <span class="s1">request</span><span class="s2">, </span><span class="s1">self</span><span class="s2">.</span><span class="s1">index_template </span><span class="s0">or </span><span class="s5">&quot;admin/index.html&quot;</span><span class="s2">, </span><span class="s1">context</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">app_index</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">, </span><span class="s1">extra_context</span><span class="s2">=</span><span class="s0">None</span><span class="s2">):</span>
+        <span class="s1">app_list </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">get_app_list</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">app_label</span><span class="s2">)</span>
+
+        <span class="s0">if not </span><span class="s1">app_list</span><span class="s2">:</span>
+            <span class="s0">raise </span><span class="s1">Http404</span><span class="s2">(</span><span class="s5">&quot;The requested admin page does not exist.&quot;</span><span class="s2">)</span>
+
+        <span class="s1">context </span><span class="s2">= {</span>
+            <span class="s2">**</span><span class="s1">self</span><span class="s2">.</span><span class="s1">each_context</span><span class="s2">(</span><span class="s1">request</span><span class="s2">),</span>
+            <span class="s5">&quot;title&quot;</span><span class="s2">: </span><span class="s1">_</span><span class="s2">(</span><span class="s5">&quot;%(app)s administration&quot;</span><span class="s2">) % {</span><span class="s5">&quot;app&quot;</span><span class="s2">: </span><span class="s1">app_list</span><span class="s2">[</span><span class="s6">0</span><span class="s2">][</span><span class="s5">&quot;name&quot;</span><span class="s2">]},</span>
+            <span class="s5">&quot;subtitle&quot;</span><span class="s2">: </span><span class="s0">None</span><span class="s2">,</span>
+            <span class="s5">&quot;app_list&quot;</span><span class="s2">: </span><span class="s1">app_list</span><span class="s2">,</span>
+            <span class="s5">&quot;app_label&quot;</span><span class="s2">: </span><span class="s1">app_label</span><span class="s2">,</span>
+            <span class="s2">**(</span><span class="s1">extra_context </span><span class="s0">or </span><span class="s2">{}),</span>
+        <span class="s2">}</span>
+
+        <span class="s1">request</span><span class="s2">.</span><span class="s1">current_app </span><span class="s2">= </span><span class="s1">self</span><span class="s2">.</span><span class="s1">name</span>
+
+        <span class="s0">return </span><span class="s1">TemplateResponse</span><span class="s2">(</span>
+            <span class="s1">request</span><span class="s2">,</span>
+            <span class="s1">self</span><span class="s2">.</span><span class="s1">app_index_template</span>
+            <span class="s0">or </span><span class="s2">[</span><span class="s5">&quot;admin/%s/app_index.html&quot; </span><span class="s2">% </span><span class="s1">app_label</span><span class="s2">, </span><span class="s5">&quot;admin/app_index.html&quot;</span><span class="s2">],</span>
+            <span class="s1">context</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">get_log_entries</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">request</span><span class="s2">):</span>
+        <span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">contrib</span><span class="s2">.</span><span class="s1">admin</span><span class="s2">.</span><span class="s1">models </span><span class="s0">import </span><span class="s1">LogEntry</span>
+
+        <span class="s0">return </span><span class="s1">LogEntry</span><span class="s2">.</span><span class="s1">objects</span><span class="s2">.</span><span class="s1">select_related</span><span class="s2">(</span><span class="s5">&quot;content_type&quot;</span><span class="s2">, </span><span class="s5">&quot;user&quot;</span><span class="s2">)</span>
+
+
+<span class="s0">class </span><span class="s1">DefaultAdminSite</span><span class="s2">(</span><span class="s1">LazyObject</span><span class="s2">):</span>
+    <span class="s0">def </span><span class="s1">_setup</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s1">AdminSiteClass </span><span class="s2">= </span><span class="s1">import_string</span><span class="s2">(</span><span class="s1">apps</span><span class="s2">.</span><span class="s1">get_app_config</span><span class="s2">(</span><span class="s5">&quot;admin&quot;</span><span class="s2">).</span><span class="s1">default_site</span><span class="s2">)</span>
+        <span class="s1">self</span><span class="s2">.</span><span class="s1">_wrapped </span><span class="s2">= </span><span class="s1">AdminSiteClass</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">__repr__</span><span class="s2">(</span><span class="s1">self</span><span class="s2">):</span>
+        <span class="s0">return </span><span class="s1">repr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">.</span><span class="s1">_wrapped</span><span class="s2">)</span>
+
+
+<span class="s4"># This global object represents the default admin site, for the common case.</span>
+<span class="s4"># You can provide your own AdminSite using the (Simple)AdminConfig.default_site</span>
+<span class="s4"># attribute. You can also instantiate AdminSite in your own code to create a</span>
+<span class="s4"># custom admin site.</span>
+<span class="s1">site </span><span class="s2">= </span><span class="s1">DefaultAdminSite</span><span class="s2">()</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<html>
+<head>
+<title>exception.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #5f826b; font-style: italic;}
+.s4 { color: #2aacb8;}
+.s5 { color: #6aab73;}
+.s6 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+exception.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">logging</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">from </span><span class="s1">functools </span><span class="s0">import </span><span class="s1">wraps</span>
+
+<span class="s0">from </span><span class="s1">asgiref</span><span class="s2">.</span><span class="s1">sync </span><span class="s0">import </span><span class="s1">iscoroutinefunction</span><span class="s2">, </span><span class="s1">sync_to_async</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">conf </span><span class="s0">import </span><span class="s1">settings</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core </span><span class="s0">import </span><span class="s1">signals</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">exceptions </span><span class="s0">import </span><span class="s2">(</span>
+    <span class="s1">BadRequest</span><span class="s2">,</span>
+    <span class="s1">PermissionDenied</span><span class="s2">,</span>
+    <span class="s1">RequestDataTooBig</span><span class="s2">,</span>
+    <span class="s1">SuspiciousOperation</span><span class="s2">,</span>
+    <span class="s1">TooManyFieldsSent</span><span class="s2">,</span>
+    <span class="s1">TooManyFilesSent</span><span class="s2">,</span>
+<span class="s2">)</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">http </span><span class="s0">import </span><span class="s1">Http404</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">http</span><span class="s2">.</span><span class="s1">multipartparser </span><span class="s0">import </span><span class="s1">MultiPartParserError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">urls </span><span class="s0">import </span><span class="s1">get_resolver</span><span class="s2">, </span><span class="s1">get_urlconf</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">log </span><span class="s0">import </span><span class="s1">log_response</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">views </span><span class="s0">import </span><span class="s1">debug</span>
+
+
+<span class="s0">def </span><span class="s1">convert_exception_to_response</span><span class="s2">(</span><span class="s1">get_response</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Wrap the given get_response callable in exception-to-response conversion. 
+ 
+    All exceptions will be converted. All known 4xx exceptions (Http404, 
+    PermissionDenied, MultiPartParserError, SuspiciousOperation) will be 
+    converted to the appropriate response, and all other exceptions will be 
+    converted to 500 responses. 
+ 
+    This decorator is automatically applied to all middleware to ensure that 
+    no middleware leaks an exception and that the next middleware in the stack 
+    can rely on getting a response instead of an exception. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">iscoroutinefunction</span><span class="s2">(</span><span class="s1">get_response</span><span class="s2">):</span>
+
+        <span class="s2">@</span><span class="s1">wraps</span><span class="s2">(</span><span class="s1">get_response</span><span class="s2">)</span>
+        <span class="s0">async def </span><span class="s1">inner</span><span class="s2">(</span><span class="s1">request</span><span class="s2">):</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">response </span><span class="s2">= </span><span class="s0">await </span><span class="s1">get_response</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">exc</span><span class="s2">:</span>
+                <span class="s1">response </span><span class="s2">= </span><span class="s0">await </span><span class="s1">sync_to_async</span><span class="s2">(</span>
+                    <span class="s1">response_for_exception</span><span class="s2">, </span><span class="s1">thread_sensitive</span><span class="s2">=</span><span class="s0">False</span>
+                <span class="s2">)(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">exc</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">response</span>
+
+        <span class="s0">return </span><span class="s1">inner</span>
+    <span class="s0">else</span><span class="s2">:</span>
+
+        <span class="s2">@</span><span class="s1">wraps</span><span class="s2">(</span><span class="s1">get_response</span><span class="s2">)</span>
+        <span class="s0">def </span><span class="s1">inner</span><span class="s2">(</span><span class="s1">request</span><span class="s2">):</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">response </span><span class="s2">= </span><span class="s1">get_response</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">Exception </span><span class="s0">as </span><span class="s1">exc</span><span class="s2">:</span>
+                <span class="s1">response </span><span class="s2">= </span><span class="s1">response_for_exception</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">exc</span><span class="s2">)</span>
+            <span class="s0">return </span><span class="s1">response</span>
+
+        <span class="s0">return </span><span class="s1">inner</span>
+
+
+<span class="s0">def </span><span class="s1">response_for_exception</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">exc</span><span class="s2">):</span>
+    <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">, </span><span class="s1">Http404</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DEBUG</span><span class="s2">:</span>
+            <span class="s1">response </span><span class="s2">= </span><span class="s1">debug</span><span class="s2">.</span><span class="s1">technical_404_response</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">exc</span><span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">response </span><span class="s2">= </span><span class="s1">get_exception_response</span><span class="s2">(</span>
+                <span class="s1">request</span><span class="s2">, </span><span class="s1">get_resolver</span><span class="s2">(</span><span class="s1">get_urlconf</span><span class="s2">()), </span><span class="s4">404</span><span class="s2">, </span><span class="s1">exc</span>
+            <span class="s2">)</span>
+
+    <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">, </span><span class="s1">PermissionDenied</span><span class="s2">):</span>
+        <span class="s1">response </span><span class="s2">= </span><span class="s1">get_exception_response</span><span class="s2">(</span>
+            <span class="s1">request</span><span class="s2">, </span><span class="s1">get_resolver</span><span class="s2">(</span><span class="s1">get_urlconf</span><span class="s2">()), </span><span class="s4">403</span><span class="s2">, </span><span class="s1">exc</span>
+        <span class="s2">)</span>
+        <span class="s1">log_response</span><span class="s2">(</span>
+            <span class="s5">&quot;Forbidden (Permission denied): %s&quot;</span><span class="s2">,</span>
+            <span class="s1">request</span><span class="s2">.</span><span class="s1">path</span><span class="s2">,</span>
+            <span class="s1">response</span><span class="s2">=</span><span class="s1">response</span><span class="s2">,</span>
+            <span class="s1">request</span><span class="s2">=</span><span class="s1">request</span><span class="s2">,</span>
+            <span class="s1">exception</span><span class="s2">=</span><span class="s1">exc</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">, </span><span class="s1">MultiPartParserError</span><span class="s2">):</span>
+        <span class="s1">response </span><span class="s2">= </span><span class="s1">get_exception_response</span><span class="s2">(</span>
+            <span class="s1">request</span><span class="s2">, </span><span class="s1">get_resolver</span><span class="s2">(</span><span class="s1">get_urlconf</span><span class="s2">()), </span><span class="s4">400</span><span class="s2">, </span><span class="s1">exc</span>
+        <span class="s2">)</span>
+        <span class="s1">log_response</span><span class="s2">(</span>
+            <span class="s5">&quot;Bad request (Unable to parse request body): %s&quot;</span><span class="s2">,</span>
+            <span class="s1">request</span><span class="s2">.</span><span class="s1">path</span><span class="s2">,</span>
+            <span class="s1">response</span><span class="s2">=</span><span class="s1">response</span><span class="s2">,</span>
+            <span class="s1">request</span><span class="s2">=</span><span class="s1">request</span><span class="s2">,</span>
+            <span class="s1">exception</span><span class="s2">=</span><span class="s1">exc</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">, </span><span class="s1">BadRequest</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DEBUG</span><span class="s2">:</span>
+            <span class="s1">response </span><span class="s2">= </span><span class="s1">debug</span><span class="s2">.</span><span class="s1">technical_500_response</span><span class="s2">(</span>
+                <span class="s1">request</span><span class="s2">, *</span><span class="s1">sys</span><span class="s2">.</span><span class="s1">exc_info</span><span class="s2">(), </span><span class="s1">status_code</span><span class="s2">=</span><span class="s4">400</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">response </span><span class="s2">= </span><span class="s1">get_exception_response</span><span class="s2">(</span>
+                <span class="s1">request</span><span class="s2">, </span><span class="s1">get_resolver</span><span class="s2">(</span><span class="s1">get_urlconf</span><span class="s2">()), </span><span class="s4">400</span><span class="s2">, </span><span class="s1">exc</span>
+            <span class="s2">)</span>
+        <span class="s1">log_response</span><span class="s2">(</span>
+            <span class="s5">&quot;%s: %s&quot;</span><span class="s2">,</span>
+            <span class="s1">str</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">),</span>
+            <span class="s1">request</span><span class="s2">.</span><span class="s1">path</span><span class="s2">,</span>
+            <span class="s1">response</span><span class="s2">=</span><span class="s1">response</span><span class="s2">,</span>
+            <span class="s1">request</span><span class="s2">=</span><span class="s1">request</span><span class="s2">,</span>
+            <span class="s1">exception</span><span class="s2">=</span><span class="s1">exc</span><span class="s2">,</span>
+        <span class="s2">)</span>
+    <span class="s0">elif </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">, </span><span class="s1">SuspiciousOperation</span><span class="s2">):</span>
+        <span class="s0">if </span><span class="s1">isinstance</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">, (</span><span class="s1">RequestDataTooBig</span><span class="s2">, </span><span class="s1">TooManyFieldsSent</span><span class="s2">, </span><span class="s1">TooManyFilesSent</span><span class="s2">)):</span>
+            <span class="s6"># POST data can't be accessed again, otherwise the original</span>
+            <span class="s6"># exception would be raised.</span>
+            <span class="s1">request</span><span class="s2">.</span><span class="s1">_mark_post_parse_error</span><span class="s2">()</span>
+
+        <span class="s6"># The request logger receives events for any problematic request</span>
+        <span class="s6"># The security logger receives events for all SuspiciousOperations</span>
+        <span class="s1">security_logger </span><span class="s2">= </span><span class="s1">logging</span><span class="s2">.</span><span class="s1">getLogger</span><span class="s2">(</span>
+            <span class="s5">&quot;django.security.%s&quot; </span><span class="s2">% </span><span class="s1">exc</span><span class="s2">.</span><span class="s1">__class__</span><span class="s2">.</span><span class="s1">__name__</span>
+        <span class="s2">)</span>
+        <span class="s1">security_logger</span><span class="s2">.</span><span class="s1">error</span><span class="s2">(</span>
+            <span class="s1">str</span><span class="s2">(</span><span class="s1">exc</span><span class="s2">),</span>
+            <span class="s1">exc_info</span><span class="s2">=</span><span class="s1">exc</span><span class="s2">,</span>
+            <span class="s1">extra</span><span class="s2">={</span><span class="s5">&quot;status_code&quot;</span><span class="s2">: </span><span class="s4">400</span><span class="s2">, </span><span class="s5">&quot;request&quot;</span><span class="s2">: </span><span class="s1">request</span><span class="s2">},</span>
+        <span class="s2">)</span>
+        <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DEBUG</span><span class="s2">:</span>
+            <span class="s1">response </span><span class="s2">= </span><span class="s1">debug</span><span class="s2">.</span><span class="s1">technical_500_response</span><span class="s2">(</span>
+                <span class="s1">request</span><span class="s2">, *</span><span class="s1">sys</span><span class="s2">.</span><span class="s1">exc_info</span><span class="s2">(), </span><span class="s1">status_code</span><span class="s2">=</span><span class="s4">400</span>
+            <span class="s2">)</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s1">response </span><span class="s2">= </span><span class="s1">get_exception_response</span><span class="s2">(</span>
+                <span class="s1">request</span><span class="s2">, </span><span class="s1">get_resolver</span><span class="s2">(</span><span class="s1">get_urlconf</span><span class="s2">()), </span><span class="s4">400</span><span class="s2">, </span><span class="s1">exc</span>
+            <span class="s2">)</span>
+
+    <span class="s0">else</span><span class="s2">:</span>
+        <span class="s1">signals</span><span class="s2">.</span><span class="s1">got_request_exception</span><span class="s2">.</span><span class="s1">send</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">request</span><span class="s2">=</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s1">response </span><span class="s2">= </span><span class="s1">handle_uncaught_exception</span><span class="s2">(</span>
+            <span class="s1">request</span><span class="s2">, </span><span class="s1">get_resolver</span><span class="s2">(</span><span class="s1">get_urlconf</span><span class="s2">()), </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">exc_info</span><span class="s2">()</span>
+        <span class="s2">)</span>
+        <span class="s1">log_response</span><span class="s2">(</span>
+            <span class="s5">&quot;%s: %s&quot;</span><span class="s2">,</span>
+            <span class="s1">response</span><span class="s2">.</span><span class="s1">reason_phrase</span><span class="s2">,</span>
+            <span class="s1">request</span><span class="s2">.</span><span class="s1">path</span><span class="s2">,</span>
+            <span class="s1">response</span><span class="s2">=</span><span class="s1">response</span><span class="s2">,</span>
+            <span class="s1">request</span><span class="s2">=</span><span class="s1">request</span><span class="s2">,</span>
+            <span class="s1">exception</span><span class="s2">=</span><span class="s1">exc</span><span class="s2">,</span>
+        <span class="s2">)</span>
+
+    <span class="s6"># Force a TemplateResponse to be rendered.</span>
+    <span class="s0">if not </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">response</span><span class="s2">, </span><span class="s5">&quot;is_rendered&quot;</span><span class="s2">, </span><span class="s0">True</span><span class="s2">) </span><span class="s0">and </span><span class="s1">callable</span><span class="s2">(</span>
+        <span class="s1">getattr</span><span class="s2">(</span><span class="s1">response</span><span class="s2">, </span><span class="s5">&quot;render&quot;</span><span class="s2">, </span><span class="s0">None</span><span class="s2">)</span>
+    <span class="s2">):</span>
+        <span class="s1">response </span><span class="s2">= </span><span class="s1">response</span><span class="s2">.</span><span class="s1">render</span><span class="s2">()</span>
+
+    <span class="s0">return </span><span class="s1">response</span>
+
+
+<span class="s0">def </span><span class="s1">get_exception_response</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">resolver</span><span class="s2">, </span><span class="s1">status_code</span><span class="s2">, </span><span class="s1">exception</span><span class="s2">):</span>
+    <span class="s0">try</span><span class="s2">:</span>
+        <span class="s1">callback </span><span class="s2">= </span><span class="s1">resolver</span><span class="s2">.</span><span class="s1">resolve_error_handler</span><span class="s2">(</span><span class="s1">status_code</span><span class="s2">)</span>
+        <span class="s1">response </span><span class="s2">= </span><span class="s1">callback</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">exception</span><span class="s2">=</span><span class="s1">exception</span><span class="s2">)</span>
+    <span class="s0">except </span><span class="s1">Exception</span><span class="s2">:</span>
+        <span class="s1">signals</span><span class="s2">.</span><span class="s1">got_request_exception</span><span class="s2">.</span><span class="s1">send</span><span class="s2">(</span><span class="s1">sender</span><span class="s2">=</span><span class="s0">None</span><span class="s2">, </span><span class="s1">request</span><span class="s2">=</span><span class="s1">request</span><span class="s2">)</span>
+        <span class="s1">response </span><span class="s2">= </span><span class="s1">handle_uncaught_exception</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">resolver</span><span class="s2">, </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">exc_info</span><span class="s2">())</span>
+
+    <span class="s0">return </span><span class="s1">response</span>
+
+
+<span class="s0">def </span><span class="s1">handle_uncaught_exception</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, </span><span class="s1">resolver</span><span class="s2">, </span><span class="s1">exc_info</span><span class="s2">):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Processing for any otherwise uncaught exceptions (those that will 
+    generate HTTP 500 responses). 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DEBUG_PROPAGATE_EXCEPTIONS</span><span class="s2">:</span>
+        <span class="s0">raise</span>
+
+    <span class="s0">if </span><span class="s1">settings</span><span class="s2">.</span><span class="s1">DEBUG</span><span class="s2">:</span>
+        <span class="s0">return </span><span class="s1">debug</span><span class="s2">.</span><span class="s1">technical_500_response</span><span class="s2">(</span><span class="s1">request</span><span class="s2">, *</span><span class="s1">exc_info</span><span class="s2">)</span>
+
+    <span class="s6"># Return an HttpResponse that displays a friendly error message.</span>
+    <span class="s1">callback </span><span class="s2">= </span><span class="s1">resolver</span><span class="s2">.</span><span class="s1">resolve_error_handler</span><span class="s2">(</span><span class="s4">500</span><span class="s2">)</span>
+    <span class="s0">return </span><span class="s1">callback</span><span class="s2">(</span><span class="s1">request</span><span class="s2">)</span>
+</pre>
+</body>
+</html>

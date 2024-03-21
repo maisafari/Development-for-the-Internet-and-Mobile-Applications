@@ -1,0 +1,161 @@
+<html>
+<head>
+<title>shell.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #7a7e85;}
+.s5 { color: #2aacb8;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+shell.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">select</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">traceback</span>
+
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">core</span><span class="s2">.</span><span class="s1">management </span><span class="s0">import </span><span class="s1">BaseCommand</span><span class="s2">, </span><span class="s1">CommandError</span>
+<span class="s0">from </span><span class="s1">django</span><span class="s2">.</span><span class="s1">utils</span><span class="s2">.</span><span class="s1">datastructures </span><span class="s0">import </span><span class="s1">OrderedSet</span>
+
+
+<span class="s0">class </span><span class="s1">Command</span><span class="s2">(</span><span class="s1">BaseCommand</span><span class="s2">):</span>
+    <span class="s1">help </span><span class="s2">= (</span>
+        <span class="s3">&quot;Runs a Python interactive interpreter. Tries to use IPython or &quot;</span>
+        <span class="s3">&quot;bpython, if one of them is available. Any standard input is executed &quot;</span>
+        <span class="s3">&quot;as code.&quot;</span>
+    <span class="s2">)</span>
+
+    <span class="s1">requires_system_checks </span><span class="s2">= []</span>
+    <span class="s1">shells </span><span class="s2">= [</span><span class="s3">&quot;ipython&quot;</span><span class="s2">, </span><span class="s3">&quot;bpython&quot;</span><span class="s2">, </span><span class="s3">&quot;python&quot;</span><span class="s2">]</span>
+
+    <span class="s0">def </span><span class="s1">add_arguments</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">parser</span><span class="s2">):</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;--no-startup&quot;</span><span class="s2">,</span>
+            <span class="s1">action</span><span class="s2">=</span><span class="s3">&quot;store_true&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;When using plain Python, ignore the PYTHONSTARTUP environment &quot;</span>
+                <span class="s3">&quot;variable and ~/.pythonrc.py script.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;-i&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--interface&quot;</span><span class="s2">,</span>
+            <span class="s1">choices</span><span class="s2">=</span><span class="s1">self</span><span class="s2">.</span><span class="s1">shells</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Specify an interactive interpreter interface. Available options: &quot;</span>
+                <span class="s3">'&quot;ipython&quot;, &quot;bpython&quot;, and &quot;python&quot;'</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+        <span class="s1">parser</span><span class="s2">.</span><span class="s1">add_argument</span><span class="s2">(</span>
+            <span class="s3">&quot;-c&quot;</span><span class="s2">,</span>
+            <span class="s3">&quot;--command&quot;</span><span class="s2">,</span>
+            <span class="s1">help</span><span class="s2">=(</span>
+                <span class="s3">&quot;Instead of opening an interactive shell, run a command as Django and &quot;</span>
+                <span class="s3">&quot;exit.&quot;</span>
+            <span class="s2">),</span>
+        <span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">ipython</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s0">from </span><span class="s1">IPython </span><span class="s0">import </span><span class="s1">start_ipython</span>
+
+        <span class="s1">start_ipython</span><span class="s2">(</span><span class="s1">argv</span><span class="s2">=[])</span>
+
+    <span class="s0">def </span><span class="s1">bpython</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s0">import </span><span class="s1">bpython</span>
+
+        <span class="s1">bpython</span><span class="s2">.</span><span class="s1">embed</span><span class="s2">()</span>
+
+    <span class="s0">def </span><span class="s1">python</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s0">import </span><span class="s1">code</span>
+
+        <span class="s4"># Set up a dictionary to serve as the environment for the shell.</span>
+        <span class="s1">imported_objects </span><span class="s2">= {}</span>
+
+        <span class="s4"># We want to honor both $PYTHONSTARTUP and .pythonrc.py, so follow system</span>
+        <span class="s4"># conventions and get $PYTHONSTARTUP first then .pythonrc.py.</span>
+        <span class="s0">if not </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;no_startup&quot;</span><span class="s2">]:</span>
+            <span class="s0">for </span><span class="s1">pythonrc </span><span class="s0">in </span><span class="s1">OrderedSet</span><span class="s2">(</span>
+                <span class="s2">[</span><span class="s1">os</span><span class="s2">.</span><span class="s1">environ</span><span class="s2">.</span><span class="s1">get</span><span class="s2">(</span><span class="s3">&quot;PYTHONSTARTUP&quot;</span><span class="s2">), </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">expanduser</span><span class="s2">(</span><span class="s3">&quot;~/.pythonrc.py&quot;</span><span class="s2">)]</span>
+            <span class="s2">):</span>
+                <span class="s0">if not </span><span class="s1">pythonrc</span><span class="s2">:</span>
+                    <span class="s0">continue</span>
+                <span class="s0">if not </span><span class="s1">os</span><span class="s2">.</span><span class="s1">path</span><span class="s2">.</span><span class="s1">isfile</span><span class="s2">(</span><span class="s1">pythonrc</span><span class="s2">):</span>
+                    <span class="s0">continue</span>
+                <span class="s0">with </span><span class="s1">open</span><span class="s2">(</span><span class="s1">pythonrc</span><span class="s2">) </span><span class="s0">as </span><span class="s1">handle</span><span class="s2">:</span>
+                    <span class="s1">pythonrc_code </span><span class="s2">= </span><span class="s1">handle</span><span class="s2">.</span><span class="s1">read</span><span class="s2">()</span>
+                <span class="s4"># Match the behavior of the cpython shell where an error in</span>
+                <span class="s4"># PYTHONSTARTUP prints an exception and continues.</span>
+                <span class="s0">try</span><span class="s2">:</span>
+                    <span class="s1">exec</span><span class="s2">(</span><span class="s1">compile</span><span class="s2">(</span><span class="s1">pythonrc_code</span><span class="s2">, </span><span class="s1">pythonrc</span><span class="s2">, </span><span class="s3">&quot;exec&quot;</span><span class="s2">), </span><span class="s1">imported_objects</span><span class="s2">)</span>
+                <span class="s0">except </span><span class="s1">Exception</span><span class="s2">:</span>
+                    <span class="s1">traceback</span><span class="s2">.</span><span class="s1">print_exc</span><span class="s2">()</span>
+
+        <span class="s4"># By default, this will set up readline to do tab completion and to read and</span>
+        <span class="s4"># write history to the .python_history file, but this can be overridden by</span>
+        <span class="s4"># $PYTHONSTARTUP or ~/.pythonrc.py.</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s1">hook </span><span class="s2">= </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">__interactivehook__</span>
+        <span class="s0">except </span><span class="s1">AttributeError</span><span class="s2">:</span>
+            <span class="s4"># Match the behavior of the cpython shell where a missing</span>
+            <span class="s4"># sys.__interactivehook__ is ignored.</span>
+            <span class="s0">pass</span>
+        <span class="s0">else</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s1">hook</span><span class="s2">()</span>
+            <span class="s0">except </span><span class="s1">Exception</span><span class="s2">:</span>
+                <span class="s4"># Match the behavior of the cpython shell where an error in</span>
+                <span class="s4"># sys.__interactivehook__ prints a warning and the exception</span>
+                <span class="s4"># and continues.</span>
+                <span class="s1">print</span><span class="s2">(</span><span class="s3">&quot;Failed calling sys.__interactivehook__&quot;</span><span class="s2">)</span>
+                <span class="s1">traceback</span><span class="s2">.</span><span class="s1">print_exc</span><span class="s2">()</span>
+
+        <span class="s4"># Set up tab completion for objects imported by $PYTHONSTARTUP or</span>
+        <span class="s4"># ~/.pythonrc.py.</span>
+        <span class="s0">try</span><span class="s2">:</span>
+            <span class="s0">import </span><span class="s1">readline</span>
+            <span class="s0">import </span><span class="s1">rlcompleter</span>
+
+            <span class="s1">readline</span><span class="s2">.</span><span class="s1">set_completer</span><span class="s2">(</span><span class="s1">rlcompleter</span><span class="s2">.</span><span class="s1">Completer</span><span class="s2">(</span><span class="s1">imported_objects</span><span class="s2">).</span><span class="s1">complete</span><span class="s2">)</span>
+        <span class="s0">except </span><span class="s1">ImportError</span><span class="s2">:</span>
+            <span class="s0">pass</span>
+
+        <span class="s4"># Start the interactive interpreter.</span>
+        <span class="s1">code</span><span class="s2">.</span><span class="s1">interact</span><span class="s2">(</span><span class="s1">local</span><span class="s2">=</span><span class="s1">imported_objects</span><span class="s2">)</span>
+
+    <span class="s0">def </span><span class="s1">handle</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, **</span><span class="s1">options</span><span class="s2">):</span>
+        <span class="s4"># Execute the command and exit.</span>
+        <span class="s0">if </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;command&quot;</span><span class="s2">]:</span>
+            <span class="s1">exec</span><span class="s2">(</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;command&quot;</span><span class="s2">], </span><span class="s1">globals</span><span class="s2">())</span>
+            <span class="s0">return</span>
+
+        <span class="s4"># Execute stdin if it has anything to read and exit.</span>
+        <span class="s4"># Not supported on Windows due to select.select() limitations.</span>
+        <span class="s0">if </span><span class="s2">(</span>
+            <span class="s1">sys</span><span class="s2">.</span><span class="s1">platform </span><span class="s2">!= </span><span class="s3">&quot;win32&quot;</span>
+            <span class="s0">and not </span><span class="s1">sys</span><span class="s2">.</span><span class="s1">stdin</span><span class="s2">.</span><span class="s1">isatty</span><span class="s2">()</span>
+            <span class="s0">and </span><span class="s1">select</span><span class="s2">.</span><span class="s1">select</span><span class="s2">([</span><span class="s1">sys</span><span class="s2">.</span><span class="s1">stdin</span><span class="s2">], [], [], </span><span class="s5">0</span><span class="s2">)[</span><span class="s5">0</span><span class="s2">]</span>
+        <span class="s2">):</span>
+            <span class="s1">exec</span><span class="s2">(</span><span class="s1">sys</span><span class="s2">.</span><span class="s1">stdin</span><span class="s2">.</span><span class="s1">read</span><span class="s2">(), </span><span class="s1">globals</span><span class="s2">())</span>
+            <span class="s0">return</span>
+
+        <span class="s1">available_shells </span><span class="s2">= (</span>
+            <span class="s2">[</span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;interface&quot;</span><span class="s2">]] </span><span class="s0">if </span><span class="s1">options</span><span class="s2">[</span><span class="s3">&quot;interface&quot;</span><span class="s2">] </span><span class="s0">else </span><span class="s1">self</span><span class="s2">.</span><span class="s1">shells</span>
+        <span class="s2">)</span>
+
+        <span class="s0">for </span><span class="s1">shell </span><span class="s0">in </span><span class="s1">available_shells</span><span class="s2">:</span>
+            <span class="s0">try</span><span class="s2">:</span>
+                <span class="s0">return </span><span class="s1">getattr</span><span class="s2">(</span><span class="s1">self</span><span class="s2">, </span><span class="s1">shell</span><span class="s2">)(</span><span class="s1">options</span><span class="s2">)</span>
+            <span class="s0">except </span><span class="s1">ImportError</span><span class="s2">:</span>
+                <span class="s0">pass</span>
+        <span class="s0">raise </span><span class="s1">CommandError</span><span class="s2">(</span><span class="s3">&quot;Couldn't import {} interface.&quot;</span><span class="s2">.</span><span class="s1">format</span><span class="s2">(</span><span class="s1">shell</span><span class="s2">))</span>
+</pre>
+</body>
+</html>
