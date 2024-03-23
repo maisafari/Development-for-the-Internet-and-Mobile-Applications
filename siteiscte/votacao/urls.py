@@ -12,10 +12,7 @@ urlpatterns = [
     path('<int:questao_id>/resultados', views.resultados,
          name='resultados'),
     # ex: votacao/5/voto
-    path('<int:questao_id>/voto', views.voto,name='voto'),
     # ex: votacao/3/resultados
-    path('<int:questao_id>/resultados', views.resultados,
-         name='resultados'),
     # ex: votacao/5/voto
     path('<int:questao_id>/voto', views.voto,
          name='voto'),
@@ -25,6 +22,5 @@ urlpatterns = [
 
     path('<int:questao_id>/remover/', views.remover_questao, name='remover_questao'),
 
-    path('<int:questao_id>/removeropcao/', views.remover_opcao, name='remover_opcao'),
 
 ]

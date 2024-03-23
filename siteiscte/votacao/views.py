@@ -18,40 +18,32 @@ def resultados(request, questao_id):
  return render(request,
 'votacao/resultados.html',{'questao': questao})
 def voto(request, questao_id):
-    print(1)
+    if request.method == 'POST':
+        if 'Votar' in request.POST['action']:
+            questao = get_object_or_404(Questao, pk=questao_id)
+            opcao_id = request.POST.get('opcao_id')
+            try:
+                opcao_selecionada = questao.opcao_set.get(pk=opcao_id)
+            except (KeyError, Opcao.DoesNotExist):
+                return render(request, 'votacao/detalhe.html', {'questao': questao, 'error_message': "Não escolheu uma opção"})
+            else:
+                opcao_selecionada.votos += 1
+                opcao_selecionada.save()
+                return HttpResponseRedirect(reverse('votacao:resultados', args=(questao.id,)))
 
-    if request.method == 'POST': #and request.POST.get('input.name') == 'Remover':
-        print(2)
-        questao_id = request.POST.get('questao_id')
-        print(questao_id)
-        q = get_object_or_404(Questao, pk=questao_id)
+        elif 'Remover' in request.POST['action']:
+            opcao_id = request.POST.get('opcao_id')
+            if opcao_id:
+                q = get_object_or_404(Questao, pk=questao_id)
+                try:
+                    opcao_selecionada = q.opcao_set.get(pk=opcao_id)
+                    opcao_selecionada.delete()
+                    return redirect('votacao:detalhe', questao_id=questao_id)
+                except (KeyError, Opcao.DoesNotExist):
+                    return redirect('votacao:voto')
 
-        try:
-            opcao_selecionada = q.opcao_set.get(pk=request.POST['opcao'])
-            opcao_selecionada.delete()
-            return redirect('votacao:index')
+    return redirect('votacao:index')
 
-        except (KeyError, Opcao.DoesNotExist):
-            return redirect('votacao:voto')
-
-
-    elif request.method == 'POST' and request.POST.get('action') == 'Voto':
-        print(4)
-        questao = get_object_or_404(Questao, pk=questao_id)
-        try:
-            opcao_seleccionada =questao.opcao_set.get(pk=request.POST['opcao'])
-
-        except (KeyError, Opcao.DoesNotExist):
-    # Apresenta de novo o form para votar
-            return render(request, 'votacao/detalhe.html', {'questao': questao,'error_message': "Não escolheu uma opção",})
-        else:
-            opcao_seleccionada.votos += 1
-            opcao_seleccionada.save()
-
-
-            return HttpResponseRedirect(reverse('votacao:resultados',args=(questao.id,)))
-
-    else: return redirect('votacao:index')
 
 def criar_questao(request):
     if request.method == 'POST':
@@ -81,16 +73,6 @@ def criar_opcao(request, questao_id):
 
 def remover_questao(request, questao_id):
     if request.method == 'POST':
-        questao_id = request.POST.get('questao_id')
-        questao = get_object_or_404(Questao, pk=questao_id)
-        questao.delete()
-        return redirect('votacao:index')
-    else:
-        return redirect('votacao:index')
-
-
-def remover_opcao(request, questao_id):
-    if request.method == 'POST' and request.POST.get('Remover') == 'opcao_id':
         questao_id = request.POST.get('questao_id')
         questao = get_object_or_404(Questao, pk=questao_id)
         questao.delete()
