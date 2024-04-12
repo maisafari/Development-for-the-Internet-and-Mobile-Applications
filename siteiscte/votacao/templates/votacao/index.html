@@ -1,22 +1,44 @@
-{% if request.session.username %}
-    <p>Olá, {{ request.session.username }}!</p>
+{% if request.user.is_authenticated %}
+    {% if not is_aluno %}
 
-{% if latest_question_list %}
- <ul>
- {% for questao in latest_question_list %}
-<li>
-<a href="{% url 'votacao:detalhe' questao.id %}">
-{{ questao.questao_texto }}
-</a>
-</li>
- {% endfor %}
- </ul>
-{% else %}
- <p>Nao ha questoes disponiveis.</p>
-{% endif %}
-<a href="{% url 'votacao:criarquestao' %}">Criar Nova Questão</a> </br>
-    <p><a href="{% url 'votacao:logout' %}">Sair</a></p>
+        <p>Olá, {{ request.session.username }}!</p>
+
+        {% if latest_question_list %}
+        <ul>
+        {% for questao in latest_question_list %}
+        <li>
+        <a href="{% url 'votacao:detalhe' questao.id %}">
+        {{ questao.questao_texto }}
+        </a>
+        </li>
+         {% endfor %}
+         </ul>
+        {% else %}
+         <p>Nao ha questoes disponiveis.</p>
+        {% endif %}
+        <a href="{% url 'votacao:criarquestao' %}">Criar Nova Questão</a> </br>
+            <p><a href="{% url 'votacao:logout' %}">Sair</a></p>
+            {% endif %}
+
+
+    {% elif is_aluno %}
+
+        {% if latest_question_list %}
+             <ul>
+             {% for questao in latest_question_list %}
+            <li>
+            <a href="{% url 'votacao:detalhe' questao.id %}">
+            {{ questao.questao_texto }}
+            </a>
+            </li>
+             {% endfor %}
+             </ul>
+    {% else %}
+        <p>Nao ha questoes disponiveis.</p>
+    {% endif %}
 
 {% else %}
     <p>Faça <a href="{% url 'votacao:login' %}">login</a> para acerder a funcionalidades.</p>
     {% endif %}
+
+

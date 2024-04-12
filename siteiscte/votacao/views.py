@@ -4,7 +4,7 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.shortcuts import render, get_object_or_404, redirect
 
 from .forms import AlunoForm, UserRegistoForm
-from .models import Questao, Opcao
+from .models import Questao, Opcao, Aluno
 from django.template import loader
 from django.http import Http404, HttpResponse,HttpResponseRedirect
 from django.urls import reverse
@@ -12,9 +12,30 @@ from django.contrib.auth import authenticate, login, logout
 
 
 def index(request):
-    latest_question_list =Questao.objects.order_by('-pub_data')[:5]
-    context = {'latest_question_list':latest_question_list}
-    return render(request, 'votacao/index.html',context)
+    if request.user.is_authenticated:
+
+        latest_question_list = Questao.objects.order_by('-pub_data')[:5]
+
+        try:
+            aluno = Aluno.objects.get(user=request.user)
+        except Aluno.DoesNotExist:
+            aluno = None
+
+        context = {}
+        if aluno:
+            context['is_aluno'] = True
+            context['latest_question_list'] = latest_question_list
+
+        else:
+            context['is_aluno'] = False
+            context['latest_question_list'] = latest_question_list
+
+        # Renderizar o template index.html com o contexto adequado
+        return render(request, 'votacao/index.html', context)
+    else:
+        return redirect('votacao:login')
+
+
 def detalhe(request, questao_id):
     questao = get_object_or_404(Questao, pk=questao_id)
     return render(request, 'votacao/detalhe.html',{'questao': questao})
