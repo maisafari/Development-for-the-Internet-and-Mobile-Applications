@@ -1,11 +1,16 @@
 from datetime import datetime
 
+from django.contrib.auth.forms import AuthenticationForm
 from django.shortcuts import render, get_object_or_404, redirect
 
+from .forms import AlunoForm, UserRegistoForm
 from .models import Questao, Opcao
 from django.template import loader
 from django.http import Http404, HttpResponse,HttpResponseRedirect
 from django.urls import reverse
+from django.contrib.auth import authenticate, login, logout
+
+
 def index(request):
     latest_question_list =Questao.objects.order_by('-pub_data')[:5]
     context = {'latest_question_list':latest_question_list}
@@ -80,5 +85,37 @@ def remover_questao(request, questao_id):
     else:
         return redirect('votacao:index')
 
+def registo_user(request):
+    if request.method == 'POST':
+        form_user = UserRegistoForm(request.POST)
+        form_aluno = AlunoForm(request.POST)
+        if form_user.is_valid() and form_aluno.is_valid():
+            user = form_user.save()
+            aluno = form_aluno.save(commit=False)
+            aluno.user = user
+            aluno.save()
+            raw_password = form_user.cleaned_data.get('password1')
+            user = authenticate(username=user.username, password=raw_password)
+            login(request, user)
+            return redirect('votacao:index')  # Altere 'pagina_principal' para a página desejada após o registro
+    else:
+        form_user = UserRegistoForm()
+        form_aluno = AlunoForm()
+    return render(request, 'votacao/registo_user.html', {'form_user': form_user, 'form_aluno': form_aluno})
 
+def login_user(request):
+    if request.method == 'POST':
+        form = AuthenticationForm(request, request.POST)
+        if form.is_valid():
+            user = form.get_user()
+            login(request, user)
+            request.session['username'] = user.username  # Armazena o username na sessão
+            return redirect('votacao:index')
+    else:
+        form = AuthenticationForm()
+    return render(request, 'votacao/login.html', {'form': form})
+
+def logoutview(request):
+    logout(request)
+    return redirect(reverse('votacao:login'))
 

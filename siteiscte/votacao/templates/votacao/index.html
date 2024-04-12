@@ -1,3 +1,6 @@
+{% if request.session.username %}
+    <p>Olá, {{ request.session.username }}!</p>
+
 {% if latest_question_list %}
  <ul>
  {% for questao in latest_question_list %}
@@ -11,4 +14,9 @@
 {% else %}
  <p>Nao ha questoes disponiveis.</p>
 {% endif %}
-<a href="{% url 'votacao:criarquestao' %}">Criar Nova Questão</a>
+<a href="{% url 'votacao:criarquestao' %}">Criar Nova Questão</a> </br>
+    <p><a href="{% url 'votacao:logout' %}">Sair</a></p>
+
+{% else %}
+    <p>Faça <a href="{% url 'votacao:login' %}">login</a> para acerder a funcionalidades.</p>
+    {% endif %}
