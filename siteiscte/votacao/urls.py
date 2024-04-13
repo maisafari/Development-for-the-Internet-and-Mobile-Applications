@@ -24,6 +24,10 @@ urlpatterns = [
 
     path('logout/', logoutview, name='logout'),
 
-    path('infopessoal/', infopessoal, name='infopessoal'),
+    path('infopessoal/', views.infopessoal, name='infopessoal'),
+
+    path('users_admin/', views.users_admin, name='users_admin'),
+
+    path('users_admin/delete_user/<int:user_id>/', views.delete_user, name='delete_user'),
 
 ]

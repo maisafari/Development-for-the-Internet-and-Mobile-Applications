@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.models import User
 from django.shortcuts import render, get_object_or_404, redirect
 
 from .forms import AlunoForm, UserRegistoForm
@@ -181,3 +182,29 @@ def limite(request):
         print(ultimo_digito)
         aluno.limite = ultimo_digito + 5
         aluno.save()
+
+from django.shortcuts import get_object_or_404
+
+def delete_user(request, user_id):
+    if request.user.is_authenticated:
+        if hasattr(request.user, 'administrador'):
+            # Certifique-se de buscar o usuário associado ao aluno primeiro
+            aluno_user = get_object_or_404(User, pk=user_id)
+            # Em seguida, busque o aluno correspondente
+            user_to_delete = get_object_or_404(Aluno, user=aluno_user)
+            user_to_delete.delete()
+            alunos = Aluno.objects.all()
+            return render(request, 'votacao/users_admin.html',
+                          {'success_message': 'User Removido', 'alunos': alunos})
+
+        elif hasattr(request.user, 'aluno'):
+            return render(request, 'votacao/users_admin.html',
+                          {'error_message': 'Apenas admin pode remover users'})
+
+def users_admin(request):
+    if request.user.is_authenticated and hasattr(request.user, 'administrador'):
+        alunos = Aluno.objects.all()
+        return render(request, 'votacao/users_admin.html', {'alunos': alunos})
+    else:
+        return render(request, 'votacao/users_admin.html',
+                      {'error_message': 'Apenas administradores podem acessar esta página.'})
