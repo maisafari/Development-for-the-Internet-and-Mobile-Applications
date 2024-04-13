@@ -49,6 +49,8 @@ def resultados(request, questao_id):
  questao = get_object_or_404(Questao, pk=questao_id)
  return render(request,
 'votacao/resultados.html',{'questao': questao})
+
+
 def voto(request, questao_id):
     if request.method == 'POST':
         if 'Votar' in request.POST['action']:
@@ -57,7 +59,7 @@ def voto(request, questao_id):
             try:
                 opcao_selecionada = questao.opcao_set.get(pk=opcao_id)
             except (KeyError, Opcao.DoesNotExist):
-                return render(request, 'votacao/detalhe.html', {'questao': questao, 'error_message': "Não escolheu uma opção"})
+                return render(request, 'votacao/detalhe.html', {'questao': questao, 'error_message': 'Não escolheu uma opção'})
             else:
                 opcao_selecionada.votos += 1
                 opcao_selecionada.save()
@@ -66,16 +68,16 @@ def voto(request, questao_id):
                 if hasattr(request.user, 'aluno'):
                     aluno = request.user.aluno
                     if aluno.votos == aluno.limite:
-                        return render(request, 'votacao/detalhe.html', {'error_message': 'Limite de votos atingido'})
+                        return render(request, 'votacao/detalhe.html', {'questao': questao,'error_message': 'Limite de votos atingido'})
                     else:
                         aluno.votos += 1
                     aluno.save()
                 elif hasattr(request.user, 'administrador'):
                     administrador = request.user.administrador
                     if administrador.votos == administrador.limite:
-                        return render(request, 'votacao/detalhe.html', {'error_message': 'Limite de votos atingido'})
+                        return render(request, 'votacao/detalhe.html', {'questao': questao,'error_message': 'Limite de votos atingido'})
                     else:
-                         administrador.votos += 1
+                        administrador.votos += 1
                     administrador.save()
 
                 return HttpResponseRedirect(reverse('votacao:resultados', args=(questao.id,)))
@@ -89,9 +91,10 @@ def voto(request, questao_id):
                     opcao_selecionada.delete()
                     return redirect('votacao:detalhe', questao_id=questao_id)
                 except (KeyError, Opcao.DoesNotExist):
-                    return redirect('votacao:voto')
+                    return redirect('votacao:detalhe', questao_id=questao_id)
 
     return redirect('votacao:index')
+
 
 def criar_questao(request):
     if request.method == 'POST':
@@ -137,7 +140,6 @@ def registo_user(request):
             aluno = form_aluno.save(commit=False)
             aluno.user = user
             aluno.save()
-            limite(request)
             raw_password = form_user.cleaned_data.get('password1')
             user = authenticate(username=user.username, password=raw_password)
             login(request, user)
@@ -154,6 +156,7 @@ def login_user(request):
             user = form.get_user()
             login(request, user)
             request.session['username'] = user.username  # Armazena o username na sessão
+            limite(request)
             return redirect('votacao:index')
     else:
         form = AuthenticationForm()
@@ -174,12 +177,7 @@ def limite(request):
         aluno = request.user.aluno
         grupo = aluno.grupo
         ultimo_digito = int(aluno.grupo[-1])  # Último dígito do grupo
+        print("AQUI: ")
+        print(ultimo_digito)
         aluno.limite = ultimo_digito + 5
         aluno.save()
-    elif hasattr(request.user, 'administrador'):
-        administrador = request.user.administrador
-        administrador = request.user.aluno
-        grupo = administrador.grupo
-        ultimo_digito = int(administrador.grupo[-1])  # Último dígito do grupo
-        administrador.limite = ultimo_digito + 5
-        administrador.save()
