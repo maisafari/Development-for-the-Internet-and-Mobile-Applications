@@ -1,6 +1,6 @@
 from django.urls import include, path
 from . import views
-from .views import registo_user, login_user, logoutview
+from .views import registo_user, login_user, logoutview, infopessoal
 
 app_name = 'votacao'
 
@@ -25,5 +25,7 @@ urlpatterns = [
     path('login/', login_user, name='login'),
 
     path('logout/', logoutview, name='logout'),
+
+    path('infopessoal/', infopessoal, name='infopessoal'),
 
 ]

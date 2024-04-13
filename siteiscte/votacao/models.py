@@ -26,6 +26,25 @@ class Opcao(models.Model):
 class Aluno(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     curso = models.CharField(max_length=50)
+    votos = models.IntegerField(max_length=20, default=0)
+    limite = models.IntegerField(max_length=20, default=0)
+    grupo = models.CharField(max_length=20)
+
+
+
 
     def __str__(self):
         return self.user.username
+
+
+class Administrador(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    votos = models.IntegerField(max_length=20, default=0)
+
+    limite = models.IntegerField(max_length=20, default=100)
+    grupo = models.CharField(max_length=20, default='admin')
+
+
+
+    def __str__(self):
+         return self.user.username

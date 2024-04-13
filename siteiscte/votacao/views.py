@@ -4,7 +4,7 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.shortcuts import render, get_object_or_404, redirect
 
 from .forms import AlunoForm, UserRegistoForm
-from .models import Questao, Opcao, Aluno
+from .models import Questao, Opcao, Aluno, Administrador
 from django.template import loader
 from django.http import Http404, HttpResponse,HttpResponseRedirect
 from django.urls import reverse
@@ -17,11 +17,13 @@ def index(request):
         latest_question_list = Questao.objects.order_by('-pub_data')[:5]
         if not request.user.is_superuser:
             try:
-                aluno, created = Aluno.objects.get_or_create(user=request.user, defaults={'curso': 'Default Curso'})
+                aluno, created = Aluno.objects.get_or_create(user=request.user, defaults={'curso': 'Default Curso', 'votos': 0})
             except Aluno.DoesNotExist:
                 aluno = None
         else:
             aluno = None
+
+            administrador, created = Administrador.objects.get_or_create(user=request.user, defaults={'votos': 0})
 
         context = {}
         if aluno:
@@ -42,6 +44,7 @@ def index(request):
 def detalhe(request, questao_id):
     questao = get_object_or_404(Questao, pk=questao_id)
     return render(request, 'votacao/detalhe.html',{'questao': questao})
+
 def resultados(request, questao_id):
  questao = get_object_or_404(Questao, pk=questao_id)
  return render(request,
@@ -58,6 +61,23 @@ def voto(request, questao_id):
             else:
                 opcao_selecionada.votos += 1
                 opcao_selecionada.save()
+
+                # Verificar se o usuário é um aluno ou administrador
+                if hasattr(request.user, 'aluno'):
+                    aluno = request.user.aluno
+                    if aluno.votos == aluno.limite:
+                        return render(request, 'votacao/detalhe.html', {'error_message': 'Limite de votos atingido'})
+                    else:
+                        aluno.votos += 1
+                    aluno.save()
+                elif hasattr(request.user, 'administrador'):
+                    administrador = request.user.administrador
+                    if administrador.votos == administrador.limite:
+                        return render(request, 'votacao/detalhe.html', {'error_message': 'Limite de votos atingido'})
+                    else:
+                         administrador.votos += 1
+                    administrador.save()
+
                 return HttpResponseRedirect(reverse('votacao:resultados', args=(questao.id,)))
 
         elif 'Remover' in request.POST['action']:
@@ -72,7 +92,6 @@ def voto(request, questao_id):
                     return redirect('votacao:voto')
 
     return redirect('votacao:index')
-
 
 def criar_questao(request):
     if request.method == 'POST':
@@ -118,6 +137,7 @@ def registo_user(request):
             aluno = form_aluno.save(commit=False)
             aluno.user = user
             aluno.save()
+            limite(request)
             raw_password = form_user.cleaned_data.get('password1')
             user = authenticate(username=user.username, password=raw_password)
             login(request, user)
@@ -143,3 +163,23 @@ def logoutview(request):
     logout(request)
     return redirect(reverse('votacao:login'))
 
+def infopessoal(request):
+    return render(request, 'votacao/infopessoal.html',{'request': request})
+
+def votosCount(request):
+     count = 0
+
+def limite(request):
+    if hasattr(request.user, 'aluno'):
+        aluno = request.user.aluno
+        grupo = aluno.grupo
+        ultimo_digito = int(aluno.grupo[-1])  # Último dígito do grupo
+        aluno.limite = ultimo_digito + 5
+        aluno.save()
+    elif hasattr(request.user, 'administrador'):
+        administrador = request.user.administrador
+        administrador = request.user.aluno
+        grupo = administrador.grupo
+        ultimo_digito = int(administrador.grupo[-1])  # Último dígito do grupo
+        administrador.limite = ultimo_digito + 5
+        administrador.save()
