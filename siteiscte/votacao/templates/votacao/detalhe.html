@@ -1,31 +1,34 @@
-{% if request.session.username %}
-
-
-<h1>{{ questao.questao_texto }}</h1>
-{% if error_message %}
-<p><strong>{{ error_message }}</strong></p>
-{% endif %}
-<form action="{% url 'votacao:voto' questao.id %}" method="post">
-    {% csrf_token %}
-    {% for opcao in questao.opcao_set.all %}
-    <input type="radio" name="opcao_id" id="opcao{{ opcao.id }}" value="{{ opcao.id }}" />
-    <label for="opcao{{ opcao.id }}">{{ opcao.opcao_texto }}</label>
-    <br />
-    {% endfor %}
-    <input type="submit" name="action" value="Votar">
-    <input type="submit" name="action" value="Remover" onclick="return confirm('Tem certeza que deseja remover a opção?')">
-</form>
-
-<a href="{% url 'votacao:criaropcao' questao.id %}">Criar Nova Opção</a>
-<form method="post" action="{% url 'votacao:remover_questao' questao.id %}">
-    {% csrf_token %}
-    <input type="hidden" name="questao_id" value="{{ questao.id }}">
-    <button type="submit" onclick="return confirm('Tem certeza que deseja remover esta questão?')">Remover Questão</button>
-</form>
+{% if request.user.is_authenticated %}
+    <h1>{{ questao.questao_texto }}</h1>
+    {% if error_message %}
+        <p><strong>{{ error_message }}</strong></p>
+    {% endif %}
+    <form action="{% url 'votacao:voto' questao.id %}" method="post">
+        {% csrf_token %}
+        {% for opcao in questao.opcao_set.all %}
+            <input type="radio" name="opcao_id" id="opcao{{ opcao.id }}" value="{{ opcao.id }}" />
+            <label for="opcao{{ opcao.id }}">{{ opcao.opcao_texto }}</label>
+            <br />
+        {% endfor %}
+        <input type="submit" name="action" value="Votar">
+         {% if request.user.administrador %}
+            <input type="submit" name="action" value="Remover" onclick="return confirm('Tem certeza que deseja remover a opção?')">
+        {% endif %}
+    </form>
+    {% if request.user.administrador %}
+     <a href="{% url 'votacao:criaropcao' questao.id %}">Criar Nova Opção</a>
+    {% endif %}
+        {% if request.user.administrador %}
+         <form method="post" action="{% url 'votacao:remover_questao' questao.id %}">
+         {% endif %}
+        {% csrf_token %}
+        <input type="hidden" name="questao_id" value="{{ questao.id }}">
+        {% if request.user.administrador %}
+            <button type="submit" onclick="return confirm('Tem certeza que deseja remover esta questão?')">Remover Questão</button>
+        {% endif %}
+        </form>
     <p>Clique <a href="{% url 'votacao:index' %}">aqui</a> para retroceder</p>
-
-
-
 {% endif %}
+
 
 
