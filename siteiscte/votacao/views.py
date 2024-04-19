@@ -9,9 +9,12 @@ from django.template import loader
 from django.http import Http404, HttpResponse,HttpResponseRedirect
 from django.urls import reverse
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 
-@login_required
+def is_administrador(user):
+    return user.is_authenticated and user.is_superuser  # Assuming superuser is equivalent to administrator
+
+administrador_required = user_passes_test(is_administrador, login_url='/login/')
 @login_required
 def index(request):
     latest_question_list = Questao.objects.order_by('-pub_data')[:5]
@@ -76,7 +79,7 @@ def voto(request, questao_id):
 
     return redirect('votacao:index')
 
-
+@administrador_required
 def criar_questao(request):
     if request.method == 'POST':
         texto_questao = request.POST.get('questao_texto')
@@ -89,7 +92,7 @@ def criar_questao(request):
     else:
         return render(request, 'votacao/criar_questao.html')
 
-@login_required
+@administrador_required
 def criar_opcao(request, questao_id):
     questao = get_object_or_404(Questao, pk=questao_id)
 
@@ -104,7 +107,7 @@ def criar_opcao(request, questao_id):
     else:
         return render(request, 'votacao/criar_opcao.html', {'questao': questao})
 
-@login_required
+@administrador_required
 def remover_questao(request, questao_id):
     if request.method == 'POST':
         questao_id = request.POST.get('questao_id')
