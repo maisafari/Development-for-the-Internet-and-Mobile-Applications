@@ -1,45 +1,30 @@
 {% extends "./base.html" %}
 
 {% block header %}
-    Olá, {{ request.user.username }}!
+    <h1>Hello, {{ user.username }}!</h1>
 {% endblock %}
+
 {% block body %}
     {% if is_aluno %}
-        <!-- Render content for aluno -->
-        <p>Numero de votos: {{ request.user.aluno.votos}}</p>
-        {% if latest_question_list %}
-            <ul>
-                {% for questao in latest_question_list %}
-                    <li>
-                        <a href="{% url 'votacao:detalhe' questao.id %}">
-                            {{ questao.questao_texto }}
-                        </a>
-                    </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p>Não há questões disponíveis.</p>
-        {% endif %}
-        <a href="{% url 'votacao:infopessoal' %}">Verificar Informação Pessoal</a>
-        <a href="{% url 'votacao:logout' %}">Sair</a>
+        <!-- Content for aluno -->
+        <p>Number of votes: {{ user.aluno.votos }}</p>
     {% else %}
-        <!-- Render content for authenticated non-aluno user -->
-        <p>Numero de votos: {{ request.user.administrador.votos}}</p>
-        {% if latest_question_list %}
-            <ul>
-                {% for questao in latest_question_list %}
-                    <li>
-                        <a href="{% url 'votacao:detalhe' questao.id %}">
-                            {{ questao.questao_texto }}
-                        </a>
-                    </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p>Não há questões disponíveis.</p>
-        {% endif %}
-        <a href="{% url 'votacao:criarquestao' %}" class="btn">Criar Nova Questão</a> <!-- Added class "btn" for styling -->
+        <!-- Content for non-aluno -->
+        <p>Number of votes: {{ user.administrador.votos }}</p>
+    {% endif %}
+    <h2>Questoes:</h2>
+    <ul>
+        {% for questao in latest_question_list %}
+            <li>
+                <a href="{% url 'votacao:detalhe' questao.id %}">{{ questao.questao_texto }}</a>
+            </li>
+        {% empty %}
+            <li>No questions available.</li>
+        {% endfor %}
+    </ul>
+    {% if is_aluno %}
+        <a href="{% url 'votacao:infopessoal' %}">Check Personal Information</a>
+    {% else %}
+        <a href="{% url 'votacao:criarquestao' %}" class="btn">Create New Question</a>
     {% endif %}
 {% endblock %}
-
-

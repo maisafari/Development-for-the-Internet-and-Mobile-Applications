@@ -9,48 +9,29 @@ from django.template import loader
 from django.http import Http404, HttpResponse,HttpResponseRedirect
 from django.urls import reverse
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
 
-
+@login_required
+@login_required
 def index(request):
-    if request.user.is_authenticated:
+    latest_question_list = Questao.objects.order_by('-pub_data')[:5]
+    aluno = None
+    if not request.user.is_superuser:
+        aluno, created = Aluno.objects.get_or_create(user=request.user, defaults={'curso': 'Default Curso', 'votos': 0})
+    context = {'is_aluno': bool(aluno), 'latest_question_list': latest_question_list}
+    return render(request, 'votacao/index.html', context)
 
-        latest_question_list = Questao.objects.order_by('-pub_data')[:5]
-        if not request.user.is_superuser:
-            try:
-                aluno, created = Aluno.objects.get_or_create(user=request.user, defaults={'curso': 'Default Curso', 'votos': 0})
-            except Aluno.DoesNotExist:
-                aluno = None
-        else:
-            aluno = None
-
-            administrador, created = Administrador.objects.get_or_create(user=request.user, defaults={'votos': 0})
-
-        context = {}
-        if aluno:
-            context['is_aluno'] = True
-            context['latest_question_list'] = latest_question_list
-
-        else:
-            context['is_aluno'] = False
-            context['latest_question_list'] = latest_question_list
-        # Renderizar o template index.html com o contexto adequado
-        print(request)
-        print(context)
-        return render(request, 'votacao/index.html', context)
-    else:
-        return redirect('votacao:login')
-
-
+@login_required
 def detalhe(request, questao_id):
     questao = get_object_or_404(Questao, pk=questao_id)
     return render(request, 'votacao/detalhe.html',{'questao': questao})
-
+@login_required
 def resultados(request, questao_id):
  questao = get_object_or_404(Questao, pk=questao_id)
  return render(request,
 'votacao/resultados.html',{'questao': questao})
 
-
+@login_required
 def voto(request, questao_id):
     if request.method == 'POST':
         if 'Votar' in request.POST['action']:
@@ -108,6 +89,7 @@ def criar_questao(request):
     else:
         return render(request, 'votacao/criar_questao.html')
 
+@login_required
 def criar_opcao(request, questao_id):
     questao = get_object_or_404(Questao, pk=questao_id)
 
@@ -122,6 +104,7 @@ def criar_opcao(request, questao_id):
     else:
         return render(request, 'votacao/criar_opcao.html', {'questao': questao})
 
+@login_required
 def remover_questao(request, questao_id):
     if request.method == 'POST':
         questao_id = request.POST.get('questao_id')
@@ -130,6 +113,7 @@ def remover_questao(request, questao_id):
         return redirect('votacao:index')
     else:
         return redirect('votacao:index')
+
 
 def registo_user(request):
     if request.method == 'POST':
@@ -162,16 +146,20 @@ def login_user(request):
         form = AuthenticationForm()
     return render(request, 'votacao/login.html', {'form': form})
 
+@login_required
 def logoutview(request):
     logout(request)
     return redirect(reverse('votacao:login'))
 
+@login_required
 def infopessoal(request):
     return render(request, 'votacao/infopessoal.html',{'request': request})
 
+@login_required
 def votosCount(request):
      count = 0
 
+@login_required
 def limite(request):
     if hasattr(request.user, 'aluno'):
         aluno = request.user.aluno
@@ -182,5 +170,6 @@ def limite(request):
         aluno.limite = ultimo_digito + 5
         aluno.save()
 
+@login_required
 def base_view(request):
     return
