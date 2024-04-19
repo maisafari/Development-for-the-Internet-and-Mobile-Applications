@@ -28,6 +28,8 @@ urlpatterns = [
 
     path('base/', views.base_view, name='base'),
 
+    path('fazer_upload', views.fazer_upload, name='fazer_upload'),
+
 
 
 

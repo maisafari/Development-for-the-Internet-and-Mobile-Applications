@@ -10,6 +10,7 @@ from django.http import Http404, HttpResponse,HttpResponseRedirect
 from django.urls import reverse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.core.files.storage import FileSystemStorage
 
 def is_administrador(user):
     return user.is_authenticated and user.is_superuser  # Assuming superuser is equivalent to administrator
@@ -178,3 +179,15 @@ def limite(request):
 @login_required
 def base_view(request):
     return
+
+@login_required
+def fazer_upload(request):
+    if request.method == 'POST' and request.FILES.get('myfile') is not None :
+        user = request.user
+        myfile = request.FILES['myfile']
+        fs = FileSystemStorage()
+        filename = user.username + "." + myfile.name
+        filename = fs.save(filename, myfile)
+        uploaded_file_url = fs.url(filename)
+        return render(request, 'votacao/fazer_upload.html', {'uploaded_file_url': uploaded_file_url})
+    return render(request,'votacao/fazer_upload.html')
