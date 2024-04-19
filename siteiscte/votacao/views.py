@@ -37,7 +37,9 @@ def resultados(request, questao_id):
 @login_required
 def voto(request, questao_id):
     if request.method == 'POST':
+
         if 'Votar' in request.POST['action']:
+            print("a")
             questao = get_object_or_404(Questao, pk=questao_id)
             opcao_id = request.POST.get('opcao_id')
             try:
