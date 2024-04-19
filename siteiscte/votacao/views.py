@@ -181,3 +181,6 @@ def limite(request):
         print(ultimo_digito)
         aluno.limite = ultimo_digito + 5
         aluno.save()
+
+def base_view(request):
+    return

@@ -26,4 +26,9 @@ urlpatterns = [
 
     path('infopessoal/', infopessoal, name='infopessoal'),
 
+    path('base/', views.base_view, name='base'),
+
+
+
+
 ]

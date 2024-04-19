@@ -1,9 +1,12 @@
-{% if request.user.is_authenticated %}
+{% extends "./base.html" %}
+
+{% block header %}
+    Olá, {{ request.user.username }}!
+{% endblock %}
+{% block body %}
     {% if is_aluno %}
         <!-- Render content for aluno -->
-        <p>Olá, {{ request.user.username }}!</p>
         <p>Numero de votos: {{ request.user.aluno.votos}}</p>
-
         {% if latest_question_list %}
             <ul>
                 {% for questao in latest_question_list %}
@@ -18,13 +21,10 @@
             <p>Não há questões disponíveis.</p>
         {% endif %}
         <a href="{% url 'votacao:infopessoal' %}">Verificar Informação Pessoal</a>
-
         <a href="{% url 'votacao:logout' %}">Sair</a>
     {% else %}
         <!-- Render content for authenticated non-aluno user -->
-        <p>Olá, {{ request.user.username }}!</p>
         <p>Numero de votos: {{ request.user.administrador.votos}}</p>
-
         {% if latest_question_list %}
             <ul>
                 {% for questao in latest_question_list %}
@@ -38,11 +38,8 @@
         {% else %}
             <p>Não há questões disponíveis.</p>
         {% endif %}
-        <a href="{% url 'votacao:criarquestao' %}">Criar Nova Questão</a>
-        <a href="{% url 'votacao:infopessoal' %}">Verificar Informação Pessoal</a>
-        <p><a href="{% url 'votacao:logout' %}">Logout</a></p>
+        <a href="{% url 'votacao:criarquestao' %}" class="btn">Criar Nova Questão</a> <!-- Added class "btn" for styling -->
     {% endif %}
-{% else %}
-    <!-- Render content for non-authenticated user -->
-    <p>Faça <a href="{% url 'votacao:login' %}">login</a> para acessar as funcionalidades.</p>
-{% endif %}
+{% endblock %}
+
+

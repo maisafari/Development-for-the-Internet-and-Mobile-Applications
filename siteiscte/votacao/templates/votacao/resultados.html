@@ -1,10 +1,20 @@
-<h1>{{ questao.questao_texto }}</h1>
-<ul>
-{% for opcao in questao.opcao_set.all %}
- <li>{{ opcao.opcao_texto }} --
-{{ opcao.votos }}
-voto{{ opcao.votos|pluralize }}</li>
-{% endfor %}
-</ul>
-<a href="{% url 'votacao:detalhe' questao.id %}">Votar
-novamente?</a>
+{% extends "./base.html" %}
+{% block header %}
+    <p>Olá, {{ request.user.username }}!</p>
+   Resultados
+{% endblock %}
+{% block body %}
+    <div class="question-container">
+        <h1>{{ questao.questao_texto }}</h1>
+        <ul>
+            {% for opcao in questao.opcao_set.all %}
+                <li>{{ opcao.opcao_texto }} --
+                    {{ opcao.votos }}
+                    voto{{ opcao.votos|pluralize }}</li>
+            {% endfor %}
+        </ul>
+        <div class="navigation-links">
+            <a href="{% url 'votacao:detalhe' questao.id %}" class="btn">Votar Novamente</a>
+        </div>
+    </div>
+{% endblock %}
