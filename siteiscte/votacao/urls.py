@@ -1,6 +1,6 @@
 from django.urls import include, path
 from . import views
-from .views import registo_user, login_user, logoutview, infopessoal
+from .views import registo_user, login_user, logoutview, infopessoal, base_view
 
 app_name = 'votacao'
 

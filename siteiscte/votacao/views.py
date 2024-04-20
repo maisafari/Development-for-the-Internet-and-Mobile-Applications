@@ -1,4 +1,8 @@
+import glob
+import os
 from datetime import datetime
+
+from django.conf import settings
 from django.contrib.auth.forms import AuthenticationForm
 from django.shortcuts import render, get_object_or_404, redirect
 from .forms import AlunoForm, UserRegistoForm
@@ -145,7 +149,10 @@ def login_user(request):
             login(request, user)
             request.session['username'] = user.username  # Armazena o username na sessão
             limite(request)
-            return redirect('votacao:index')
+            file_url = render_file(request)
+
+            return render(request, 'votacao/index.html', {'file_url': file_url})
+
     else:
         form = AuthenticationForm()
     return render(request, 'votacao/login.html', {'form': form})
@@ -157,7 +164,8 @@ def logoutview(request):
 
 @login_required
 def infopessoal(request):
-    return render(request, 'votacao/infopessoal.html',{'request': request})
+    file_url = render_file(request)
+    return render(request, 'votacao/infopessoal.html', {'request': request, 'file_url': file_url})
 
 @login_required
 def votosCount(request):
@@ -169,7 +177,6 @@ def limite(request):
         aluno = request.user.aluno
         grupo = aluno.grupo
         ultimo_digito = int(aluno.grupo[-1])  # Último dígito do grupo
-        print("AQUI: ")
         print(ultimo_digito)
         aluno.limite = ultimo_digito + 5
         aluno.save()
@@ -177,6 +184,7 @@ def limite(request):
 @login_required
 def base_view(request):
     return
+
 @login_required()
 def fazer_upload(request):
     if request.method == 'POST' and request.FILES.get('myfile') is not None :
@@ -186,6 +194,21 @@ def fazer_upload(request):
         filename = user.username + "_" + myfile.name
         filename = fs.save(filename, myfile)
         uploaded_file_url = fs.url(filename)
-        print("AKI: ",uploaded_file_url)
+
         return render(request, 'votacao/fazer_upload.html', {'uploaded_file_url': uploaded_file_url})
     return render(request,'votacao/fazer_upload.html')
+
+
+@login_required
+def render_file(request):
+    file_pattern = os.path.join(settings.MEDIA_ROOT, f"{request.user.username}_*.*")
+    matching_files = glob.glob(file_pattern)
+
+    if matching_files:
+        file_path = matching_files[0]
+        file_name = os.path.basename(file_path)
+        file_url = os.path.join(settings.MEDIA_URL, file_name)
+    else:
+        file_url = None
+
+    return file_url

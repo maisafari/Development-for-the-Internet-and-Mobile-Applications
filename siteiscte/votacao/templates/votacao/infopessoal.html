@@ -5,7 +5,12 @@
 {% block body %}
     <h2> Informação Pessoal</h2>
     <p>Nome: {{ request.user.username }}</p></br>
-    <img src="{% static 'votacao/images/default.png' %}" class="header-image">
+      {% if file_url %}
+            <img src="{{  file_url }}" alt="User Image" class="user-image">
+      {% else  %}
+             <img src="{% static 'votacao/images/default.png' %}" class="header-image">
+      {% endif %}
+   
     <p>Email: {{ request.user.email }}</p></br>
     <p>Curso: {{ request.user.aluno.curso }}</p></br>
     <a href="{% url 'votacao:index' %}" class="btn">Retroceder</a>
