@@ -1,18 +1,20 @@
 {% extends "./base.html" %}
 {% load static %}
-{% block header %}<p>Olá, {{ request.user.username }}!</p>
-   {% endblock %}
+{% block header %}
+    <p id="username">Olá, {{ request.user.username }}!</p>
+{% endblock %}
 {% block body %}
     <h2> Informação Pessoal</h2>
-    <p>Nome: {{ request.user.username }}</p></br>
-      {% if file_url %}
-            <img src="{{  file_url }}" alt="User Image" class="user-image">
-      {% else  %}
-             <img src="{% static 'votacao/images/default.png' %}" class="header-image">
-      {% endif %}
+        {% if file_url %}
+            <img src="{{ file_url }}" alt="User Image" class="user-image" id="uImage">
+        {% else  %}
+            <img src="{% static 'votacao/images/default.png' %}" alt="User Image" class="user-image" id="uImage">
+        {% endif %}
+        <div id="userData" style="display:none;">
+            <p>Nome: {{ request.user.username }}</p><br>
+            <p>Email: {{ request.user.email }}</p>
+            <p>Curso: {{ request.user.aluno.curso }}</p>
+        </div>
    
-    <p>Email: {{ request.user.email }}</p></br>
-    <p>Curso: {{ request.user.aluno.curso }}</p></br>
-    <a href="{% url 'votacao:index' %}" class="btn">Retroceder</a>
-
+    <br><a href="{% url 'votacao:index' %}" class="btn">Retroceder</a>
 {% endblock %}

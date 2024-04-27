@@ -22,23 +22,28 @@ administrador_required = user_passes_test(is_administrador, login_url='/login/')
 def index(request):
     latest_question_list = Questao.objects.order_by('-pub_data')[:5]
     aluno = None
+    file_url = render_file(request)
     if not request.user.is_superuser:
         aluno, created = Aluno.objects.get_or_create(user=request.user, defaults={'curso': 'Default Curso', 'votos': 0})
-    context = {'is_aluno': bool(aluno), 'latest_question_list': latest_question_list}
+    context = {'is_aluno': bool(aluno), 'latest_question_list': latest_question_list, 'file_url': file_url}
+
     return render(request, 'votacao/index.html', context)
 
 @login_required
 def detalhe(request, questao_id):
+    file_url = render_file(request)
     questao = get_object_or_404(Questao, pk=questao_id)
-    return render(request, 'votacao/detalhe.html',{'questao': questao})
+    return render(request, 'votacao/detalhe.html',{'questao': questao, 'file_url': file_url})
 @login_required
 def resultados(request, questao_id):
- questao = get_object_or_404(Questao, pk=questao_id)
- return render(request,
-'votacao/resultados.html',{'questao': questao})
+    file_url = render_file(request)
+    questao = get_object_or_404(Questao, pk=questao_id)
+    return render(request,
+'votacao/resultados.html',{'questao': questao,'file_url': file_url})
 
 @login_required
 def voto(request, questao_id):
+
     if request.method == 'POST':
 
         if 'Votar' in request.POST['action']:
@@ -86,6 +91,7 @@ def voto(request, questao_id):
 
 @administrador_required
 def criar_questao(request):
+    file_url = render_file(request)
     if request.method == 'POST':
         texto_questao = request.POST.get('questao_texto')
         if texto_questao:
@@ -93,12 +99,13 @@ def criar_questao(request):
             nova_questao.save()
             return redirect('votacao:index')
         else:
-            return render(request, 'votacao/criar_questao.html', {'erro': 'Texto da questão é obrigatório'})
+            return render(request, 'votacao/criar_questao.html', {'erro': 'Texto da questão é obrigatório', 'file_url': file_url})
     else:
-        return render(request, 'votacao/criar_questao.html')
+        return render(request, 'votacao/criar_questao.html', {'file_url': file_url})
 
 @administrador_required
 def criar_opcao(request, questao_id):
+    file_url = render_file(request)
     questao = get_object_or_404(Questao, pk=questao_id)
 
     if request.method == 'POST':
@@ -108,12 +115,13 @@ def criar_opcao(request, questao_id):
             nova_opcao.save()
             return redirect('votacao:detalhe', questao_id=questao_id)
         else:
-            return render(request, 'votacao/criar_opcao.html', {'questao': questao, 'erro': 'Texto da opção é obrigatório'})
+            return render(request, 'votacao/criar_opcao.html', {'questao': questao, 'erro': 'Texto da opção é obrigatório', 'file_url': file_url})
     else:
-        return render(request, 'votacao/criar_opcao.html', {'questao': questao})
+        return render(request, 'votacao/criar_opcao.html', {'questao': questao, 'file_url': file_url})
 
 @administrador_required
 def remover_questao(request, questao_id):
+    file_url = render_file(request)
     if request.method == 'POST':
         questao_id = request.POST.get('questao_id')
         questao = get_object_or_404(Questao, pk=questao_id)
@@ -124,6 +132,7 @@ def remover_questao(request, questao_id):
 
 
 def registo_user(request):
+    file_url = render_file(request)
     if request.method == 'POST':
         form_user = UserRegistoForm(request.POST)
         form_aluno = AlunoForm(request.POST)
@@ -142,6 +151,7 @@ def registo_user(request):
     return render(request, 'votacao/registo_user.html', {'form_user': form_user, 'form_aluno': form_aluno})
 
 def login_user(request):
+    file_url = render_file(request)
     if request.method == 'POST':
         form = AuthenticationForm(request, request.POST)
         if form.is_valid():
@@ -165,7 +175,8 @@ def logoutview(request):
 @login_required
 def infopessoal(request):
     file_url = render_file(request)
-    return render(request, 'votacao/infopessoal.html', {'request': request, 'file_url': file_url})
+    return (
+        render(request, 'votacao/infopessoal.html', {'request': request, 'file_url': file_url}))
 
 @login_required
 def votosCount(request):
@@ -194,9 +205,10 @@ def fazer_upload(request):
         filename = user.username + "_" + myfile.name
         filename = fs.save(filename, myfile)
         uploaded_file_url = fs.url(filename)
-
-        return render(request, 'votacao/fazer_upload.html', {'uploaded_file_url': uploaded_file_url})
-    return render(request,'votacao/fazer_upload.html')
+        file_url = render_file(request)
+        return render(request, 'votacao/fazer_upload.html', {'uploaded_file_url': uploaded_file_url, 'file_url': file_url})
+    file_url = render_file(request)
+    return render(request,'votacao/fazer_upload.html', {'file_url': file_url})
 
 
 @login_required
